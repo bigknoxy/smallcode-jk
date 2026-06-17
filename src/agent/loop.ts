@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import path, { sep } from "node:path";
 import type { ContextBundle } from "@/context/types.ts";
 import { applyBatch, parse } from "@/edit/index.ts";
 import type { ModelProfile } from "@/models/types.ts";
@@ -94,21 +94,30 @@ function parseToolCalls(text: string): ParsedToolCall[] {
   return results;
 }
 
-function buildReadFile(repoRoot: string): (path: string) => Promise<string | null> {
-  return async (path: string): Promise<string | null> => {
+function safeResolve(repoRoot: string, p: string): string | null {
+  const base = path.resolve(repoRoot) + sep;
+  const abs = path.resolve(repoRoot, p);
+  if (!(abs + sep).startsWith(base)) return null;
+  return abs;
+}
+
+function buildReadFile(repoRoot: string): (p: string) => Promise<string | null> {
+  return async (p: string): Promise<string | null> => {
+    const abs = safeResolve(repoRoot, p);
+    if (abs === null) return null;
     try {
-      const absPath = path.startsWith("/") ? path : join(repoRoot, path);
-      return await readFile(absPath, "utf-8");
+      return await readFile(abs, "utf-8");
     } catch {
       return null;
     }
   };
 }
 
-function buildWriteFile(repoRoot: string): (path: string, content: string) => Promise<void> {
-  return async (path: string, content: string): Promise<void> => {
-    const absPath = path.startsWith("/") ? path : join(repoRoot, path);
-    await writeFile(absPath, content, "utf-8");
+function buildWriteFile(repoRoot: string): (p: string, content: string) => Promise<void> {
+  return async (p: string, content: string): Promise<void> => {
+    const abs = safeResolve(repoRoot, p);
+    if (abs === null) throw new Error(`Path traversal rejected: ${p}`);
+    await writeFile(abs, content, "utf-8");
   };
 }
 
