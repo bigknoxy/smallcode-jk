@@ -12,6 +12,8 @@ export interface CompletionRequest {
   max_tokens?: number;
   stream?: boolean;
   responseFormat?: { type: "json_schema"; schema: Record<string, unknown> } | { type: "text" };
+  /** Ollama-specific backend options forwarded verbatim as `options` in the request body (e.g. `{num_ctx: 32768}`). */
+  ollamaOptions?: Record<string, number>;
 }
 
 export interface TokenUsage {
@@ -25,6 +27,8 @@ export interface CompletionResponse {
   usage?: TokenUsage;
   model: string;
   finishReason?: string;
+  /** True when finish_reason=length — completion was cut short by the token budget. */
+  truncated?: boolean;
 }
 
 export interface StreamChunk {

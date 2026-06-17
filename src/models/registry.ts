@@ -14,8 +14,11 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
     reasoningTags: { open: "<think>", close: "</think>" },
     supportsGrammar: false,
     supportsJsonSchema: false,
+    // Ollama defaults num_ctx to 2048; 32K prevents CoT truncation.
+    // top_k=-1 requires a Modelfile PARAMETER — the OpenAI-compat route silently ignores it.
+    ollamaOptions: { num_ctx: 32_768 },
     notes:
-      "Qwen2.5-3B base, MIT license. Strong at verifiable code/math, weak at open-domain knowledge. High variance — use best-of-N.",
+      "Qwen2.5-3B base, MIT license. Strong at verifiable code/math, weak at open-domain knowledge. High variance — use best-of-N. top_k=-1 requires Modelfile (not settable via OpenAI-compat route).",
   },
   {
     id: "qwen2.5-coder-7b",

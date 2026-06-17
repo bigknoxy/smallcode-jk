@@ -12,6 +12,14 @@ export const SamplingDefaultsSchema = z.object({
   max_tokens: z.number().int().positive(),
 });
 
+export const OllamaOptionsSchema = z
+  .object({
+    num_ctx: z.number().int().positive().optional(),
+    num_predict: z.number().int().optional(),
+    top_k: z.number().int().optional(),
+  })
+  .strict();
+
 export const ModelProfileSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -20,9 +28,11 @@ export const ModelProfileSchema = z.object({
   reasoningTags: ReasoningTagSchema.optional(),
   supportsGrammar: z.boolean().default(false),
   supportsJsonSchema: z.boolean().default(false),
+  ollamaOptions: OllamaOptionsSchema.optional(),
   notes: z.string().optional(),
 });
 
 export type ReasoningTags = z.infer<typeof ReasoningTagSchema>;
 export type SamplingDefaults = z.infer<typeof SamplingDefaultsSchema>;
+export type OllamaOptions = z.infer<typeof OllamaOptionsSchema>;
 export type ModelProfile = z.infer<typeof ModelProfileSchema>;

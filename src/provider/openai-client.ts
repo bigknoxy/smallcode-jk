@@ -54,6 +54,8 @@ interface RequestBody {
   response_format?:
     | { type: "json_schema"; json_schema: Record<string, unknown> }
     | { type: "text" };
+  /** Ollama-specific model parameters (e.g. num_ctx). Ignored by non-Ollama backends. */
+  options?: Record<string, number>;
 }
 
 function buildRequestBody(req: CompletionRequest, stream: boolean): RequestBody {
@@ -78,6 +80,10 @@ function buildRequestBody(req: CompletionRequest, stream: boolean): RequestBody 
     } else {
       body.response_format = { type: "text" };
     }
+  }
+
+  if (req.ollamaOptions !== undefined && Object.keys(req.ollamaOptions).length > 0) {
+    body.options = req.ollamaOptions;
   }
 
   return body;
@@ -245,6 +251,9 @@ function parseCompletionResponse(raw: unknown, fallbackModel: string): Completio
   const rawContent = choice?.message?.content ?? "";
   const finishReason = choice?.finish_reason ?? undefined;
 
+  // Truncation: explicitly cut short by token budget.
+  const truncated = finishReason === "length";
+
   let usage: CompletionResponse["usage"];
   if (data.usage) {
     usage = {
@@ -259,5 +268,6 @@ function parseCompletionResponse(raw: unknown, fallbackModel: string): Completio
     usage,
     model: data.model ?? fallbackModel,
     finishReason: finishReason ?? undefined,
+    truncated,
   };
 }

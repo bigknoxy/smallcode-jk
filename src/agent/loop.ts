@@ -174,6 +174,7 @@ export async function runLoop(
         temperature: profile.samplingDefaults.temperature,
         top_p: profile.samplingDefaults.top_p,
         max_tokens: profile.samplingDefaults.max_tokens,
+        ollamaOptions: profile.ollamaOptions,
       });
 
       rawResponse = response.rawContent;
@@ -183,6 +184,14 @@ export async function runLoop(
       const parsed = reasoningHandler.parse(rawResponse);
       reasoning = parsed.reasoning ?? undefined;
       answer = parsed.answer;
+
+      // Think-only truncation: reasoning present but answer empty → completion was cut short.
+      // Treat as an error turn rather than silently scoring a non-answer.
+      if (parsed.hasReasoning && answer === "" && response.truncated !== false) {
+        throw new Error(
+          "think-only completion: model emitted reasoning but no answer (likely truncated)",
+        );
+      }
     } catch (err) {
       // Record a failed turn but continue
       rawResponse = "";
