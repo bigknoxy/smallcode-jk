@@ -5,3 +5,4 @@ export * from "./edit/index.ts";
 export * from "./models/index.ts";
 export * from "./provider/index.ts";
 export * from "./reasoning/index.ts";
+export * from "./verify/index.ts";
