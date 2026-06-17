@@ -11,10 +11,21 @@
   "graders": [
     {
       "type": "deterministic_tests",
-      "required": ["tests/path-safety.test.ts"],
+      "required": [
+        "tests/path-safety.test.ts"
+      ],
       "command": "bun test"
     }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "path-safety"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "path-safety"
+  ],
+  "reference_solution": "path-absolute-rejected_1/"
 }

@@ -11,10 +11,22 @@
   "graders": [
     {
       "type": "deterministic_tests",
-      "required": ["tests/safe-parser.test.ts"],
+      "required": [
+        "tests/safe-parser.test.ts"
+      ],
       "command": "bun test"
     }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "edit-parser", "path-safety"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "edit-parser",
+    "path-safety"
+  ],
+  "reference_solution": "edit-reject-path-traversal_1/"
 }

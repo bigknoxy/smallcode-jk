@@ -11,10 +11,22 @@
   "graders": [
     {
       "type": "deterministic_tests",
-      "required": ["tests/config-full.test.ts"],
+      "required": [
+        "tests/config-full.test.ts"
+      ],
       "command": "bun test"
     }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "config", "validation"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "config",
+    "validation"
+  ],
+  "reference_solution": "config-valid-parse_1/"
 }

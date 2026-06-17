@@ -11,10 +11,21 @@
   "graders": [
     {
       "type": "deterministic_tests",
-      "required": ["tests/parser.test.ts"],
+      "required": [
+        "tests/parser.test.ts"
+      ],
       "command": "bun test"
     }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "edit-parser"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "edit-parser"
+  ],
+  "reference_solution": "edit-parse-no-blocks_1/"
 }

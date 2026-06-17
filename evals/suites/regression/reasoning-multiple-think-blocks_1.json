@@ -11,10 +11,21 @@
   "graders": [
     {
       "type": "deterministic_tests",
-      "required": ["tests/reasoning.test.ts"],
+      "required": [
+        "tests/reasoning.test.ts"
+      ],
       "command": "bun test"
     }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "reasoning"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "reasoning"
+  ],
+  "reference_solution": "reasoning-multiple-think-blocks_1/"
 }

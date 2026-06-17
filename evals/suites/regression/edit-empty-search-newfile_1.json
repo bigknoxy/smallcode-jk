@@ -11,10 +11,22 @@
   "graders": [
     {
       "type": "deterministic_tests",
-      "required": ["tests/applier.test.ts"],
+      "required": [
+        "tests/applier.test.ts"
+      ],
       "command": "bun test"
     }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "edit-parser", "new-file"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "edit-parser",
+    "new-file"
+  ],
+  "reference_solution": "edit-empty-search-newfile_1/"
 }

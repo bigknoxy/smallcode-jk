@@ -9,8 +9,24 @@
     }
   },
   "graders": [
-    { "type": "static_analysis", "commands": ["tsc"] }
+    {
+      "type": "static_analysis",
+      "commands": [
+        "tsc"
+      ]
+    }
   ],
-  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
-  "tags": ["regression", "typescript", "strict-mode", "noPropertyAccessFromIndexSignature"]
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1"
+  ],
+  "tags": [
+    "regression",
+    "typescript",
+    "strict-mode",
+    "noPropertyAccessFromIndexSignature"
+  ],
+  "reference_solution": "ts-no-property-from-index-sig_1/"
 }
