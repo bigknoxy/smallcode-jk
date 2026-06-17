@@ -1,0 +1,20 @@
+{
+  "id": "reasoning-strip-think-tags_1",
+  "desc": "Reasoning handler must strip <think>...</think> from model output and return clean answer",
+  "setup": {
+    "files": {
+      "src/reasoning.ts": "export interface ParsedResponse {\n  reasoning: string | null;\n  answer: string;\n}\n\nexport function parseReasoning(raw: string): ParsedResponse {\n  // TODO: implement — currently returns the raw text unchanged\n  return { reasoning: null, answer: raw };\n}\n",
+      "tests/reasoning.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseReasoning } from \"../src/reasoning\";\n\ntest(\"strips <think> tags and returns clean answer\", () => {\n  const raw = \"<think>let me think</think>The answer is 42.\";\n  const result = parseReasoning(raw);\n  expect(result.answer).toBe(\"The answer is 42.\");\n  expect(result.reasoning).toBe(\"let me think\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/reasoning.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "reasoning"]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "edit-empty-search-newfile_1",
+  "desc": "Empty SEARCH block signals a new-file creation; apply should write the full replace content",
+  "setup": {
+    "files": {
+      "src/applier.ts": "export function applyEdit(\n  files: Map<string, string>,\n  filePath: string,\n  search: string,\n  replace: string,\n): Map<string, string> {\n  // TODO: if search is empty string, treat as new file / full replace\n  if (search !== \"\") {\n    const current = files.get(filePath) ?? \"\";\n    const updated = current.replace(search, replace);\n    files.set(filePath, updated);\n  }\n  return files;\n}\n",
+      "tests/applier.test.ts": "import { test, expect } from \"bun:test\";\nimport { applyEdit } from \"../src/applier\";\n\ntest(\"empty search creates new file\", () => {\n  const files = new Map<string, string>();\n  const result = applyEdit(files, \"src/new.ts\", \"\", \"export const x = 1;\\n\");\n  expect(result.get(\"src/new.ts\")).toBe(\"export const x = 1;\\n\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/applier.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "edit-parser", "new-file"]
+}

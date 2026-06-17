@@ -1,0 +1,20 @@
+{
+  "id": "edit-parse-multiple-blocks_1",
+  "desc": "Parse a model response containing two search/replace blocks and return both",
+  "setup": {
+    "files": {
+      "src/multi-parser.ts": "export interface EditBlock {\n  filePath: string;\n  search: string;\n  replace: string;\n}\n\nexport function parseEditBlocks(_response: string): EditBlock[] {\n  // TODO: implement — must return all blocks, not just the first\n  return [];\n}\n",
+      "tests/multi-parser.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseEditBlocks } from \"../src/multi-parser\";\n\ntest(\"parses two blocks\", () => {\n  const response = `File: src/a.ts\\n<<<<<<< SEARCH\\nold_a\\n=======\\nnew_a\\n>>>>>>>`\n    + `\\n\\nFile: src/b.ts\\n<<<<<<< SEARCH\\nold_b\\n=======\\nnew_b\\n>>>>>>>`;\n  const blocks = parseEditBlocks(response);\n  expect(blocks.length).toBe(2);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/multi-parser.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "edit-parser"]
+}

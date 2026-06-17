@@ -1,0 +1,16 @@
+{
+  "id": "ts-unused-parameter_1",
+  "desc": "Fix noUnusedParameters: function parameter declared but never referenced",
+  "setup": {
+    "files": {
+      "src/handler.ts": "export function handleRequest(req: { url: string }, ctx: { userId: string }): string {\n  return `Handling: ${req.url}`;\n}\n",
+      "tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"noUnusedParameters\":true,\"noEmit\":true}}",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    { "type": "static_analysis", "commands": ["tsc"] }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "typescript", "strict-mode", "noUnusedParameters"]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "config-valid-parse_1",
+  "desc": "Config with all required valid fields must parse successfully and return typed data",
+  "setup": {
+    "files": {
+      "src/config-full.ts": "import { z } from \"zod\";\n\nexport const FullConfigSchema = z.object({\n  provider: z.object({\n    baseUrl: z.string(),\n    apiKey: z.string().default(\"none\"),\n    timeoutMs: z.number().default(120000),\n  }),\n  activeModel: z.string(),\n  maxTurns: z.number().default(15),\n});\n\nexport function parseFullConfig(raw: unknown) {\n  return FullConfigSchema.safeParse(raw);\n}\n",
+      "tests/config-full.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseFullConfig } from \"../src/config-full\";\n\ntest(\"valid config parses successfully\", () => {\n  const result = parseFullConfig({\n    provider: { baseUrl: \"http://localhost:11434\", apiKey: \"none\" },\n    activeModel: \"vibethinker-3b\",\n  });\n  expect(result.success).toBe(true);\n  if (result.success) {\n    expect(result.data.activeModel).toBe(\"vibethinker-3b\");\n    expect(result.data.maxTurns).toBe(15);\n  }\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/config-full.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "config", "validation"]
+}

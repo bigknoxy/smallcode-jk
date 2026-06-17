@@ -1,0 +1,20 @@
+{
+  "id": "edit-parse-single-block_1",
+  "desc": "Parse a model response with a valid search/replace block and extract filePath, search, replace",
+  "setup": {
+    "files": {
+      "src/parser.ts": "export function parseEditBlock(_response: string): { filePath: string; search: string; replace: string } | null {\n  // TODO: implement\n  return null;\n}\n",
+      "tests/parser.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseEditBlock } from \"../src/parser\";\n\ntest(\"parses single search/replace block\", () => {\n  const response = `<<<<<<< SEARCH\\nsrc/foo.ts\\n=======\\nold content\\n>>>>>>> REPLACE\\nnew content\\n`;\n  const result = parseEditBlock(response);\n  expect(result).not.toBeNull();\n  expect(result?.filePath).toBe(\"src/foo.ts\");\n  expect(result?.search).toBe(\"old content\");\n  expect(result?.replace).toBe(\"new content\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/parser.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "edit-parser"]
+}

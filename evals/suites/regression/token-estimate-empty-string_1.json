@@ -1,0 +1,20 @@
+{
+  "id": "token-estimate-empty-string_1",
+  "desc": "estimateTokens(\"\") must return 1 (minimum floor), not 0",
+  "setup": {
+    "files": {
+      "src/tokens.ts": "export function estimateTokens(text: string): number {\n  // TODO: fix — must return at least 1, even for empty strings\n  return Math.ceil(text.length / 4);\n}\n",
+      "tests/tokens.test.ts": "import { test, expect } from \"bun:test\";\nimport { estimateTokens } from \"../src/tokens\";\n\ntest(\"empty string returns minimum 1\", () => {\n  expect(estimateTokens(\"\")).toBe(1);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/tokens.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "token-estimation"]
+}

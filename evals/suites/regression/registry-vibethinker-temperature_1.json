@@ -1,0 +1,20 @@
+{
+  "id": "registry-vibethinker-temperature_1",
+  "desc": "Built-in vibethinker-3b profile must have temperature=1.0 for creative/reasoning tasks",
+  "setup": {
+    "files": {
+      "src/registry.ts": "interface ModelProfile {\n  id: string;\n  temperature: number;\n  maxTokens: number;\n}\n\nconst BUILTIN_PROFILES: ModelProfile[] = [\n  { id: \"vibethinker-3b\", temperature: 0.7, maxTokens: 4096 },\n];\n\nexport class ModelRegistry {\n  private profiles = new Map<string, ModelProfile>(\n    BUILTIN_PROFILES.map((p) => [p.id, p]),\n  );\n\n  get(id: string): ModelProfile {\n    const profile = this.profiles.get(id);\n    if (!profile) throw new Error(`Unknown model: ${id}`);\n    return profile;\n  }\n}\n",
+      "tests/registry.test.ts": "import { test, expect } from \"bun:test\";\nimport { ModelRegistry } from \"../src/registry\";\n\ntest(\"vibethinker-3b has temperature 1.0\", () => {\n  const registry = new ModelRegistry();\n  const profile = registry.get(\"vibethinker-3b\");\n  expect(profile.temperature).toBe(1.0);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/registry.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "registry"]
+}

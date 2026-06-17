@@ -1,0 +1,20 @@
+{
+  "id": "edit-reject-path-traversal_1",
+  "desc": "Edit block parser must reject filePaths containing path traversal sequences (../)",
+  "setup": {
+    "files": {
+      "src/safe-parser.ts": "export function isSafePath(filePath: string): boolean {\n  // TODO: implement — return false for paths containing '../' or starting with '/'\n  return true;\n}\n",
+      "tests/safe-parser.test.ts": "import { test, expect } from \"bun:test\";\nimport { isSafePath } from \"../src/safe-parser\";\n\ntest(\"rejects path traversal\", () => {\n  expect(isSafePath(\"../../../etc/passwd\")).toBe(false);\n});\n\ntest(\"rejects absolute path\", () => {\n  expect(isSafePath(\"/etc/passwd\")).toBe(false);\n});\n\ntest(\"allows normal relative path\", () => {\n  expect(isSafePath(\"src/foo.ts\")).toBe(true);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/safe-parser.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "edit-parser", "path-safety"]
+}

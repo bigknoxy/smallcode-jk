@@ -1,0 +1,6 @@
+{
+  "id": "regression-v1",
+  "kind": "regression",
+  "description": "Regression suite: tasks derived from Phase 0-5 build failures and patterns",
+  "defaultTrials": 1
+}

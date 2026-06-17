@@ -1,0 +1,16 @@
+{
+  "id": "ts-unchecked-array-access_1",
+  "desc": "Fix noUncheckedIndexedAccess error: array element used as number without undefined check",
+  "setup": {
+    "files": {
+      "src/foo.ts": "const arr = [1, 2, 3];\nconst x: number = arr[0];\nconsole.log(x);\n",
+      "tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"noUncheckedIndexedAccess\":true,\"noEmit\":true}}",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    { "type": "static_analysis", "commands": ["tsc"] }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "typescript", "strict-mode", "noUncheckedIndexedAccess"]
+}

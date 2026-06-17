@@ -1,0 +1,16 @@
+{
+  "id": "ts-no-property-from-index-sig_1",
+  "desc": "Fix noPropertyAccessFromIndexSignature: dot-access on index-signature type must use bracket notation",
+  "setup": {
+    "files": {
+      "src/config.ts": "interface Env {\n  [key: string]: string;\n}\n\nfunction getHost(env: Env): string {\n  return env.HOST;\n}\n",
+      "tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"noPropertyAccessFromIndexSignature\":true,\"noEmit\":true}}",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    { "type": "static_analysis", "commands": ["tsc"] }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "typescript", "strict-mode", "noPropertyAccessFromIndexSignature"]
+}

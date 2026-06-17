@@ -1,0 +1,21 @@
+{
+  "id": "config-invalid-url_1",
+  "desc": "Config validator must reject an invalid URL in provider.baseUrl via Zod",
+  "setup": {
+    "files": {
+      "src/config-validator.ts": "import { z } from \"zod\";\n\nconst ProviderSchema = z.object({\n  baseUrl: z.string(),\n  apiKey: z.string().default(\"none\"),\n});\n\nexport function validateProviderConfig(raw: unknown) {\n  return ProviderSchema.safeParse(raw);\n}\n",
+      "tests/config-validator.test.ts": "import { test, expect } from \"bun:test\";\nimport { validateProviderConfig } from \"../src/config-validator\";\n\ntest(\"rejects invalid URL\", () => {\n  const result = validateProviderConfig({ baseUrl: \"not-a-url\", apiKey: \"k\" });\n  expect(result.success).toBe(false);\n});\n\ntest(\"accepts valid URL\", () => {\n  const result = validateProviderConfig({ baseUrl: \"http://localhost:11434\", apiKey: \"k\" });\n  expect(result.success).toBe(true);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}",
+      "bun.lock": ""
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/config-validator.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "config", "validation"]
+}

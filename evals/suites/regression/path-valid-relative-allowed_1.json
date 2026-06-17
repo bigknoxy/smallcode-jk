@@ -1,0 +1,20 @@
+{
+  "id": "path-valid-relative-allowed_1",
+  "desc": "resolveSafe must allow a valid relative path like src/foo.ts within the workspace root",
+  "setup": {
+    "files": {
+      "src/path-safety.ts": "import { resolve } from \"node:path\";\n\nexport function resolveSafe(root: string, filePath: string): string {\n  // BUG: throws for ALL paths including valid ones\n  throw new Error(\"Path not allowed: \" + filePath);\n}\n",
+      "tests/path-safety.test.ts": "import { test, expect } from \"bun:test\";\nimport { resolveSafe } from \"../src/path-safety\";\n\ntest(\"allows valid relative path inside root\", () => {\n  const result = resolveSafe(\"/workspace\", \"src/foo.ts\");\n  expect(result).toBe(\"/workspace/src/foo.ts\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/path-safety.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "path-safety"]
+}

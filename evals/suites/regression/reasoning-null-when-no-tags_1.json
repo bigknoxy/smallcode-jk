@@ -1,0 +1,20 @@
+{
+  "id": "reasoning-null-when-no-tags_1",
+  "desc": "Reasoning handler must return null reasoning when no <think> tags are present",
+  "setup": {
+    "files": {
+      "src/reasoning.ts": "export interface ParsedResponse {\n  reasoning: string | null;\n  answer: string;\n}\n\nexport function parseReasoning(raw: string): ParsedResponse {\n  // BUG: returns empty string instead of null when no think tags\n  const match = raw.match(/<think>([\\s\\S]*?)<\\/think>/);\n  const reasoning = match ? (match[1] ?? null) : \"\";\n  const answer = match ? raw.replace(/<think>[\\s\\S]*?<\\/think>/g, \"\").trim() : raw;\n  return { reasoning, answer };\n}\n",
+      "tests/reasoning.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseReasoning } from \"../src/reasoning\";\n\ntest(\"returns null reasoning when no think tags\", () => {\n  const result = parseReasoning(\"Just a plain answer.\");\n  expect(result.reasoning).toBeNull();\n  expect(result.answer).toBe(\"Just a plain answer.\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/reasoning.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "reasoning"]
+}

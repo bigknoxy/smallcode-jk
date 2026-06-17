@@ -1,0 +1,20 @@
+{
+  "id": "registry-unknown-model-throws_1",
+  "desc": "ModelRegistry.get() must throw a descriptive error when an unknown model ID is requested",
+  "setup": {
+    "files": {
+      "src/registry.ts": "interface ModelProfile {\n  id: string;\n  temperature: number;\n}\n\nexport class ModelRegistry {\n  private profiles = new Map<string, ModelProfile>();\n\n  register(profile: ModelProfile): void {\n    this.profiles.set(profile.id, profile);\n  }\n\n  get(id: string): ModelProfile {\n    // BUG: returns undefined silently instead of throwing\n    return this.profiles.get(id) as ModelProfile;\n  }\n}\n",
+      "tests/registry.test.ts": "import { test, expect } from \"bun:test\";\nimport { ModelRegistry } from \"../src/registry\";\n\ntest(\"throws descriptive error for unknown model\", () => {\n  const registry = new ModelRegistry();\n  expect(() => registry.get(\"nonexistent-model\")).toThrow(\"nonexistent-model\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/registry.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "registry"]
+}

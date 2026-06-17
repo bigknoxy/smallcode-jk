@@ -1,0 +1,16 @@
+{
+  "id": "ts-implicit-any_1",
+  "desc": "Fix implicit any: variable declared without type annotation in strict mode",
+  "setup": {
+    "files": {
+      "src/parse.ts": "export function parseItems(raw: string) {\n  const items = JSON.parse(raw);\n  return items;\n}\n",
+      "tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"noImplicitAny\":true,\"noEmit\":true}}",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    { "type": "static_analysis", "commands": ["tsc"] }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "typescript", "strict-mode", "implicit-any"]
+}

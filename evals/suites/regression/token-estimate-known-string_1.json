@@ -1,0 +1,20 @@
+{
+  "id": "token-estimate-known-string_1",
+  "desc": "estimateTokens with a 40-char string should return approximately 10 (within ±2)",
+  "setup": {
+    "files": {
+      "src/tokens.ts": "export function estimateTokens(text: string): number {\n  // TODO: fix — current formula double-counts whitespace tokens\n  const words = text.trim().split(/\\s+/).length;\n  return words;\n}\n",
+      "tests/tokens.test.ts": "import { test, expect } from \"bun:test\";\nimport { estimateTokens } from \"../src/tokens\";\n\ntest(\"40-char string estimates to ~10 tokens\", () => {\n  // 'The quick brown fox jumps over the lazy' = 38 chars, ~9-10 tokens\n  const result = estimateTokens(\"The quick brown fox jumps over the lazy\");\n  expect(result).toBeGreaterThanOrEqual(8);\n  expect(result).toBeLessThanOrEqual(12);\n});\n\ntest(\"empty string returns minimum 1\", () => {\n  expect(estimateTokens(\"\")).toBeGreaterThanOrEqual(1);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/tokens.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "token-estimation"]
+}

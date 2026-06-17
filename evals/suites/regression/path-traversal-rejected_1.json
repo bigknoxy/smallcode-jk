@@ -1,0 +1,20 @@
+{
+  "id": "path-traversal-rejected_1",
+  "desc": "resolveSafe must reject paths containing ../ to prevent directory traversal",
+  "setup": {
+    "files": {
+      "src/path-safety.ts": "import { resolve, relative } from \"node:path\";\n\nexport function resolveSafe(root: string, filePath: string): string {\n  // BUG: no traversal check — just joins blindly\n  const abs = resolve(root, filePath);\n  return abs;\n}\n",
+      "tests/path-safety.test.ts": "import { test, expect } from \"bun:test\";\nimport { resolveSafe } from \"../src/path-safety\";\n\ntest(\"rejects path traversal\", () => {\n  expect(() => resolveSafe(\"/workspace\", \"../../../etc/passwd\")).toThrow();\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/path-safety.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "path-safety"]
+}

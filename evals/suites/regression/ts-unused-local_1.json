@@ -1,0 +1,16 @@
+{
+  "id": "ts-unused-local_1",
+  "desc": "Fix noUnusedLocals: remove or use an unused local variable",
+  "setup": {
+    "files": {
+      "src/util.ts": "export function greet(name: string): string {\n  const prefix = \"Hello\";\n  const unused = 42;\n  return `${prefix}, ${name}!`;\n}\n",
+      "tsconfig.json": "{\"compilerOptions\":{\"strict\":true,\"noUnusedLocals\":true,\"noEmit\":true}}",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    { "type": "static_analysis", "commands": ["tsc"] }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "typescript", "strict-mode", "noUnusedLocals"]
+}

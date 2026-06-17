@@ -1,0 +1,20 @@
+{
+  "id": "edit-parse-no-blocks_1",
+  "desc": "Edit block parser must return empty array (not throw) when the response has no edit blocks",
+  "setup": {
+    "files": {
+      "src/parser.ts": "export function parseEditBlocks(_response: string): Array<{ filePath: string; search: string; replace: string }> {\n  // BUG: throws instead of returning []\n  throw new Error(\"No edit blocks found\");\n}\n",
+      "tests/parser.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseEditBlocks } from \"../src/parser\";\n\ntest(\"returns empty array when no blocks present\", () => {\n  const result = parseEditBlocks(\"Just a plain text response with no edits.\");\n  expect(result).toEqual([]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/parser.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "edit-parser"]
+}

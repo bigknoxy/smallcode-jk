@@ -1,0 +1,20 @@
+{
+  "id": "reasoning-multiple-think-blocks_1",
+  "desc": "Reasoning handler must handle multiple <think> blocks, concatenating reasoning content",
+  "setup": {
+    "files": {
+      "src/reasoning.ts": "export interface ParsedResponse {\n  reasoning: string | null;\n  answer: string;\n}\n\nexport function parseReasoning(raw: string): ParsedResponse {\n  // TODO: only handles one <think> block; must handle multiple\n  const match = raw.match(/<think>([\\s\\S]*?)<\\/think>/);\n  if (!match) return { reasoning: null, answer: raw };\n  const reasoning = match[1] ?? null;\n  const answer = raw.replace(/<think>[\\s\\S]*?<\\/think>/, \"\").trim();\n  return { reasoning, answer };\n}\n",
+      "tests/reasoning.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseReasoning } from \"../src/reasoning\";\n\ntest(\"handles multiple think blocks\", () => {\n  const raw = \"<think>step one</think>partial<think>step two</think>Final answer.\";\n  const result = parseReasoning(raw);\n  expect(result.answer.trim()).toBe(\"Final answer.\");\n  expect(result.reasoning).toContain(\"step one\");\n  expect(result.reasoning).toContain(\"step two\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/reasoning.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "reasoning"]
+}

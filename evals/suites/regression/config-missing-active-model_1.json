@@ -1,0 +1,20 @@
+{
+  "id": "config-missing-active-model_1",
+  "desc": "Config schema must fail Zod parse when activeModel is absent",
+  "setup": {
+    "files": {
+      "src/config-schema.ts": "import { z } from \"zod\";\n\nexport const ConfigSchema = z.object({\n  provider: z.object({ baseUrl: z.string().url(), apiKey: z.string() }),\n  activeModel: z.string().optional(),\n});\n\nexport function parseConfig(raw: unknown) {\n  return ConfigSchema.safeParse(raw);\n}\n",
+      "tests/config-schema.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseConfig } from \"../src/config-schema\";\n\ntest(\"fails when activeModel is missing\", () => {\n  const result = parseConfig({\n    provider: { baseUrl: \"http://localhost:11434\", apiKey: \"none\" },\n  });\n  // activeModel is required — optional() above is the bug to fix\n  expect(result.success).toBe(false);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/config-schema.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "config", "validation"]
+}
