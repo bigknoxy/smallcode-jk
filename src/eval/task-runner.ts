@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { lstat, readdir, readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import type { LoopDependencies } from "../agent/loop.ts";
 import { runLoop } from "../agent/loop.ts";
 import { createState, getStatePath } from "../agent/state.ts";
 import type { AgentConfig } from "../agent/types.ts";
-import type { ContextBundle } from "../context/types.ts";
+import { estimateTokens } from "../context/tokens.ts";
+import type { ContextBundle, ContextChunk } from "../context/types.ts";
 import type { LLMJudgeOptions } from "./graders/index.ts";
 import { runGrader } from "./graders/index.ts";
 import { averageMetrics, collectMetrics, computePassAllK, computePassAtK } from "./metrics.ts";
@@ -19,13 +21,67 @@ export interface TaskRunnerOptions {
   graderOpts?: LLMJudgeOptions;
 }
 
-function buildEmptyContext(goal: string): ContextBundle {
+// Walk trial dir and return source files as context chunks.
+// Includes .ts/.js/.py source files but not node_modules or lock files.
+async function buildTrialContext(trialDir: string, query: string): Promise<ContextBundle> {
+  const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"]);
+  const SKIP_DIRS = new Set(["node_modules", ".git", ".smallcode"]);
+
+  const chunks: ContextChunk[] = [];
+  let totalTokens = 0;
+  const TOKEN_BUDGET = 8_000;
+
+  async function walk(dir: string): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await readdir(dir, { encoding: "utf-8" });
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      const absPath = join(dir, name);
+      // Check if directory
+      let isDir = false;
+      try {
+        const s = await lstat(absPath);
+        isDir = s.isDirectory();
+      } catch {
+        continue;
+      }
+      if (isDir) {
+        if (!SKIP_DIRS.has(name)) await walk(absPath);
+        continue;
+      }
+      const ext = name.slice(name.lastIndexOf("."));
+      if (!SOURCE_EXTS.has(ext)) continue;
+      const relPath = relative(trialDir, absPath);
+      try {
+        const content = await readFile(absPath, { encoding: "utf-8" });
+        const lines = content.split("\n");
+        const tokens = estimateTokens(content);
+        if (totalTokens + tokens > TOKEN_BUDGET) continue;
+        totalTokens += tokens;
+        chunks.push({
+          filePath: relPath,
+          content,
+          startLine: 1,
+          endLine: lines.length,
+          estimatedTokens: tokens,
+        });
+      } catch {
+        // Skip unreadable files
+      }
+    }
+  }
+
+  await walk(trialDir);
+
   return {
-    chunks: [],
-    totalTokens: 0,
-    tokenBudget: 0,
+    chunks,
+    totalTokens,
+    tokenBudget: TOKEN_BUDGET,
     truncated: false,
-    query: goal,
+    query,
   };
 }
 
@@ -61,7 +117,7 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
         state,
         statePath,
         trialDeps,
-        async (goal: string): Promise<ContextBundle> => buildEmptyContext(goal),
+        async (goal: string): Promise<ContextBundle> => buildTrialContext(trialEnv.dir, goal),
       );
 
       const trialFinishedAt = Date.now();
