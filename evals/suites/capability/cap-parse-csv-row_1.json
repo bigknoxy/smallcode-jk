@@ -1,0 +1,21 @@
+{
+  "id": "cap-parse-csv-row_1",
+  "desc": "Implement parseCsvRow(line: string): string[] that parses a single CSV row, correctly handling quoted fields that may contain commas. Quoted fields use double-quotes.",
+  "setup": {
+    "files": {
+      "src/csv.ts": "/**\n * Parse a single CSV row into fields.\n * Handles quoted fields (double-quotes) that may contain commas.\n * Example: 'a,\"b,c\",d' => ['a', 'b,c', 'd']\n */\nexport function parseCsvRow(line: string): string[] {\n  // TODO: implement\n  return line.split(\",\");\n}\n",
+      "tests/csv.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseCsvRow } from \"../src/csv\";\n\ntest(\"parses simple row\", () => {\n  expect(parseCsvRow(\"a,b,c\")).toEqual([\"a\", \"b\", \"c\"]);\n});\n\ntest(\"handles quoted field with comma\", () => {\n  expect(parseCsvRow('a,\"b,c\",d')).toEqual([\"a\", \"b,c\", \"d\"]);\n});\n\ntest(\"handles multiple quoted fields\", () => {\n  expect(parseCsvRow('\"hello,world\",\"foo,bar\"')).toEqual([\"hello,world\", \"foo,bar\"]);\n});\n\ntest(\"handles empty fields\", () => {\n  expect(parseCsvRow(\"a,,c\")).toEqual([\"a\", \"\", \"c\"]);\n});\n\ntest(\"handles single field\", () => {\n  expect(parseCsvRow(\"only\")).toEqual([\"only\"]);\n});\n\ntest(\"handles quoted field at end\", () => {\n  expect(parseCsvRow('a,b,\"c,d\"')).toEqual([\"a\", \"b\", \"c,d\"]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/csv.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "parsing", "edge-cases"],
+  "reference_solution": "capability/cap-parse-csv-row_1/"
+}

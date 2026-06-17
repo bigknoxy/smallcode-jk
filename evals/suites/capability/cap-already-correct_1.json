@@ -1,0 +1,21 @@
+{
+  "id": "cap-already-correct_1",
+  "desc": "Review and improve the isPalindrome function. It should return true if the input string reads the same forwards and backwards (case-insensitive, ignoring non-alphanumeric characters).",
+  "setup": {
+    "files": {
+      "src/palindrome.ts": "/**\n * Returns true if the string is a palindrome.\n * Case-insensitive, ignores non-alphanumeric characters.\n */\nexport function isPalindrome(s: string): boolean {\n  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, \"\");\n  return cleaned === cleaned.split(\"\").reverse().join(\"\");\n}\n",
+      "tests/palindrome.test.ts": "import { test, expect } from \"bun:test\";\nimport { isPalindrome } from \"../src/palindrome\";\n\ntest(\"simple palindrome\", () => {\n  expect(isPalindrome(\"racecar\")).toBe(true);\n});\n\ntest(\"not a palindrome\", () => {\n  expect(isPalindrome(\"hello\")).toBe(false);\n});\n\ntest(\"case insensitive\", () => {\n  expect(isPalindrome(\"RaceCar\")).toBe(true);\n});\n\ntest(\"ignores spaces and punctuation\", () => {\n  expect(isPalindrome(\"A man, a plan, a canal: Panama\")).toBe(true);\n});\n\ntest(\"empty string is palindrome\", () => {\n  expect(isPalindrome(\"\")).toBe(true);\n});\n\ntest(\"single char is palindrome\", () => {\n  expect(isPalindrome(\"a\")).toBe(true);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/palindrome.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "no-edit", "preserve-correctness"],
+  "reference_solution": "capability/cap-already-correct_1/"
+}

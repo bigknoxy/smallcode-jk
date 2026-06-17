@@ -1,0 +1,21 @@
+{
+  "id": "cap-no-edit-needed_1",
+  "desc": "Optimize the sortNumbers function if possible. It should sort an array of numbers in ascending order and return a new sorted array without mutating the input.",
+  "setup": {
+    "files": {
+      "src/sort.ts": "/**\n * Returns a new array with numbers sorted in ascending order.\n * Does not mutate the input array.\n */\nexport function sortNumbers(arr: number[]): number[] {\n  return [...arr].sort((a, b) => a - b);\n}\n",
+      "tests/sort.test.ts": "import { test, expect } from \"bun:test\";\nimport { sortNumbers } from \"../src/sort\";\n\ntest(\"sorts numbers ascending\", () => {\n  expect(sortNumbers([3, 1, 4, 1, 5, 9, 2, 6])).toEqual([1, 1, 2, 3, 4, 5, 6, 9]);\n});\n\ntest(\"does not mutate input\", () => {\n  const arr = [3, 1, 2];\n  sortNumbers(arr);\n  expect(arr).toEqual([3, 1, 2]);\n});\n\ntest(\"handles empty array\", () => {\n  expect(sortNumbers([])).toEqual([]);\n});\n\ntest(\"handles single element\", () => {\n  expect(sortNumbers([42])).toEqual([42]);\n});\n\ntest(\"handles already sorted\", () => {\n  expect(sortNumbers([1, 2, 3])).toEqual([1, 2, 3]);\n});\n\ntest(\"handles negative numbers\", () => {\n  expect(sortNumbers([-3, 0, -1, 2])).toEqual([-3, -1, 0, 2]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/sort.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "no-edit", "preserve-correctness"],
+  "reference_solution": "capability/cap-no-edit-needed_1/"
+}

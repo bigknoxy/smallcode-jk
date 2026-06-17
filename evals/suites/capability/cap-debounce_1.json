@@ -1,0 +1,21 @@
+{
+  "id": "cap-debounce_1",
+  "desc": "Implement a debounce(fn, delayMs) function that delays invoking fn until after delayMs milliseconds have elapsed since the last call. Returns a debounced version of fn.",
+  "setup": {
+    "files": {
+      "src/debounce.ts": "/**\n * Returns a debounced version of fn that delays invocation by delayMs.\n * Each new call resets the delay timer.\n */\nexport function debounce<T extends unknown[]>(\n  fn: (...args: T) => void,\n  delayMs: number\n): (...args: T) => void {\n  // TODO: implement\n  return fn;\n}\n",
+      "tests/debounce.test.ts": "import { test, expect, mock, beforeEach, afterEach } from \"bun:test\";\nimport { debounce } from \"../src/debounce\";\n\nbeforeEach(() => {\n  // Use Bun's built-in fake timers\n  // @ts-ignore\n  globalThis.__originalSetTimeout = globalThis.setTimeout;\n  // @ts-ignore\n  globalThis.__originalClearTimeout = globalThis.clearTimeout;\n});\n\nafterEach(() => {\n  // @ts-ignore\n  if (globalThis.__originalSetTimeout) {\n    // @ts-ignore\n    globalThis.setTimeout = globalThis.__originalSetTimeout;\n    // @ts-ignore\n    globalThis.clearTimeout = globalThis.__originalClearTimeout;\n  }\n});\n\ntest(\"does not call fn immediately\", () => {\n  const calls: number[] = [];\n  let pendingTimeout: ReturnType<typeof setTimeout> | null = null;\n\n  // Intercept setTimeout to capture the timer\n  const origSetTimeout = globalThis.setTimeout;\n  // @ts-ignore\n  globalThis.setTimeout = (cb: () => void, delay: number) => {\n    pendingTimeout = origSetTimeout(cb, delay);\n    return pendingTimeout;\n  };\n\n  const fn = (n: number) => calls.push(n);\n  const debounced = debounce(fn, 100);\n\n  debounced(42);\n  // Clear the pending timer before it fires\n  if (pendingTimeout !== null) clearTimeout(pendingTimeout);\n\n  expect(calls).toEqual([]);\n});\n\ntest(\"calls fn once after delay with last args\", async () => {\n  const calls: number[] = [];\n  const fn = (n: number) => calls.push(n);\n  const debounced = debounce(fn, 20);\n\n  debounced(1);\n  debounced(2);\n  debounced(3);\n\n  await new Promise<void>((resolve) => setTimeout(resolve, 50));\n  expect(calls).toEqual([3]);\n});\n\ntest(\"resets timer on each call\", async () => {\n  const calls: number[] = [];\n  const fn = (n: number) => calls.push(n);\n  const debounced = debounce(fn, 30);\n\n  debounced(1);\n  await new Promise<void>((resolve) => setTimeout(resolve, 15));\n  debounced(2);\n  await new Promise<void>((resolve) => setTimeout(resolve, 15));\n  // Only 15ms since last call — should NOT have fired yet\n  expect(calls).toEqual([]);\n\n  await new Promise<void>((resolve) => setTimeout(resolve, 30));\n  // Now 30ms since last call — should have fired once with arg 2\n  expect(calls).toEqual([2]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/debounce.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "async", "timers"],
+  "reference_solution": "capability/cap-debounce_1/"
+}

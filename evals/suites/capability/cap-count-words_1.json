@@ -1,0 +1,21 @@
+{
+  "id": "cap-count-words_1",
+  "desc": "Implement countWords(text: string): Map<string, number> that counts word frequency in a string. Words are case-insensitive and split on whitespace. Punctuation attached to words should be stripped.",
+  "setup": {
+    "files": {
+      "src/words.ts": "/**\n * Count word frequency in text.\n * Words are lowercase, split on whitespace, punctuation stripped from edges.\n * Returns a Map<string, number>.\n */\nexport function countWords(text: string): Map<string, number> {\n  // TODO: implement\n  return new Map();\n}\n",
+      "tests/words.test.ts": "import { test, expect } from \"bun:test\";\nimport { countWords } from \"../src/words\";\n\ntest(\"counts words in simple sentence\", () => {\n  const result = countWords(\"the cat sat on the mat\");\n  expect(result.get(\"the\")).toBe(2);\n  expect(result.get(\"cat\")).toBe(1);\n  expect(result.get(\"mat\")).toBe(1);\n});\n\ntest(\"is case insensitive\", () => {\n  const result = countWords(\"Hello hello HELLO\");\n  expect(result.get(\"hello\")).toBe(3);\n});\n\ntest(\"strips trailing punctuation\", () => {\n  const result = countWords(\"hello, world!\");\n  expect(result.get(\"hello\")).toBe(1);\n  expect(result.get(\"world\")).toBe(1);\n});\n\ntest(\"handles empty string\", () => {\n  expect(countWords(\"\").size).toBe(0);\n});\n\ntest(\"handles multiple spaces\", () => {\n  const result = countWords(\"a  b   a\");\n  expect(result.get(\"a\")).toBe(2);\n  expect(result.get(\"b\")).toBe(1);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/words.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "strings", "data-structures"],
+  "reference_solution": "capability/cap-count-words_1/"
+}

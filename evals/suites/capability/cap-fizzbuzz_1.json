@@ -1,0 +1,21 @@
+{
+  "id": "cap-fizzbuzz_1",
+  "desc": "Implement fizzbuzz(n: number): string[] — returns an array of n strings where multiples of 3 are 'Fizz', multiples of 5 are 'Buzz', multiples of both are 'FizzBuzz', and all others are the number as a string",
+  "setup": {
+    "files": {
+      "src/fizzbuzz.ts": "export function fizzbuzz(n: number): string[] {\n  // TODO: implement\n  return [];\n}\n",
+      "tests/fizzbuzz.test.ts": "import { test, expect } from \"bun:test\";\nimport { fizzbuzz } from \"../src/fizzbuzz\";\n\ntest(\"returns correct length\", () => {\n  expect(fizzbuzz(15).length).toBe(15);\n});\n\ntest(\"multiples of 3 are Fizz\", () => {\n  const result = fizzbuzz(15);\n  expect(result[2]).toBe(\"Fizz\");\n  expect(result[5]).toBe(\"Fizz\");\n  expect(result[8]).toBe(\"Fizz\");\n});\n\ntest(\"multiples of 5 are Buzz\", () => {\n  const result = fizzbuzz(15);\n  expect(result[4]).toBe(\"Buzz\");\n  expect(result[9]).toBe(\"Buzz\");\n});\n\ntest(\"multiples of 15 are FizzBuzz\", () => {\n  const result = fizzbuzz(15);\n  expect(result[14]).toBe(\"FizzBuzz\");\n});\n\ntest(\"other numbers are strings of the number\", () => {\n  const result = fizzbuzz(5);\n  expect(result[0]).toBe(\"1\");\n  expect(result[1]).toBe(\"2\");\n  expect(result[3]).toBe(\"4\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/fizzbuzz.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "classic"],
+  "reference_solution": "capability/cap-fizzbuzz_1/"
+}

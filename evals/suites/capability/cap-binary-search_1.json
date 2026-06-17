@@ -1,0 +1,21 @@
+{
+  "id": "cap-binary-search_1",
+  "desc": "Implement binarySearch(arr: number[], target: number): number that returns the index of target in a sorted array, or -1 if not found",
+  "setup": {
+    "files": {
+      "src/search.ts": "/**\n * Binary search on a sorted array.\n * Returns the index of target, or -1 if not found.\n */\nexport function binarySearch(arr: number[], target: number): number {\n  // TODO: implement\n  return -1;\n}\n",
+      "tests/search.test.ts": "import { test, expect } from \"bun:test\";\nimport { binarySearch } from \"../src/search\";\n\ntest(\"finds element in middle\", () => {\n  expect(binarySearch([1, 3, 5, 7, 9], 5)).toBe(2);\n});\n\ntest(\"finds element at start\", () => {\n  expect(binarySearch([1, 3, 5, 7, 9], 1)).toBe(0);\n});\n\ntest(\"finds element at end\", () => {\n  expect(binarySearch([1, 3, 5, 7, 9], 9)).toBe(4);\n});\n\ntest(\"returns -1 when not found\", () => {\n  expect(binarySearch([1, 3, 5, 7, 9], 4)).toBe(-1);\n});\n\ntest(\"returns -1 for empty array\", () => {\n  expect(binarySearch([], 5)).toBe(-1);\n});\n\ntest(\"finds single element\", () => {\n  expect(binarySearch([42], 42)).toBe(0);\n});\n\ntest(\"single element not found\", () => {\n  expect(binarySearch([42], 1)).toBe(-1);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/search.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "algorithms", "search"],
+  "reference_solution": "capability/cap-binary-search_1/"
+}

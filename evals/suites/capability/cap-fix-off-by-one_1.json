@@ -1,0 +1,21 @@
+{
+  "id": "cap-fix-off-by-one_1",
+  "desc": "Fix the off-by-one bug in the getLastN function — it should return the last n elements of an array but currently returns one too few due to a slicing error",
+  "setup": {
+    "files": {
+      "src/array-utils.ts": "/**\n * Returns the last n elements of the array.\n * Bug: off-by-one in the slice index.\n */\nexport function getLastN<T>(arr: T[], n: number): T[] {\n  if (n <= 0) return [];\n  if (n >= arr.length) return arr.slice();\n  return arr.slice(arr.length - n + 1);\n}\n",
+      "tests/array-utils.test.ts": "import { test, expect } from \"bun:test\";\nimport { getLastN } from \"../src/array-utils\";\n\ntest(\"returns last 3 elements\", () => {\n  expect(getLastN([1, 2, 3, 4, 5], 3)).toEqual([3, 4, 5]);\n});\n\ntest(\"returns last 1 element\", () => {\n  expect(getLastN([10, 20, 30], 1)).toEqual([30]);\n});\n\ntest(\"returns all when n >= length\", () => {\n  expect(getLastN([1, 2], 5)).toEqual([1, 2]);\n});\n\ntest(\"returns empty when n is 0\", () => {\n  expect(getLastN([1, 2, 3], 0)).toEqual([]);\n});\n\ntest(\"returns last 2 of 4\", () => {\n  expect(getLastN([\"a\", \"b\", \"c\", \"d\"], 2)).toEqual([\"c\", \"d\"]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/array-utils.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "bugfix", "off-by-one"],
+  "reference_solution": "capability/cap-fix-off-by-one_1/"
+}

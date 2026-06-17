@@ -1,0 +1,6 @@
+{
+  "id": "capability-v1",
+  "kind": "capability",
+  "description": "Capability suite: real end-to-end coding tasks for VibeThinker-3B baseline evaluation",
+  "defaultTrials": 5
+}

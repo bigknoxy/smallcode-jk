@@ -257,3 +257,10 @@ The metrics store tracks `MetricsSnapshot` history per suite, enabling trend ana
 ## License
 
 MIT
+
+<!-- agent-skills:doc-keeper:start -->
+## Reference (auto-tracked by doc-keeper)
+
+### Environment Variables
+- `SMALLCODE_DRY_RUN`: _(add description)_
+<!-- agent-skills:doc-keeper:end -->

@@ -1,0 +1,21 @@
+{
+  "id": "cap-remove-duplicates_1",
+  "desc": "Implement removeDuplicates<T>(arr: T[]): T[] that removes duplicate values while preserving the original order of first occurrences",
+  "setup": {
+    "files": {
+      "src/dedup.ts": "export function removeDuplicates<T>(arr: T[]): T[] {\n  // TODO: implement — preserve order of first occurrence\n  return arr;\n}\n",
+      "tests/dedup.test.ts": "import { test, expect } from \"bun:test\";\nimport { removeDuplicates } from \"../src/dedup\";\n\ntest(\"removes duplicate numbers\", () => {\n  expect(removeDuplicates([1, 2, 2, 3, 1])).toEqual([1, 2, 3]);\n});\n\ntest(\"preserves order of first occurrence\", () => {\n  expect(removeDuplicates([3, 1, 2, 1, 3])).toEqual([3, 1, 2]);\n});\n\ntest(\"handles empty array\", () => {\n  expect(removeDuplicates([])).toEqual([]);\n});\n\ntest(\"handles array with no duplicates\", () => {\n  expect(removeDuplicates([1, 2, 3])).toEqual([1, 2, 3]);\n});\n\ntest(\"works with strings\", () => {\n  expect(removeDuplicates([\"a\", \"b\", \"a\", \"c\", \"b\"])).toEqual([\"a\", \"b\", \"c\"]);\n});\n\ntest(\"handles all same elements\", () => {\n  expect(removeDuplicates([5, 5, 5, 5])).toEqual([5]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/dedup.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "arrays", "generics"],
+  "reference_solution": "capability/cap-remove-duplicates_1/"
+}
