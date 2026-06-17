@@ -5,6 +5,7 @@ import { applyBatch, parse } from "@/edit/index.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
+import { planTask } from "./planner.ts";
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
 import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./types.ts";
@@ -132,6 +133,23 @@ export async function runLoop(
 
   const readFileFn = buildReadFile(state.repoRoot);
   const writeFileFn = buildWriteFile(state.repoRoot);
+
+  // Planning phase: decompose the task into goals if none exist yet.
+  if (state.goals.length === 0) {
+    let context: ContextBundle;
+    try {
+      context = await getContext(state.task);
+    } catch {
+      context = { chunks: [], totalTokens: 0, tokenBudget: 0, truncated: false, query: state.task };
+    }
+    state.goals = await planTask(state.task, context, {
+      provider,
+      modelId: state.modelId,
+      profile,
+      repoRoot: state.repoRoot,
+    });
+    await saveState(state, statePath);
+  }
 
   while (!isTerminal(state) && state.turns.length < state.maxTurns) {
     const goal = currentGoal(state);

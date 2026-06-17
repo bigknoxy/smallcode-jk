@@ -17,10 +17,15 @@
 
 import { mkdir, cp, rm, appendFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { loadConfig } from "../src/config/loader.ts";
+import { runTask } from "../src/eval/task-runner.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
 import { runDeterministicGrader } from "../src/eval/graders/deterministic.ts";
 import { runStaticGrader } from "../src/eval/graders/static.ts";
-import type { EvalTask, GraderConfig, GraderResult } from "../src/eval/types.ts";
+import type { EvalTask, GraderConfig, GraderResult, TaskEvalResult } from "../src/eval/types.ts";
+import { defaultRegistry } from "../src/models/registry.ts";
+import { createProvider } from "../src/provider/factory.ts";
+import { ReasoningHandler } from "../src/reasoning/handler.ts";
 import type { MetricsSnapshot } from "../src/improve/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -154,12 +159,55 @@ interface LiveTaskMetrics {
 }
 
 async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> {
-  // TODO: wire up to the real agent harness (src/eval/harness.ts)
-  // For now this is a placeholder that would run k trials of the agent.
-  throw new Error(
-    `Live eval not yet wired up for task ${task.id}. ` +
-      `Set SMALLCODE_DRY_RUN=1 to run reference-solution validation instead.`,
+  const { config, extraModels } = loadConfig();
+  for (const m of extraModels) defaultRegistry.register(m);
+
+  const profile = defaultRegistry.get(config.activeModel);
+  const provider = createProvider(config.provider, defaultRegistry);
+  const reasoningHandler = new ReasoningHandler(
+    profile.reasoningTags ?? { open: "<think>", close: "</think>" },
   );
+
+  const agentConfig = {
+    repoRoot: PROJECT_ROOT, // overridden per trial inside runTask
+    modelId: profile.id,
+    maxTurns: config.maxTurns,
+    bestOfN: config.bestOfN,
+    allowedCommands: config.sandbox.allowedCommands,
+    requireApproval: false,
+  };
+
+  const loopDeps = {
+    provider,
+    profile,
+    reasoningHandler,
+    config: agentConfig,
+  };
+
+  const result: TaskEvalResult = await runTask(task, {
+    trialsPerTask: k,
+    fixturesRoot: FIXTURES_DIR,
+    agentConfig,
+    loopDeps,
+  });
+
+  const avgTurns =
+    result.trials.length === 0
+      ? 0
+      : result.trials.reduce((sum, t) => sum + t.metrics.nTurns, 0) / result.trials.length;
+
+  const avgTokens =
+    result.trials.length === 0
+      ? 0
+      : result.trials.reduce((sum, t) => sum + t.metrics.nTotalTokens, 0) / result.trials.length;
+
+  return {
+    taskId: task.id,
+    passAt1: result.passAt1,
+    passAtK: result.passAtK[k] ?? result.passAt1,
+    avgTurns,
+    avgTokens,
+  };
 }
 
 function printLiveTable(metrics: LiveTaskMetrics[]): void {
@@ -279,7 +327,7 @@ async function main(): Promise<void> {
       timestamp: Date.now(),
       runId: `live-${Date.now()}`,
       suiteId: suite.id,
-      modelId: process.env.SMALLCODE_MODEL ?? "unknown",
+      modelId: loadConfig().config.activeModel,
       overallPassAt1: allMetrics.reduce((sum, m) => sum + m.passAt1, 0) / allMetrics.length,
       totalTasksPassed: passCount,
       totalTasks: suite.tasks.length,

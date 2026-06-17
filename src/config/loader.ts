@@ -17,9 +17,7 @@ export interface LoadedConfig {
 export function loadConfig(configPath?: string): LoadedConfig {
   // If an explicit path was given, use only that path (no default fallback).
   const candidates: string[] =
-    configPath !== undefined
-      ? [configPath]
-      : ["smallcode.config.json", ".smallcode.json"];
+    configPath !== undefined ? [configPath] : ["smallcode.config.json", ".smallcode.json"];
 
   for (const candidate of candidates) {
     const abs = resolve(candidate);
