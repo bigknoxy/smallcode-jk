@@ -1,0 +1,21 @@
+{
+  "id": "cap-fix-async-bug_1",
+  "desc": "Fix a bug where an async function doesn't await properly — the function fetchValue() returns a Promise<number> but the caller doesn't await it, so tests fail because they receive a Promise object instead of a resolved number",
+  "setup": {
+    "files": {
+      "src/async-utils.ts": "async function delay(ms: number): Promise<void> {\n  return new Promise((resolve) => setTimeout(resolve, ms));\n}\n\nasync function fetchValue(): Promise<number> {\n  await delay(1);\n  return 42;\n}\n\nexport async function getDoubledValue(): Promise<number> {\n  // BUG: not awaiting fetchValue — this returns a Promise, not a number\n  const value = fetchValue();\n  return (value as unknown as number) * 2;\n}\n",
+      "tests/async-utils.test.ts": "import { test, expect } from \"bun:test\";\nimport { getDoubledValue } from \"../src/async-utils\";\n\ntest(\"returns doubled value\", async () => {\n  const result = await getDoubledValue();\n  expect(result).toBe(84);\n});\n\ntest(\"returns a number, not a Promise\", async () => {\n  const result = await getDoubledValue();\n  expect(typeof result).toBe(\"number\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/async-utils.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "bugfix", "medium", "async"],
+  "reference_solution": "capability/cap-fix-async-bug_1/"
+}

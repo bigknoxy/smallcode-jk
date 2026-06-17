@@ -1,0 +1,21 @@
+{
+  "id": "cap-add-validation_1",
+  "desc": "Add input validation to an existing divide(a, b) function — it must throw an Error when b is zero. Currently the function has no validation and returns Infinity or NaN for zero division.",
+  "setup": {
+    "files": {
+      "src/math.ts": "export function divide(a: number, b: number): number {\n  // TODO: add validation — throw Error when b is 0\n  return a / b;\n}\n",
+      "tests/math.test.ts": "import { test, expect } from \"bun:test\";\nimport { divide } from \"../src/math\";\n\ntest(\"divides two positive numbers\", () => {\n  expect(divide(10, 2)).toBe(5);\n});\n\ntest(\"divides with negative\", () => {\n  expect(divide(-6, 3)).toBe(-2);\n});\n\ntest(\"divides to decimal\", () => {\n  expect(divide(1, 4)).toBe(0.25);\n});\n\ntest(\"throws when divisor is zero\", () => {\n  expect(() => divide(5, 0)).toThrow();\n});\n\ntest(\"throws when both are zero\", () => {\n  expect(() => divide(0, 0)).toThrow();\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/math.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "bugfix", "medium", "validation"],
+  "reference_solution": "capability/cap-add-validation_1/"
+}

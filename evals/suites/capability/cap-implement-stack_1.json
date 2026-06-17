@@ -1,0 +1,21 @@
+{
+  "id": "cap-implement-stack_1",
+  "desc": "Implement a Stack<T> class with push(item: T): void, pop(): T | undefined, peek(): T | undefined, and isEmpty(): boolean methods",
+  "setup": {
+    "files": {
+      "src/stack.ts": "export class Stack<T> {\n  // TODO: implement push, pop, peek, isEmpty\n}\n",
+      "tests/stack.test.ts": "import { test, expect } from \"bun:test\";\nimport { Stack } from \"../src/stack\";\n\ntest(\"isEmpty on new stack\", () => {\n  const s = new Stack<number>();\n  expect(s.isEmpty()).toBe(true);\n});\n\ntest(\"push and peek\", () => {\n  const s = new Stack<number>();\n  s.push(1);\n  expect(s.peek()).toBe(1);\n  expect(s.isEmpty()).toBe(false);\n});\n\ntest(\"pop returns last pushed\", () => {\n  const s = new Stack<number>();\n  s.push(1);\n  s.push(2);\n  expect(s.pop()).toBe(2);\n  expect(s.pop()).toBe(1);\n});\n\ntest(\"pop on empty returns undefined\", () => {\n  const s = new Stack<string>();\n  expect(s.pop()).toBeUndefined();\n});\n\ntest(\"peek on empty returns undefined\", () => {\n  const s = new Stack<string>();\n  expect(s.peek()).toBeUndefined();\n});\n\ntest(\"isEmpty after push and pop\", () => {\n  const s = new Stack<number>();\n  s.push(42);\n  s.pop();\n  expect(s.isEmpty()).toBe(true);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/stack.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "medium", "data-structures"],
+  "reference_solution": "capability/cap-implement-stack_1/"
+}

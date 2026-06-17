@@ -1,0 +1,21 @@
+{
+  "id": "cap-deep-equal_1",
+  "desc": "Implement `deepEqual(a: unknown, b: unknown): boolean` — recursively compares two values for structural equality, handling nested objects, arrays, primitives, and null",
+  "setup": {
+    "files": {
+      "src/deep-equal.ts": "export function deepEqual(a: unknown, b: unknown): boolean {\n  // TODO: implement deep structural equality\n  return false;\n}\n",
+      "tests/deep-equal.test.ts": "import { test, expect } from \"bun:test\";\nimport { deepEqual } from \"../src/deep-equal\";\n\ntest(\"primitive equality\", () => {\n  expect(deepEqual(1, 1)).toBe(true);\n  expect(deepEqual(\"a\", \"a\")).toBe(true);\n  expect(deepEqual(1, 2)).toBe(false);\n});\n\ntest(\"null and undefined\", () => {\n  expect(deepEqual(null, null)).toBe(true);\n  expect(deepEqual(undefined, undefined)).toBe(true);\n  expect(deepEqual(null, undefined)).toBe(false);\n});\n\ntest(\"flat object equality\", () => {\n  expect(deepEqual({ a: 1, b: 2 }, { a: 1, b: 2 })).toBe(true);\n  expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);\n});\n\ntest(\"nested object equality\", () => {\n  expect(deepEqual({ a: { b: 1 } }, { a: { b: 1 } })).toBe(true);\n  expect(deepEqual({ a: { b: 1 } }, { a: { b: 2 } })).toBe(false);\n});\n\ntest(\"array equality\", () => {\n  expect(deepEqual([1, 2, 3], [1, 2, 3])).toBe(true);\n  expect(deepEqual([1, 2], [1, 2, 3])).toBe(false);\n});\n\ntest(\"nested arrays\", () => {\n  expect(deepEqual([[1, 2], [3]], [[1, 2], [3]])).toBe(true);\n  expect(deepEqual([[1, 2], [3]], [[1, 2], [4]])).toBe(false);\n});\n\ntest(\"different types\", () => {\n  expect(deepEqual([], {})).toBe(false);\n  expect(deepEqual(1, \"1\")).toBe(false);\n});\n\ntest(\"object missing key\", () => {\n  expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/deep-equal.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "hard"],
+  "reference_solution": "capability/cap-deep-equal_1/"
+}

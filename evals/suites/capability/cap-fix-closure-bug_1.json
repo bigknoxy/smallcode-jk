@@ -1,0 +1,21 @@
+{
+  "id": "cap-fix-closure-bug_1",
+  "desc": "Fix a classic closure-in-loop bug — the function uses var in a for loop to create closures, but all closures capture the same variable, so every function returns the same final value instead of their respective loop index",
+  "setup": {
+    "files": {
+      "src/closures.ts": "export function makeCounters(n: number): (() => number)[] {\n  const fns: (() => number)[] = [];\n  for (var i = 0; i < n; i++) {\n    // BUG: var is function-scoped, all closures capture the same `i`\n    fns.push(() => i);\n  }\n  return fns;\n}\n",
+      "tests/closures.test.ts": "import { test, expect } from \"bun:test\";\nimport { makeCounters } from \"../src/closures\";\n\ntest(\"each counter returns its own index\", () => {\n  const counters = makeCounters(3);\n  expect(counters[0]()).toBe(0);\n  expect(counters[1]()).toBe(1);\n  expect(counters[2]()).toBe(2);\n});\n\ntest(\"single counter\", () => {\n  const counters = makeCounters(1);\n  expect(counters[0]()).toBe(0);\n});\n\ntest(\"five counters\", () => {\n  const counters = makeCounters(5);\n  for (let j = 0; j < 5; j++) {\n    expect(counters[j]()).toBe(j);\n  }\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/closures.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "bugfix", "medium", "closures"],
+  "reference_solution": "capability/cap-fix-closure-bug_1/"
+}

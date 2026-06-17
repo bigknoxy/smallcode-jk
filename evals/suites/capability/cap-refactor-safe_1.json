@@ -1,0 +1,21 @@
+{
+  "id": "cap-refactor-safe_1",
+  "desc": "A working string `trimWhitespace(s: string): string` wrapper with passing tests — you may simplify the implementation but must not change its observable behavior",
+  "setup": {
+    "files": {
+      "src/string-utils.ts": "/**\n * Removes leading and trailing whitespace from a string.\n * Wrapper around String.prototype.trim.\n */\nexport function trimWhitespace(s: string): string {\n  const trimmed = s.trim();\n  return trimmed;\n}\n",
+      "tests/string-utils.test.ts": "import { test, expect } from \"bun:test\";\nimport { trimWhitespace } from \"../src/string-utils\";\n\ntest(\"trims spaces\", () => {\n  expect(trimWhitespace(\"  hello  \")).toBe(\"hello\");\n});\n\ntest(\"trims tabs and newlines\", () => {\n  expect(trimWhitespace(\"\\t\\nhello\\n\\t\")).toBe(\"hello\");\n});\n\ntest(\"empty string stays empty\", () => {\n  expect(trimWhitespace(\"\")).toBe(\"\");\n});\n\ntest(\"no whitespace unchanged\", () => {\n  expect(trimWhitespace(\"hello\")).toBe(\"hello\");\n});\n\ntest(\"only whitespace becomes empty\", () => {\n  expect(trimWhitespace(\"   \")).toBe(\"\");\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/string-utils.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "no-edit", "negative", "refactor"],
+  "reference_solution": "capability/cap-refactor-safe_1/"
+}

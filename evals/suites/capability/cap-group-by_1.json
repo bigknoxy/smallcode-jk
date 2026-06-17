@@ -1,0 +1,21 @@
+{
+  "id": "cap-group-by_1",
+  "desc": "Implement `groupBy<T>(items: T[], key: keyof T): Record<string, T[]>` — groups an array of objects by a given key, collecting items with the same key value into arrays",
+  "setup": {
+    "files": {
+      "src/group-by.ts": "export function groupBy<T>(items: T[], key: keyof T): Record<string, T[]> {\n  // TODO: implement\n  return {};\n}\n",
+      "tests/group-by.test.ts": "import { test, expect } from \"bun:test\";\nimport { groupBy } from \"../src/group-by\";\n\ntest(\"groups by string key\", () => {\n  const items = [\n    { type: \"a\", val: 1 },\n    { type: \"b\", val: 2 },\n    { type: \"a\", val: 3 },\n  ];\n  const result = groupBy(items, \"type\");\n  expect(result[\"a\"]).toEqual([{ type: \"a\", val: 1 }, { type: \"a\", val: 3 }]);\n  expect(result[\"b\"]).toEqual([{ type: \"b\", val: 2 }]);\n});\n\ntest(\"returns empty object for empty array\", () => {\n  expect(groupBy([], \"id\" as never)).toEqual({});\n});\n\ntest(\"groups by numeric key\", () => {\n  const items = [{ score: 10, name: \"x\" }, { score: 20, name: \"y\" }, { score: 10, name: \"z\" }];\n  const result = groupBy(items, \"score\");\n  expect(result[\"10\"].length).toBe(2);\n  expect(result[\"20\"].length).toBe(1);\n});\n\ntest(\"single item per group\", () => {\n  const items = [{ k: \"a\", v: 1 }, { k: \"b\", v: 2 }];\n  const result = groupBy(items, \"k\");\n  expect(Object.keys(result).length).toBe(2);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/group-by.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "medium"],
+  "reference_solution": "capability/cap-group-by_1/"
+}

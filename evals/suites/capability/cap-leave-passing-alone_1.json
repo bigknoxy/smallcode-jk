@@ -1,0 +1,21 @@
+{
+  "id": "cap-leave-passing-alone_1",
+  "desc": "A working `clamp(n: number, min: number, max: number): number` implementation with passing tests — do not modify the implementation, all tests already pass",
+  "setup": {
+    "files": {
+      "src/clamp.ts": "/**\n * Clamps n to the range [min, max].\n * Returns min if n < min, max if n > max, otherwise n.\n */\nexport function clamp(n: number, min: number, max: number): number {\n  if (n < min) return min;\n  if (n > max) return max;\n  return n;\n}\n",
+      "tests/clamp.test.ts": "import { test, expect } from \"bun:test\";\nimport { clamp } from \"../src/clamp\";\n\ntest(\"value below min returns min\", () => {\n  expect(clamp(-5, 0, 10)).toBe(0);\n});\n\ntest(\"value above max returns max\", () => {\n  expect(clamp(15, 0, 10)).toBe(10);\n});\n\ntest(\"value in range returns value\", () => {\n  expect(clamp(5, 0, 10)).toBe(5);\n});\n\ntest(\"value equal to min\", () => {\n  expect(clamp(0, 0, 10)).toBe(0);\n});\n\ntest(\"value equal to max\", () => {\n  expect(clamp(10, 0, 10)).toBe(10);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/clamp.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "no-edit", "negative", "preserve-correctness"],
+  "reference_solution": "capability/cap-leave-passing-alone_1/"
+}

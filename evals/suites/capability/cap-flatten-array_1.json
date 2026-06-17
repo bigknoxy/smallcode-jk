@@ -1,0 +1,21 @@
+{
+  "id": "cap-flatten-array_1",
+  "desc": "Implement `flatten(arr: (number | number[])[]): number[]` — flattens one level deep only (nested arrays inside nested arrays are not further flattened)",
+  "setup": {
+    "files": {
+      "src/array-utils.ts": "export function flatten(arr: (number | number[])[]): number[] {\n  // TODO: implement — one level deep only\n  return [];\n}\n",
+      "tests/array-utils.test.ts": "import { test, expect } from \"bun:test\";\nimport { flatten } from \"../src/array-utils\";\n\ntest(\"flattens simple nested arrays\", () => {\n  expect(flatten([1, [2, 3], 4])).toEqual([1, 2, 3, 4]);\n});\n\ntest(\"handles all scalars\", () => {\n  expect(flatten([1, 2, 3])).toEqual([1, 2, 3]);\n});\n\ntest(\"handles empty array\", () => {\n  expect(flatten([])).toEqual([]);\n});\n\ntest(\"handles array of arrays\", () => {\n  expect(flatten([[1, 2], [3, 4]])).toEqual([1, 2, 3, 4]);\n});\n\ntest(\"handles empty inner arrays\", () => {\n  expect(flatten([1, [], 2])).toEqual([1, 2]);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/array-utils.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "medium"],
+  "reference_solution": "capability/cap-flatten-array_1/"
+}

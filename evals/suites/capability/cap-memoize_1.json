@@ -1,0 +1,21 @@
+{
+  "id": "cap-memoize_1",
+  "desc": "Implement `memoize<T>(fn: (...args: number[]) => T): (...args: number[]) => T` — returns a memoized version of the function that caches results by serialized argument key",
+  "setup": {
+    "files": {
+      "src/memoize.ts": "export function memoize<T>(fn: (...args: number[]) => T): (...args: number[]) => T {\n  // TODO: implement memoization — cache results keyed by arguments\n  return fn;\n}\n",
+      "tests/memoize.test.ts": "import { test, expect } from \"bun:test\";\nimport { memoize } from \"../src/memoize\";\n\ntest(\"returns correct result\", () => {\n  const add = memoize((a: number, b: number) => a + b);\n  expect(add(2, 3)).toBe(5);\n});\n\ntest(\"caches result — original only called once\", () => {\n  let callCount = 0;\n  const fn = memoize((x: number) => { callCount++; return x * 2; });\n  fn(5);\n  fn(5);\n  fn(5);\n  expect(callCount).toBe(1);\n});\n\ntest(\"different args call function again\", () => {\n  let callCount = 0;\n  const fn = memoize((x: number) => { callCount++; return x * 2; });\n  fn(1);\n  fn(2);\n  expect(callCount).toBe(2);\n});\n\ntest(\"caches multiple distinct args\", () => {\n  let callCount = 0;\n  const fn = memoize((a: number, b: number) => { callCount++; return a + b; });\n  fn(1, 2);\n  fn(1, 2);\n  fn(3, 4);\n  fn(3, 4);\n  expect(callCount).toBe(2);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/memoize.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "medium", "higher-order"],
+  "reference_solution": "capability/cap-memoize_1/"
+}

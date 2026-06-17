@@ -1,0 +1,21 @@
+{
+  "id": "cap-parse-json-safe_1",
+  "desc": "Implement `parseJSONSafe<T>(s: string): {ok: true; value: T} | {ok: false; error: string}` — type-safe JSON parser that never throws, returns a discriminated union result type",
+  "setup": {
+    "files": {
+      "src/json-safe.ts": "export type ParseResult<T> =\n  | { ok: true; value: T }\n  | { ok: false; error: string };\n\nexport function parseJSONSafe<T>(s: string): ParseResult<T> {\n  // TODO: implement — never throws, returns discriminated union\n  return { ok: false, error: \"not implemented\" };\n}\n",
+      "tests/json-safe.test.ts": "import { test, expect } from \"bun:test\";\nimport { parseJSONSafe } from \"../src/json-safe\";\n\ntest(\"parses valid JSON object\", () => {\n  const result = parseJSONSafe<{ a: number }>(`{\"a\":1}`);\n  expect(result.ok).toBe(true);\n  if (result.ok) {\n    expect(result.value).toEqual({ a: 1 });\n  }\n});\n\ntest(\"parses valid JSON array\", () => {\n  const result = parseJSONSafe<number[]>(\"[1,2,3]\");\n  expect(result.ok).toBe(true);\n  if (result.ok) {\n    expect(result.value).toEqual([1, 2, 3]);\n  }\n});\n\ntest(\"returns error on invalid JSON\", () => {\n  const result = parseJSONSafe<unknown>(\"not json\");\n  expect(result.ok).toBe(false);\n  if (!result.ok) {\n    expect(typeof result.error).toBe(\"string\");\n    expect(result.error.length).toBeGreaterThan(0);\n  }\n});\n\ntest(\"does not throw on bad input\", () => {\n  expect(() => parseJSONSafe<unknown>(\"{bad}\")).not.toThrow();\n});\n\ntest(\"parses null\", () => {\n  const result = parseJSONSafe<null>(\"null\");\n  expect(result.ok).toBe(true);\n  if (result.ok) {\n    expect(result.value).toBeNull();\n  }\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/json-safe.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "hard", "error-handling"],
+  "reference_solution": "capability/cap-parse-json-safe_1/"
+}

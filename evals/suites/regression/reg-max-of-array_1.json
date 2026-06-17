@@ -1,0 +1,21 @@
+{
+  "id": "reg-max-of-array_1",
+  "desc": "Implement `max(arr: number[]): number` — returns the maximum value in the array, throws an Error if the array is empty",
+  "setup": {
+    "files": {
+      "src/math.ts": "export function max(arr: number[]): number {\n  // TODO: implement\n  return 0;\n}\n",
+      "tests/math.test.ts": "import { test, expect } from \"bun:test\";\nimport { max } from \"../src/math\";\n\ntest(\"returns max of positive numbers\", () => {\n  expect(max([1, 3, 2])).toBe(3);\n});\n\ntest(\"returns max of negative numbers\", () => {\n  expect(max([-5, -1, -3])).toBe(-1);\n});\n\ntest(\"returns max of single element\", () => {\n  expect(max([42])).toBe(42);\n});\n\ntest(\"returns max with duplicates\", () => {\n  expect(max([7, 7, 7])).toBe(7);\n});\n\ntest(\"throws on empty array\", () => {\n  expect(() => max([])).toThrow();\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/math.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "graduated", "implement", "easy"],
+  "reference_solution": "capability/cap-max-of-array_1/"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "reg-add-two-nums_1",
+  "desc": "Implement the add(a, b) function that returns the sum of two numbers",
+  "setup": {
+    "files": {
+      "src/math.ts": "export function add(a: number, b: number): number {\n  // TODO: implement\n  return 0;\n}\n",
+      "tests/math.test.ts": "import { test, expect } from \"bun:test\";\nimport { add } from \"../src/math\";\n\ntest(\"add two positive numbers\", () => {\n  expect(add(1, 2)).toBe(3);\n});\n\ntest(\"add with zero\", () => {\n  expect(add(5, 0)).toBe(5);\n});\n\ntest(\"add negative numbers\", () => {\n  expect(add(-3, -4)).toBe(-7);\n});\n\ntest(\"add positive and negative\", () => {\n  expect(add(10, -3)).toBe(7);\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/math.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["regression", "graduated", "implement", "sanity-check"],
+  "reference_solution": "capability/cap-add-two-nums_1/"
+}

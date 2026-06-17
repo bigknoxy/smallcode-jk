@@ -1,0 +1,21 @@
+{
+  "id": "cap-event-emitter_1",
+  "desc": "Implement an EventEmitter class with on(event: string, listener: Function): void, off(event: string, listener: Function): void, and emit(event: string, ...args: unknown[]): void methods — basic Node.js-style event emitter",
+  "setup": {
+    "files": {
+      "src/event-emitter.ts": "export class EventEmitter {\n  // TODO: implement on, off, emit\n}\n",
+      "tests/event-emitter.test.ts": "import { test, expect } from \"bun:test\";\nimport { EventEmitter } from \"../src/event-emitter\";\n\ntest(\"on and emit calls listener\", () => {\n  const ee = new EventEmitter();\n  let called = false;\n  ee.on(\"foo\", () => { called = true; });\n  ee.emit(\"foo\");\n  expect(called).toBe(true);\n});\n\ntest(\"emit passes arguments to listener\", () => {\n  const ee = new EventEmitter();\n  let received: unknown[] = [];\n  ee.on(\"data\", (...args: unknown[]) => { received = args; });\n  ee.emit(\"data\", 1, \"hello\");\n  expect(received).toEqual([1, \"hello\"]);\n});\n\ntest(\"multiple listeners on same event\", () => {\n  const ee = new EventEmitter();\n  let count = 0;\n  ee.on(\"tick\", () => count++);\n  ee.on(\"tick\", () => count++);\n  ee.emit(\"tick\");\n  expect(count).toBe(2);\n});\n\ntest(\"off removes listener\", () => {\n  const ee = new EventEmitter();\n  let count = 0;\n  const fn = () => count++;\n  ee.on(\"x\", fn);\n  ee.off(\"x\", fn);\n  ee.emit(\"x\");\n  expect(count).toBe(0);\n});\n\ntest(\"emit unknown event does nothing\", () => {\n  const ee = new EventEmitter();\n  expect(() => ee.emit(\"unknown\")).not.toThrow();\n});\n\ntest(\"off non-registered listener does nothing\", () => {\n  const ee = new EventEmitter();\n  expect(() => ee.off(\"x\", () => {})).not.toThrow();\n});\n",
+      "package.json": "{\"name\":\"fixture\",\"type\":\"module\"}"
+    }
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/event-emitter.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["capability", "implement", "hard", "design-patterns"],
+  "reference_solution": "capability/cap-event-emitter_1/"
+}
