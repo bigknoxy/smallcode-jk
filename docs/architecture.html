@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>smallcode — Architecture</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.min.js" integrity="sha384-yQ4mmBBT+vhTAwjFH0toJXNYJ6O4usWnt6EPIdWwrRvx2V/n5lXuDZQwQFeSFydF" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 0 0 64px;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 28px 48px;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: #94a3b8;
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    header a {
+      color: #7c8ff5;
+      text-decoration: none;
+    }
+
+    header a:hover { text-decoration: underline; }
+
+    nav {
+      background: #151820;
+      border-bottom: 1px solid #2d3148;
+      padding: 0 48px;
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+    }
+
+    nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      padding: 14px 18px;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    nav a:hover {
+      color: #e2e8f0;
+      border-bottom-color: #7c8ff5;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 48px 0;
+    }
+
+    section {
+      margin-bottom: 72px;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #2d3148;
+      letter-spacing: -0.01em;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin: 24px 0 12px;
+    }
+
+    p {
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+
+    .diagram-wrap {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 32px 24px;
+      overflow-x: auto;
+    }
+
+    .diagram-wrap .mermaid {
+      display: flex;
+      justify-content: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    thead tr {
+      background: #1e2130;
+    }
+
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      color: #94a3b8;
+      font-weight: 600;
+      border-bottom: 1px solid #2d3148;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #1e2130;
+      color: #cbd5e1;
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td { background: #1a1d27; }
+
+    code {
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.8em;
+      background: #1e2130;
+      color: #a5b4fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.72em;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-green  { background: #14532d; color: #86efac; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+    .badge-yellow { background: #451a03; color: #fcd34d; }
+    .badge-red    { background: #450a0a; color: #fca5a5; }
+    .badge-purple { background: #2e1065; color: #c4b5fd; }
+
+    footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 48px;
+      border-top: 1px solid #2d3148;
+      color: #475569;
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    footer a { color: #64748b; text-decoration: none; }
+    footer a:hover { color: #94a3b8; }
+
+    @media (max-width: 700px) {
+      header, nav, main, footer { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>smallcode — Architecture</h1>
+  <p>Agentic coding for small, local models &nbsp;·&nbsp; <a href="../README.md">README</a> &nbsp;·&nbsp; MIT License</p>
+</header>
+
+<nav>
+  <a href="#topology">System topology</a>
+  <a href="#agent-loop">Agent loop</a>
+  <a href="#data-flow">Data flow</a>
+  <a href="#modules">Modules</a>
+  <a href="#models">Model profiles</a>
+  <a href="#eval-metrics">Eval metrics</a>
+  <a href="#security">Security controls</a>
+</nav>
+
+<main>
+
+  <!-- ===== SYSTEM TOPOLOGY ===== -->
+  <section id="topology">
+    <h2>System topology</h2>
+    <p>
+      All eight pillars and their dependency relationships. Arrows show the direction of data or control flow.
+      The <strong>Config</strong> and <strong>Model Registry</strong> are cross-cutting — every pillar reads
+      from them at startup.
+    </p>
+    <div class="diagram-wrap">
+      <div class="mermaid">
+graph TD
+    CFG["Config<br/><small>smallcode.config.json</small>"]
+    REG["Model Registry<br/><small>src/models/registry.ts</small>"]
+
+    PROV["Provider Layer<br/><small>src/provider/</small>"]
+    REASON["Reasoning Handler<br/><small>src/reasoning/</small>"]
+    CTX["Context Engine<br/><small>src/context/</small>"]
+    EDIT["Edit Protocol<br/><small>src/edit/</small>"]
+    LOOP["Agent Loop<br/><small>src/agent/loop.ts</small>"]
+    VERIFY["Verification Loop<br/><small>src/verify/</small>"]
+    EVAL["Eval Harness<br/><small>src/eval/</small>"]
+    IMPROVE["Self-improvement Loop<br/><small>src/improve/</small>"]
+
+    CFG -->|baseUrl, apiKey, timeout| PROV
+    CFG -->|activeModel, maxTurns, bestOfN| LOOP
+    CFG -->|sandbox allowlist| VERIFY
+    CFG -->|suitesDir, transcriptsDir, trials| EVAL
+    REG -->|ModelProfile| LOOP
+    REG -->|reasoningTags| REASON
+    REG -->|contextWindow| CTX
+
+    PROV -->|CompletionResponse| REASON
+    REASON -->|answer, reasoning| LOOP
+    CTX -->|ContextBundle| LOOP
+    LOOP -->|model output| EDIT
+    EDIT -->|EditBlock, ApplyResult| LOOP
+    LOOP -->|applied edits| VERIFY
+    VERIFY -->|VerifyResult, self-correction prompt| LOOP
+    LOOP -->|TurnRecord, AgentState| EVAL
+    EVAL -->|EvalRunResult, Transcript| IMPROVE
+    IMPROVE -->|RegressionCheckResult| EVAL
+
+    style CFG fill:#1e2130,stroke:#4f5b8a,color:#a5b4fc
+    style REG fill:#1e2130,stroke:#4f5b8a,color:#a5b4fc
+    style LOOP fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    style VERIFY fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    style IMPROVE fill:#2e1065,stroke:#7c3aed,color:#ddd6fe
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== AGENT LOOP ===== -->
+  <section id="agent-loop">
+    <h2>Agent loop flow</h2>
+    <p>
+      The per-session and per-turn cycle. State is persisted to <code>.smallcode/state.json</code>
+      after every turn. The loop terminates when all goals are done, a <code>finish</code> tool call
+      is emitted, or <code>maxTurns</code> is reached.
+    </p>
+    <div class="diagram-wrap">
+      <div class="mermaid">
+flowchart TD
+    START([Task received]) --> INIT[Initialize AgentState\ndecompose into Goals]
+    INIT --> GOAL{Current goal?}
+    GOAL -- none --> DONE([Status: done])
+    GOAL -- pending --> INPROGRESS[Mark goal in_progress]
+
+    INPROGRESS --> GETCTX[Build ContextBundle\nfrom RepoMap + token budget]
+    GETCTX --> BUILDPROMPT[Build turn prompt\nsystem + user messages]
+    BUILDPROMPT --> CALLMODEL[Call provider.complete\nwith model sampling defaults]
+    CALLMODEL --> PARSETHINK[Reasoning handler\nstrip think tags → answer]
+    PARSETHINK --> PARSEEDITS[Edit parser\nSEARCH/REPLACE blocks → EditBlock list]
+    PARSEEDITS --> APPLYEDITS[Apply edits\nexact match → ApplyResult per block]
+    APPLYEDITS --> PARSETOOLS[Tool call parser\nTOOL: name json lines]
+    PARSETOOLS --> ADDTURN[Add TurnRecord\nsave state to disk]
+
+    ADDTURN --> CHECKEDITS{Any edits\napplied?}
+    CHECKEDITS -- yes --> RUNVERIFY[Run checker suite\nformat · lint · typecheck · test]
+    CHECKEDITS -- no --> CHECKFINISH
+
+    RUNVERIFY --> VERIFYPASSED{All checks\npassed?}
+    VERIFYPASSED -- yes --> CHECKFINISH
+    VERIFYPASSED -- no --> CANRETRY{Correction\niters remaining?}
+    CANRETRY -- yes --> SELFCORRECT[Build correction prompt\nfeed failure summary to model]
+    SELFCORRECT --> CALLMODEL
+    CANRETRY -- no --> CHECKFINISH
+
+    CHECKFINISH{finish tool\ncalled?} -- yes --> ADVANCE[advanceGoal\nnext goal or done]
+    CHECKFINISH -- no --> CHECKMAX{maxTurns\nreached?}
+    ADVANCE --> GOAL
+    CHECKMAX -- yes --> MAXTURN([Status: max_turns])
+    CHECKMAX -- no --> GOAL
+
+    style START fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    style DONE fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    style MAXTURN fill:#450a0a,stroke:#dc2626,color:#fca5a5
+    style SELFCORRECT fill:#2e1065,stroke:#7c3aed,color:#ddd6fe
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DATA FLOW ===== -->
+  <section id="data-flow">
+    <h2>Data flow: session → eval → CI gate</h2>
+    <p>
+      How live coding sessions feed the eval pipeline. Failed sessions become regression tests;
+      passing suites gate merges.
+    </p>
+    <div class="diagram-wrap">
+      <div class="mermaid">
+flowchart LR
+    SESSION[("Agent session\nAgentState + TurnRecords")]
+    LOG["SessionLogger\nSessionLogEntry\nevals/transcripts/"]
+    EXTRACTOR["Task extractor\nCandidateTask from transcript"]
+    PROMOTER["Promoter\nadd to regression suite"]
+    SUITE[("Eval suite\nevals/suites/*.json")]
+    RUNNER["Eval runner\nrunSuite → EvalRunResult"]
+    METRICS["MetricsStore\nMetricsSnapshot history"]
+    GATE["Regression gate\nRegressionCheckResult"]
+    CI{CI passes?}
+
+    SESSION -->|outcome, turns, tokens| LOG
+    LOG -->|transcriptPath| EXTRACTOR
+    EXTRACTOR -->|EvalTask| PROMOTER
+    PROMOTER -->|writes task JSON| SUITE
+    SUITE -->|loadSuite| RUNNER
+    RUNNER -->|pass@1, partial scores| METRICS
+    METRICS -->|baseline snapshot| GATE
+    RUNNER -->|current EvalRunResult| GATE
+    GATE -->|delta, regressedTasks| CI
+    CI -- pass --> MERGE([Merge allowed])
+    CI -- fail --> BLOCK([Merge blocked])
+
+    style SESSION fill:#1e2130,stroke:#4f5b8a,color:#a5b4fc
+    style GATE fill:#451a03,stroke:#d97706,color:#fcd34d
+    style MERGE fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    style BLOCK fill:#450a0a,stroke:#dc2626,color:#fca5a5
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MODULE REFERENCE ===== -->
+  <section id="modules">
+    <h2>Module reference</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Path</th>
+          <th>Purpose</th>
+          <th>Key exports</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Config</strong></td>
+          <td><code>src/config/</code></td>
+          <td>Load and validate <code>smallcode.config.json</code> via Zod schemas. Supports env var overrides.</td>
+          <td><code>SmallcodeConfig</code>, <code>loadConfig</code>, <code>loadConfigFromEnv</code></td>
+        </tr>
+        <tr>
+          <td><strong>Models</strong></td>
+          <td><code>src/models/</code></td>
+          <td>Built-in model profiles (VibeThinker-3B, Qwen2.5-Coder 7B/14B) and a runtime registry for custom profiles.</td>
+          <td><code>ModelProfile</code>, <code>ModelRegistry</code>, <code>defaultRegistry</code></td>
+        </tr>
+        <tr>
+          <td><strong>Provider</strong></td>
+          <td><code>src/provider/</code></td>
+          <td>OpenAI-compatible HTTP client for chat completions and streaming. Retryable error classification.</td>
+          <td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ProviderError</code></td>
+        </tr>
+        <tr>
+          <td><strong>Reasoning</strong></td>
+          <td><code>src/reasoning/</code></td>
+          <td>Strip <code>&lt;think&gt;…&lt;/think&gt;</code> traces from raw model output. Log reasoning separately for inspection.</td>
+          <td><code>ReasoningHandler</code>, <code>ReasoningLogger</code>, <code>ParsedResponse</code></td>
+        </tr>
+        <tr>
+          <td><strong>Context</strong></td>
+          <td><code>src/context/</code></td>
+          <td>Build a token-budgeted <code>ContextBundle</code> from a <code>RepoMap</code> of file symbols and code chunks.</td>
+          <td><code>RepoMap</code>, <code>FileMap</code>, <code>ContextBundle</code>, <code>ContextChunk</code></td>
+        </tr>
+        <tr>
+          <td><strong>Edit</strong></td>
+          <td><code>src/edit/</code></td>
+          <td>Parse SEARCH/REPLACE blocks and JSON patch edits from model output. Apply exact-match replacements and report diffs.</td>
+          <td><code>EditBlock</code>, <code>ParseResult</code>, <code>ApplyResult</code>, <code>parse</code>, <code>applyBatch</code></td>
+        </tr>
+        <tr>
+          <td><strong>Agent</strong></td>
+          <td><code>src/agent/</code></td>
+          <td>Core loop, goal management, prompt builders, tool dispatcher, state persistence, and best-of-N sampling.</td>
+          <td><code>runLoop</code>, <code>AgentState</code>, <code>AgentConfig</code>, <code>TurnRecord</code>, <code>BestOfNResult</code></td>
+        </tr>
+        <tr>
+          <td><strong>Verify</strong></td>
+          <td><code>src/verify/</code></td>
+          <td>Run a configurable checker suite after edits. Feed failures back to the model for self-correction up to <code>maxCorrectionIterations</code>.</td>
+          <td><code>VerifyResult</code>, <code>CheckResult</code>, <code>SelfCorrectionResult</code>, <code>VerifyConfig</code></td>
+        </tr>
+        <tr>
+          <td><strong>Eval</strong></td>
+          <td><code>src/eval/</code></td>
+          <td>Load task suites, run trials, grade with deterministic tests / static analysis / LLM rubric, compute pass@1 and partial scores.</td>
+          <td><code>EvalTask</code>, <code>EvalSuite</code>, <code>EvalRunResult</code>, <code>Transcript</code>, <code>GraderResult</code></td>
+        </tr>
+        <tr>
+          <td><strong>Improve</strong></td>
+          <td><code>src/improve/</code></td>
+          <td>Session logging, candidate task promotion, metrics history, regression gating, and A/B prompt comparison.</td>
+          <td><code>SessionLogger</code>, <code>MetricsStore</code>, <code>RegressionCheckResult</code>, <code>ABResult</code>, <code>runGate</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== MODEL PROFILES ===== -->
+  <section id="models">
+    <h2>Model profiles</h2>
+    <p>
+      Built-in profiles from <code>src/models/registry.ts</code>. Add custom profiles in the
+      <code>models</code> array of your config file. Any OpenAI-compatible endpoint is supported.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Model ID</th>
+          <th>Full name</th>
+          <th>Context window</th>
+          <th>Temperature</th>
+          <th>top_p</th>
+          <th>max_tokens</th>
+          <th>Reasoning tags</th>
+          <th>JSON schema</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>vibethinker-3b</code></td>
+          <td>WeiboAI/VibeThinker-3B</td>
+          <td>65,536</td>
+          <td>1.0</td>
+          <td>0.95</td>
+          <td>8,192</td>
+          <td><code>&lt;think&gt;</code> / <code>&lt;/think&gt;</code></td>
+          <td><span class="badge badge-yellow">No</span></td>
+          <td>Reference model. MIT license. High variance — use <code>bestOfN ≥ 3</code>.</td>
+        </tr>
+        <tr>
+          <td><code>qwen2.5-coder-7b</code></td>
+          <td>Qwen/Qwen2.5-Coder-7B-Instruct</td>
+          <td>131,072</td>
+          <td>0.7</td>
+          <td>0.95</td>
+          <td>4,096</td>
+          <td>—</td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td>Lower variance. Grammar-constrained output supported.</td>
+        </tr>
+        <tr>
+          <td><code>qwen2.5-coder-14b</code></td>
+          <td>Qwen/Qwen2.5-Coder-14B-Instruct</td>
+          <td>131,072</td>
+          <td>0.7</td>
+          <td>0.95</td>
+          <td>4,096</td>
+          <td>—</td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td>Highest quality built-in. Grammar-constrained output supported.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== EVAL METRICS ===== -->
+  <section id="eval-metrics">
+    <h2>Eval metrics</h2>
+    <p>
+      Metrics computed by the eval harness per task (<code>TaskEvalResult</code>) and aggregated
+      across the whole run (<code>EvalRunResult</code>).
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Metric</th>
+          <th>Formula</th>
+          <th>Where</th>
+          <th>What it means</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>pass@1</strong></td>
+          <td><code>P(trial passes | n=1)</code></td>
+          <td><code>TaskEvalResult.passAt1</code></td>
+          <td>Headline coding metric. Probability that a single sample solves the task. Directly comparable across models and prompt variants.</td>
+        </tr>
+        <tr>
+          <td><strong>pass@k</strong></td>
+          <td><code>P(at least 1 of k trials passes)</code></td>
+          <td><code>TaskEvalResult.passAtK[k]</code></td>
+          <td>Ceiling metric under best-of-N sampling. Shows maximum achievable quality if you can run k inference calls and pick the best.</td>
+        </tr>
+        <tr>
+          <td><strong>pass^k</strong> (passAllK)</td>
+          <td><code>P(all k trials pass)</code></td>
+          <td><code>TaskEvalResult.passAllK</code></td>
+          <td>Consistency bar. A model with pass^k ≈ pass@1 is reliable; a large gap signals high variance — increase <code>bestOfN</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>partial score</strong></td>
+          <td><code>graders_passed / graders_total</code></td>
+          <td><code>TrialResult.partialScore</code></td>
+          <td>Partial credit when a task has multiple graders. Useful for tracking directional progress on tasks that aren't passing end-to-end yet.</td>
+        </tr>
+        <tr>
+          <td><strong>overall pass@1</strong></td>
+          <td><code>tasks_passed / tasks_total</code></td>
+          <td><code>EvalRunResult.overallPassAt1</code></td>
+          <td>Suite-level headline. Used by the regression gate and A/B comparison as the single summary number.</td>
+        </tr>
+        <tr>
+          <td><strong>n_turns</strong></td>
+          <td>count of TurnRecord entries</td>
+          <td><code>TrialMetrics.nTurns</code></td>
+          <td>Efficiency signal. Fewer turns = simpler task decomposition required. High turn counts indicate complex or ambiguous tasks.</td>
+        </tr>
+        <tr>
+          <td><strong>n_total_tokens</strong></td>
+          <td><code>prompt_tokens + completion_tokens</code></td>
+          <td><code>TrialMetrics.nTotalTokens</code></td>
+          <td>Cost proxy for local inference. Useful for comparing prompt strategies that solve the same task.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Regression gate logic</h3>
+    <p>
+      The gate compares the current run's <code>overallPassAt1</code> against a stored baseline snapshot.
+      It fails if <code>currentPassAt1 &lt; threshold</code> or if any previously-passing task now fails
+      (<code>regressedTasks.length &gt; 0</code>). Exit code 1 is used to block CI merges.
+    </p>
+  </section>
+
+  <!-- ===== SECURITY CONTROLS ===== -->
+  <section id="security">
+    <h2>Security controls</h2>
+    <p>
+      smallcode is designed for local use with untrusted model output. The following controls
+      prevent a misbehaving model from escaping the repo sandbox or executing arbitrary commands.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Control</th>
+          <th>Where enforced</th>
+          <th>What it prevents</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Command allowlist</strong></td>
+          <td><code>src/agent/tools.ts</code>, <code>src/verify/sandbox.ts</code></td>
+          <td>
+            The agent and the verification runner both check the command basename against
+            <code>sandbox.allowedCommands</code> before execution. Commands not on the list
+            are rejected with an error returned to the model — not silently dropped.
+            Default allowlist: <code>bun, tsc, biome, git</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Path traversal check</strong></td>
+          <td><code>src/agent/loop.ts</code> (<code>safeResolve</code>), <code>src/verify/sandbox.ts</code> (<code>checkFilePath</code>)</td>
+          <td>
+            All file paths are resolved to absolute form and checked that they start with
+            <code>repoRoot + path.sep</code>. Any path that escapes the repo root is rejected
+            before a read or write is attempted. This applies to both agent-initiated edits
+            and verifier-run test commands.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Approval gate</strong></td>
+          <td><code>src/agent/tools.ts</code>, <code>AgentConfig.requireApproval</code></td>
+          <td>
+            When <code>sandbox.requireApproval</code> is <code>true</code> (the default),
+            destructive file writes prompt the user for confirmation before proceeding.
+            Disabling this should only be done in fully automated CI environments.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Network access flag</strong></td>
+          <td><code>src/config/types.ts</code>, sandbox enforcement</td>
+          <td>
+            <code>sandbox.networkAccess: false</code> (default) signals that agent-run commands
+            should not make outbound network requests. Used as a policy signal to sandbox
+            wrappers and is logged for audit.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>State file permissions</strong></td>
+          <td><code>src/agent/state.ts</code>, <code>src/eval/transcript-store.ts</code></td>
+          <td>
+            Session state (<code>.smallcode/state.json</code>) and eval transcripts are written
+            to project-local directories, not global paths. No credentials, API keys, or
+            system paths are written into state files. The config loader reads
+            <code>apiKey</code> from config but never serializes it into state or transcripts.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Read-only reasoning log</strong></td>
+          <td><code>src/reasoning/logger.ts</code></td>
+          <td>
+            Reasoning traces extracted from <code>&lt;think&gt;</code> tags are logged
+            separately and never fed back into the prompt context. This prevents a
+            prompt-injection attack where the model embeds instructions inside its
+            own reasoning output.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  <span>smallcode &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; <a href="../README.md">README</a></span>
+  <span>Last updated: 2026-06-17</span>
+</footer>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "dark",
+    themeVariables: {
+      background: "#1a1d27",
+      primaryColor: "#1e3a5f",
+      primaryTextColor: "#bfdbfe",
+      primaryBorderColor: "#3b82f6",
+      lineColor: "#4f5b8a",
+      secondaryColor: "#2e1065",
+      tertiaryColor: "#14532d",
+      edgeLabelBackground: "#0f1117",
+      fontSize: "13px"
+    },
+    flowchart: {
+      curve: "basis",
+      padding: 20
+    }
+  });
+</script>
+
+</body>
+</html>
