@@ -113,62 +113,59 @@ export class OpenAICompatibleClient implements Provider {
         }
       }
 
+      // Use Promise.race for the full request+body cycle.
+      // AbortController.abort() does not interrupt response.json() once headers
+      // arrive — Ollama returns 200 immediately then streams the body, so the
+      // old abort-based approach would clear on header arrival and then hang
+      // indefinitely waiting for the JSON body.
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new ProviderError("Request timed out", { retryable: false })),
+          this.timeoutMs,
+        ),
+      );
+
       const controller = new AbortController();
-      // Keep the timer alive through both fetch() AND response.json().
-      // Ollama returns HTTP 200 headers immediately, then sends the body
-      // after generation completes — so clearing the timer on header
-      // arrival (the old finally block) left response.json() without a
-      // timeout, causing indefinite hangs on long CoT generations.
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-      let response: Response;
+      const requestPromise = fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            const err = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
+              statusCode: response.status,
+              retryable: isRetryableStatus(response.status),
+            });
+            throw err;
+          }
+          const raw: unknown = await response.json();
+          return parseCompletionResponse(raw, req.model);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof ProviderError) throw err;
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
+            retryable: !isAbort,
+          });
+        });
+
       try {
-        response = await fetch(`${this.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
+        return await Promise.race([requestPromise, timeoutPromise]);
       } catch (err) {
-        clearTimeout(timer);
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
-          retryable: !isAbort,
-        });
-      }
-      // Do NOT clearTimeout here — keep the signal alive for response.json().
-
-      if (!response.ok) {
-        clearTimeout(timer);
-        const retryable = isRetryableStatus(response.status);
-        lastError = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
-          statusCode: response.status,
-          retryable,
-        });
-        if (retryable && attempt < MAX_ATTEMPTS - 1) {
-          continue;
+        controller.abort(); // cancel underlying fetch if timeout won
+        if (err instanceof ProviderError) {
+          lastError = err;
+          if (err.retryable && attempt < MAX_ATTEMPTS - 1) continue;
+          throw err;
         }
-        throw lastError;
+        throw new ProviderError(String(err), { retryable: false });
       }
-
-      let raw: unknown;
-      try {
-        raw = await response.json();
-      } catch (err) {
-        clearTimeout(timer);
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        throw new ProviderError(
-          isAbort
-            ? "Request timed out reading response body"
-            : `Failed to parse response: ${String(err)}`,
-          { retryable: false },
-        );
-      }
-      clearTimeout(timer);
-      return parseCompletionResponse(raw, req.model);
     }
 
     // Should not reach here, but satisfy TS
