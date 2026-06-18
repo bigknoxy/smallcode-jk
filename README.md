@@ -263,4 +263,6 @@ MIT
 
 ### Environment Variables
 - `SMALLCODE_DRY_RUN`: _(add description)_
+- `SMALLCODE_EVAL_MAX_TURNS`: _(add description)_
+- `SMALLCODE_EVAL_K`: _(add description)_
 <!-- agent-skills:doc-keeper:end -->

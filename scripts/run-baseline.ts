@@ -39,6 +39,10 @@ const METRICS_HISTORY_PATH = join(PROJECT_ROOT, "evals", "metrics-history.jsonl"
 const TMP_BASE = join(PROJECT_ROOT, ".tmp-baseline");
 
 const DRY_RUN = process.env.SMALLCODE_DRY_RUN === "1";
+// Eval-specific overrides: fewer turns + trials to keep total wall-clock under ~30 min.
+// Production config has maxTurns=15; eval only needs enough to attempt + verify a fix.
+const EVAL_MAX_TURNS = Number(process.env.SMALLCODE_EVAL_MAX_TURNS ?? "6");
+const EVAL_K = Number(process.env.SMALLCODE_EVAL_K ?? "3");
 
 // ---------------------------------------------------------------------------
 // Grader dispatch (same as validate-e1)
@@ -171,8 +175,8 @@ async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> 
   const agentConfig = {
     repoRoot: PROJECT_ROOT, // overridden per trial inside runTask
     modelId: profile.id,
-    maxTurns: config.maxTurns,
-    bestOfN: config.bestOfN,
+    maxTurns: EVAL_MAX_TURNS,
+    bestOfN: 1, // best-of-N inside eval adds noise; use k trials instead
     allowedCommands: config.sandbox.allowedCommands,
     requireApproval: false,
   };
@@ -303,18 +307,24 @@ async function main(): Promise<void> {
     console.log("[run-baseline] All reference solutions pass.");
   } else {
     // -----------------------------------------------------------------------
-    // Live run: k=5 trials per task
+    // Live run: EVAL_K trials per task (default 3; override with SMALLCODE_EVAL_K)
     // -----------------------------------------------------------------------
-    const K = 5;
+    const K = EVAL_K;
     const allMetrics: LiveTaskMetrics[] = [];
     let passCount = 0;
 
-    for (const task of suite.tasks) {
-      console.log(`  Running ${task.id}...`);
+    const total = suite.tasks.length;
+    for (let i = 0; i < suite.tasks.length; i++) {
+      const task = suite.tasks[i];
+      if (!task) continue;
+      console.log(`  [${i + 1}/${total}] ${task.id}...`);
       try {
+        const t0 = Date.now();
         const m = await liveRunTask(task, K);
+        const elapsed = Math.round((Date.now() - t0) / 1000);
         allMetrics.push(m);
         if (m.passAt1 > 0) passCount++;
+        console.log(`        pass@1=${m.passAt1.toFixed(2)} turns=${m.avgTurns.toFixed(1)} (${elapsed}s)`);
       } catch (err) {
         console.error(`  ERROR: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
