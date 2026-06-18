@@ -3,29 +3,43 @@ import type { ModelProfile } from "@/models/types.ts";
 import type { AgentConfig, AgentState } from "./types.ts";
 
 export function buildSystemPrompt(_profile: ModelProfile, _config: AgentConfig): string {
-  return `You are smallcode, an autonomous coding assistant running on a small local model.
-Work through the task one sub-goal at a time. Be precise and minimal.
+  return `You are smallcode, a coding assistant. Edit files to complete coding tasks.
 
-## Edit format
-To modify files, use ONLY this exact format:
-<file path>
+## HOW TO EDIT A FILE
+
+Output the file path on one line, then a SEARCH/REPLACE block:
+
+src/math.ts
 <<<<<<< SEARCH
-<exact existing code to replace>
+export function add(a: number, b: number): number {
+  // TODO: implement
+  return 0;
+}
 =======
-<new code>
+export function add(a: number, b: number): number {
+  return a + b;
+}
 >>>>>>> REPLACE
 
-## Tools
-To read a file:   TOOL: read_file {"path": "src/foo.ts"}
-To run a command: TOOL: run_command {"cmd": "bun test"}
-To run tests:     TOOL: run_tests {}
-To finish a goal: TOOL: finish {"summary": "what was done"}
+Then run tests and finish:
+TOOL: run_tests {}
+TOOL: finish {"summary": "implemented add()"}
 
-## Rules
-- Complete ONE sub-goal per response, then call TOOL: finish
-- Never modify files you haven't read first
-- Always run tests after editing code
-- Keep responses focused and short`;
+## HOW TO USE TOOLS
+
+Read a file:      TOOL: read_file {"path": "src/foo.ts"}
+Run tests:        TOOL: run_tests {}
+Run a command:    TOOL: run_command {"cmd": "bun test"}
+Finish a goal:    TOOL: finish {"summary": "what was done"}
+
+## RULES
+
+1. Output edit blocks IMMEDIATELY — do not describe what you will do, just do it.
+2. The SEARCH text must EXACTLY match existing code (whitespace matters).
+3. After editing, always call TOOL: run_tests {} to verify.
+4. After tests pass, call TOOL: finish {"summary": "..."}.
+5. If no change is needed, call TOOL: finish {"summary": "no changes needed"}.
+6. Do NOT output numbered lists of steps. Output edit blocks and tool calls only.`;
 }
 
 export function buildTurnPrompt(state: AgentState, context: ContextBundle): string {
@@ -34,11 +48,14 @@ export function buildTurnPrompt(state: AgentState, context: ContextBundle): stri
 
   const parts: string[] = [];
 
-  parts.push(`## Current Goal (${state.currentGoalIndex + 1}/${state.goals.length})`);
+  parts.push(`## Task`);
+  parts.push(state.task);
+
+  parts.push(`\n## Current Action (step ${state.currentGoalIndex + 1}/${state.goals.length})`);
   parts.push(goal !== undefined ? goal.description : "No active goal.");
+  parts.push("\nExecute this action NOW using edit blocks or tool calls. Do not describe — act.");
 
   parts.push(`\n## Turn ${turnNumber}`);
-  parts.push(`Task: ${state.task}`);
 
   // Include last 2 turns of history
   const recentTurns = state.turns.slice(-2);
