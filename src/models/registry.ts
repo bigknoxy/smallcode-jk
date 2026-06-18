@@ -9,7 +9,7 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
       temperature: 1.0,
       top_p: 0.95,
       top_k: -1,
-      max_tokens: 8_192,
+      max_tokens: 4_096,
     },
     reasoningTags: { open: "<think>", close: "</think>" },
     supportsGrammar: false,

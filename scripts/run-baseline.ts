@@ -41,7 +41,7 @@ const TMP_BASE = join(PROJECT_ROOT, ".tmp-baseline");
 const DRY_RUN = process.env.SMALLCODE_DRY_RUN === "1";
 // Eval-specific overrides: fewer turns + trials to keep total wall-clock under ~30 min.
 // Production config has maxTurns=15; eval only needs enough to attempt + verify a fix.
-const EVAL_MAX_TURNS = Number(process.env.SMALLCODE_EVAL_MAX_TURNS ?? "6");
+const EVAL_MAX_TURNS = Number(process.env.SMALLCODE_EVAL_MAX_TURNS ?? "5");
 const EVAL_K = Number(process.env.SMALLCODE_EVAL_K ?? "3");
 
 // ---------------------------------------------------------------------------

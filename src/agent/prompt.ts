@@ -39,7 +39,26 @@ Finish a goal:    TOOL: finish {"summary": "what was done"}
 3. After editing, always call TOOL: run_tests {} to verify.
 4. After tests pass, call TOOL: finish {"summary": "..."}.
 5. If no change is needed, call TOOL: finish {"summary": "no changes needed"}.
-6. Do NOT output numbered lists of steps. Output edit blocks and tool calls only.`;
+6. Do NOT output numbered lists of steps. Output edit blocks and tool calls only.
+7. The SEARCH text must be COPIED EXACTLY from the file shown in "Relevant Context" above.
+   If the edit fails, read the context again and copy the exact text.
+
+## EXAMPLE: edit failed and retry
+
+If your edit fails, retry with text copied exactly from the file:
+
+Turn 2 result:
+✗ src/math.ts (not_found) — Your SEARCH block did not match the file.
+
+Turn 3 — retry with exact SEARCH:
+src/math.ts
+<<<<<<< SEARCH
+function add(a, b) {
+=======
+function add(a: number, b: number): number {
+  return a + b;
+}
+>>>>>>> REPLACE`;
 }
 
 export function buildTurnPrompt(state: AgentState, context: ContextBundle): string {
@@ -70,6 +89,19 @@ export function buildTurnPrompt(state: AgentState, context: ContextBundle): stri
           const icon = result.status === "applied" ? "✓" : "✗";
           const detail = result.error ? ` — ${result.error}` : "";
           parts.push(`  ${icon} ${result.filePath} (${result.status})${detail}`);
+
+          if (result.status !== "applied") {
+            parts.push(`  ✗ ${result.filePath} — Your SEARCH block did not match the file.`);
+            // Find the file content in context chunks so the model can copy exact text
+            const matchingChunk = context.chunks.find((c) => c.filePath === result.filePath);
+            if (matchingChunk) {
+              parts.push(`  The file currently contains:`);
+              parts.push("  ```");
+              parts.push(matchingChunk.content);
+              parts.push("  ```");
+              parts.push("  Rewrite your SEARCH block to EXACTLY match these lines.");
+            }
+          }
         }
       }
 
