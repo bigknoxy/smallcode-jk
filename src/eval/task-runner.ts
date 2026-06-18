@@ -19,6 +19,8 @@ export interface TaskRunnerOptions {
   agentConfig: AgentConfig; // template; repoRoot overridden per trial
   loopDeps: LoopDependencies;
   graderOpts?: LLMJudgeOptions;
+  /** Hard wall-clock deadline per trial in ms. Prevents hung test runners from blocking forever. Default: 10 min. */
+  trialTimeoutMs?: number;
 }
 
 // Walk trial dir and return source files as context chunks.
@@ -87,6 +89,7 @@ async function buildTrialContext(trialDir: string, query: string): Promise<Conte
 
 export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<TaskEvalResult> {
   const { trialsPerTask, fixturesRoot, agentConfig, loopDeps, graderOpts } = opts;
+  const trialTimeoutMs = opts.trialTimeoutMs ?? 10 * 60 * 1000; // default 10 min
   const trials: TrialResult[] = [];
 
   for (let trialIndex = 0; trialIndex < trialsPerTask; trialIndex++) {
@@ -113,12 +116,16 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
         config: trialConfig,
       };
 
-      const finalState = await runLoop(
-        state,
-        statePath,
-        trialDeps,
-        async (goal: string): Promise<ContextBundle> => buildTrialContext(trialEnv.dir, goal),
-      );
+      const timeoutError = new Error(`Trial timed out after ${trialTimeoutMs / 1000}s`);
+      const finalState = await Promise.race([
+        runLoop(
+          state,
+          statePath,
+          trialDeps,
+          async (goal: string): Promise<ContextBundle> => buildTrialContext(trialEnv.dir, goal),
+        ),
+        new Promise<never>((_, reject) => setTimeout(() => reject(timeoutError), trialTimeoutMs)),
+      ]);
 
       const trialFinishedAt = Date.now();
 

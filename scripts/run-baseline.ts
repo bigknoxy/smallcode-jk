@@ -193,6 +193,7 @@ async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> 
     fixturesRoot: FIXTURES_DIR,
     agentConfig,
     loopDeps,
+    trialTimeoutMs: 5 * 60 * 1000, // 5 min hard cap per trial
   });
 
   const avgTurns =
