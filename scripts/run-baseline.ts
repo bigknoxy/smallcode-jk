@@ -193,7 +193,7 @@ async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> 
     fixturesRoot: FIXTURES_DIR,
     agentConfig,
     loopDeps,
-    trialTimeoutMs: 5 * 60 * 1000, // 5 min hard cap per trial
+    trialTimeoutMs: 20 * 60 * 1000, // 20 min per trial (VibeThinker-3B ~100-300s/call)
   });
 
   const avgTurns =
