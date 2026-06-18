@@ -114,6 +114,11 @@ export class OpenAICompatibleClient implements Provider {
       }
 
       const controller = new AbortController();
+      // Keep the timer alive through both fetch() AND response.json().
+      // Ollama returns HTTP 200 headers immediately, then sends the body
+      // after generation completes — so clearing the timer on header
+      // arrival (the old finally block) left response.json() without a
+      // timeout, causing indefinite hangs on long CoT generations.
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
       let response: Response;
@@ -133,11 +138,11 @@ export class OpenAICompatibleClient implements Provider {
         throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
           retryable: !isAbort,
         });
-      } finally {
-        clearTimeout(timer);
       }
+      // Do NOT clearTimeout here — keep the signal alive for response.json().
 
       if (!response.ok) {
+        clearTimeout(timer);
         const retryable = isRetryableStatus(response.status);
         lastError = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
           statusCode: response.status,
@@ -149,7 +154,20 @@ export class OpenAICompatibleClient implements Provider {
         throw lastError;
       }
 
-      const raw: unknown = await response.json();
+      let raw: unknown;
+      try {
+        raw = await response.json();
+      } catch (err) {
+        clearTimeout(timer);
+        const isAbort = err instanceof Error && err.name === "AbortError";
+        throw new ProviderError(
+          isAbort
+            ? "Request timed out reading response body"
+            : `Failed to parse response: ${String(err)}`,
+          { retryable: false },
+        );
+      }
+      clearTimeout(timer);
       return parseCompletionResponse(raw, req.model);
     }
 
