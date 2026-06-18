@@ -4,10 +4,11 @@ import type { EditBlock, ParseError, ParseResult } from "./types.ts";
 // Search/replace format
 // ---------------------------------------------------------------------------
 
-// Regex pieces (all case-insensitive where noted)
-const SEARCH_RE = /^<{7}\s*SEARCH\s*$/i;
+// Regex pieces (all case-insensitive where noted).
+// Accept 6–8 angle brackets — VibeThinker-3B sometimes emits 6 or 8 instead of the canonical 7.
+const SEARCH_RE = /^<{6,8}\s*SEARCH\s*$/i;
 const SEP_RE = /^={5,8}\s*$/;
-const REPLACE_RE = /^>{7}\s*REPLACE\s*$/i;
+const REPLACE_RE = /^>{6,8}\s*REPLACE\s*$/i;
 
 function normalizePath(raw: string): string {
   // Strip leading "./" and normalize backslashes to forward slashes
@@ -46,8 +47,8 @@ function parseSearchReplace(raw: string): { blocks: EditBlock[]; errors: ParseEr
       SEARCH_RE.test(pathCandidate) ||
       SEP_RE.test(pathCandidate) ||
       REPLACE_RE.test(pathCandidate) ||
-      pathCandidate.includes("<<<<<<<") ||
-      pathCandidate.includes(">>>>>>>")
+      /<<{5,}/.test(pathCandidate) ||
+      />>{5,}/.test(pathCandidate)
     ) {
       errors.push({
         message: "SEARCH marker found but no valid file path on preceding line",
