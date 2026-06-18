@@ -5,10 +5,10 @@ import type { EditBlock, ParseError, ParseResult } from "./types.ts";
 // ---------------------------------------------------------------------------
 
 // Regex pieces (all case-insensitive where noted).
-// Accept 6–8 angle brackets — VibeThinker-3B sometimes emits 6 or 8 instead of the canonical 7.
-const SEARCH_RE = /^<{6,8}\s*SEARCH\s*$/i;
-const SEP_RE = /^={5,8}\s*$/;
-const REPLACE_RE = /^>{6,8}\s*REPLACE\s*$/i;
+// Accept 6+ angle brackets — VibeThinker-3B emits anywhere from 6 to 9+ instead of canonical 7.
+const SEARCH_RE = /^<{6,}\s*SEARCH\s*$/i;
+const SEP_RE = /^={5,}\s*$/;
+const REPLACE_RE = /^>{6,}\s*REPLACE\s*$/i;
 
 function normalizePath(raw: string): string {
   // Strip leading "./" and normalize backslashes to forward slashes
