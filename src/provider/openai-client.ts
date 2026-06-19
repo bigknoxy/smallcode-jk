@@ -36,6 +36,7 @@ interface RequestBody {
   model: string;
   messages: CompletionRequest["messages"];
   stream: boolean;
+  stream_options?: { include_usage: boolean };
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
@@ -108,6 +109,7 @@ export class OpenAICompatibleClient implements Provider {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       const body = buildRequestBody(req, true); // stream:true
+      body.stream_options = { include_usage: true }; // request token counts in final chunk
 
       let response: Response;
       try {
