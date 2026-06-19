@@ -107,7 +107,6 @@ export class OpenAICompatibleClient implements Provider {
       }
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       const body = buildRequestBody(req, true); // stream:true
       body.stream_options = { include_usage: true }; // request token counts in final chunk
 
@@ -123,7 +122,6 @@ export class OpenAICompatibleClient implements Provider {
           signal: controller.signal,
         });
       } catch (err) {
-        clearTimeout(timer);
         const isAbort = err instanceof Error && err.name === "AbortError";
         throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
           retryable: !isAbort,
@@ -131,7 +129,6 @@ export class OpenAICompatibleClient implements Provider {
       }
 
       if (!response.ok) {
-        clearTimeout(timer);
         const retryable = isRetryableStatus(response.status);
         lastError = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
           statusCode: response.status,
@@ -142,11 +139,14 @@ export class OpenAICompatibleClient implements Provider {
       }
 
       if (!response.body) {
-        clearTimeout(timer);
         throw new ProviderError("Response body is null", { retryable: false });
       }
 
-      // Collect SSE stream into a single CompletionResponse
+      // Collect SSE stream into a single CompletionResponse.
+      // Race each read() against the timeout. Bun's AbortController does not
+      // interrupt a pending reader.read() — the abort signal on the fetch is
+      // sufficient to cancel the HTTP connection, but read() keeps blocking.
+      // Explicitly racing with a timeout Promise ensures timely cancellation.
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -155,9 +155,24 @@ export class OpenAICompatibleClient implements Provider {
       let usage: CompletionResponse["usage"] | undefined;
       let model = req.model;
 
+      const deadline = Date.now() + this.timeoutMs;
+
       try {
         outer: while (true) {
-          const { done, value } = await reader.read();
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) {
+            controller.abort();
+            reader.cancel().catch(() => {});
+            throw new ProviderError("Request timed out", { retryable: false });
+          }
+          const timeoutPromise = new Promise<{ done: true; value: undefined }>((_, reject) =>
+            setTimeout(() => {
+              controller.abort();
+              reader.cancel().catch(() => {});
+              reject(new ProviderError("Request timed out", { retryable: false }));
+            }, remaining),
+          );
+          const { done, value } = await Promise.race([reader.read(), timeoutPromise]);
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
@@ -195,18 +210,16 @@ export class OpenAICompatibleClient implements Provider {
           }
         }
       } catch (err) {
-        clearTimeout(timer);
+        reader.cancel().catch(() => {});
         reader.releaseLock();
+        if (err instanceof ProviderError) throw err;
         const isAbort = err instanceof Error && err.name === "AbortError";
         throw new ProviderError(
           isAbort ? "Request timed out" : `Stream read error: ${String(err)}`,
-          {
-            retryable: !isAbort,
-          },
+          { retryable: !isAbort },
         );
       }
 
-      clearTimeout(timer);
       reader.releaseLock();
 
       return {
