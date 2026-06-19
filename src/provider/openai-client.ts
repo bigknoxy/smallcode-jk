@@ -155,24 +155,25 @@ export class OpenAICompatibleClient implements Provider {
       let usage: CompletionResponse["usage"] | undefined;
       let model = req.model;
 
-      const deadline = Date.now() + this.timeoutMs;
+      // Single timeout for the entire stream — one timer, cleared when done.
+      // A per-iteration timer (previous approach) created O(n_tokens) timers
+      // which flooded the event loop and caused severe slowdown.
+      let streamTimedOut = false;
+      const streamTimer = setTimeout(() => {
+        streamTimedOut = true;
+        controller.abort();
+        reader.cancel().catch(() => {});
+      }, this.timeoutMs);
 
       try {
         outer: while (true) {
-          const remaining = deadline - Date.now();
-          if (remaining <= 0) {
-            controller.abort();
-            reader.cancel().catch(() => {});
+          if (streamTimedOut) {
             throw new ProviderError("Request timed out", { retryable: false });
           }
-          const timeoutPromise = new Promise<{ done: true; value: undefined }>((_, reject) =>
-            setTimeout(() => {
-              controller.abort();
-              reader.cancel().catch(() => {});
-              reject(new ProviderError("Request timed out", { retryable: false }));
-            }, remaining),
-          );
-          const { done, value } = await Promise.race([reader.read(), timeoutPromise]);
+          const { done, value } = await reader.read();
+          if (streamTimedOut) {
+            throw new ProviderError("Request timed out", { retryable: false });
+          }
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
@@ -210,6 +211,7 @@ export class OpenAICompatibleClient implements Provider {
           }
         }
       } catch (err) {
+        clearTimeout(streamTimer);
         reader.cancel().catch(() => {});
         reader.releaseLock();
         if (err instanceof ProviderError) throw err;
@@ -220,6 +222,7 @@ export class OpenAICompatibleClient implements Provider {
         );
       }
 
+      clearTimeout(streamTimer);
       reader.releaseLock();
 
       return {

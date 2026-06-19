@@ -9,14 +9,15 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
       temperature: 1.0,
       top_p: 0.95,
       top_k: -1,
-      max_tokens: 2_048,
+      max_tokens: 4_096,
     },
     reasoningTags: { open: "<think>", close: "</think>" },
     supportsGrammar: false,
     supportsJsonSchema: false,
-    // Ollama defaults num_ctx to 2048; 32K prevents CoT truncation.
+    // Ollama defaults num_ctx to 2048; 8K is sufficient for task prompt + CoT + answer.
+    // 32K was causing memory pressure/swap on the eval machine, dropping speed from 44→3 tok/s.
     // top_k=-1 requires a Modelfile PARAMETER — the OpenAI-compat route silently ignores it.
-    ollamaOptions: { num_ctx: 32_768 },
+    ollamaOptions: { num_ctx: 8_192 },
     notes:
       "Qwen2.5-3B base, MIT license. Strong at verifiable code/math, weak at open-domain knowledge. High variance — use best-of-N. top_k=-1 requires Modelfile (not settable via OpenAI-compat route).",
   },
