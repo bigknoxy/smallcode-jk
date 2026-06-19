@@ -155,25 +155,24 @@ export class OpenAICompatibleClient implements Provider {
       let usage: CompletionResponse["usage"] | undefined;
       let model = req.model;
 
-      // Single timeout for the entire stream — one timer, cleared when done.
-      // A per-iteration timer (previous approach) created O(n_tokens) timers
-      // which flooded the event loop and caused severe slowdown.
-      let streamTimedOut = false;
+      // Race each reader.read() against a persistent abort promise (created ONCE).
+      // reader.cancel() alone does not interrupt a pending read() in Bun — the
+      // read() keeps blocking until the next SSE chunk arrives. A persistent
+      // rejected promise that fires on timeout interrupts the Promise.race
+      // regardless of where reader.read() is in its blocking I/O.
+      let rejectStream!: (err: ProviderError) => void;
+      const streamAbortPromise = new Promise<never>((_, reject) => {
+        rejectStream = reject;
+      });
       const streamTimer = setTimeout(() => {
-        streamTimedOut = true;
         controller.abort();
         reader.cancel().catch(() => {});
+        rejectStream(new ProviderError("Request timed out", { retryable: false }));
       }, this.timeoutMs);
 
       try {
         outer: while (true) {
-          if (streamTimedOut) {
-            throw new ProviderError("Request timed out", { retryable: false });
-          }
-          const { done, value } = await reader.read();
-          if (streamTimedOut) {
-            throw new ProviderError("Request timed out", { retryable: false });
-          }
+          const { done, value } = await Promise.race([reader.read(), streamAbortPromise]);
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
