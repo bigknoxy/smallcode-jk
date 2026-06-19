@@ -32,17 +32,6 @@ interface OpenAIStreamChunk {
   choices?: OpenAIStreamChoice[];
 }
 
-interface OpenAIChoice {
-  message?: { content?: string };
-  finish_reason?: string | null;
-}
-
-interface OpenAIResponse {
-  choices?: OpenAIChoice[];
-  usage?: OpenAIUsage;
-  model?: string;
-}
-
 interface RequestBody {
   model: string;
   messages: CompletionRequest["messages"];
@@ -101,8 +90,11 @@ export class OpenAICompatibleClient implements Provider {
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResponse> {
-    const body = buildRequestBody(req, false);
-
+    // Use streaming internally so Ollama stops generating when we abort.
+    // Non-streaming (`stream:false`) buffers the whole response server-side;
+    // closing the HTTP connection does NOT stop Ollama's generation, causing
+    // request pile-up when the client times out and retries. With streaming,
+    // Ollama stops on connection close — clean cancellation.
     let lastError: ProviderError | undefined;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -113,62 +105,117 @@ export class OpenAICompatibleClient implements Provider {
         }
       }
 
-      // Use Promise.race for the full request+body cycle.
-      // AbortController.abort() does not interrupt response.json() once headers
-      // arrive — Ollama returns 200 immediately then streams the body, so the
-      // old abort-based approach would clear on header arrival and then hang
-      // indefinitely waiting for the JSON body.
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new ProviderError("Request timed out", { retryable: false })),
-          this.timeoutMs,
-        ),
-      );
-
       const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      const body = buildRequestBody(req, true); // stream:true
 
-      const requestPromise = fetch(`${this.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            const err = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
-              statusCode: response.status,
-              retryable: isRetryableStatus(response.status),
-            });
-            throw err;
-          }
-          const raw: unknown = await response.json();
-          return parseCompletionResponse(raw, req.model);
-        })
-        .catch((err: unknown) => {
-          if (err instanceof ProviderError) throw err;
-          const isAbort = err instanceof Error && err.name === "AbortError";
-          throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
-            retryable: !isAbort,
-          });
+      let response: Response;
+      try {
+        response = await fetch(`${this.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
         });
+      } catch (err) {
+        clearTimeout(timer);
+        const isAbort = err instanceof Error && err.name === "AbortError";
+        throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
+          retryable: !isAbort,
+        });
+      }
+
+      if (!response.ok) {
+        clearTimeout(timer);
+        const retryable = isRetryableStatus(response.status);
+        lastError = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
+          statusCode: response.status,
+          retryable,
+        });
+        if (retryable && attempt < MAX_ATTEMPTS - 1) continue;
+        throw lastError;
+      }
+
+      if (!response.body) {
+        clearTimeout(timer);
+        throw new ProviderError("Response body is null", { retryable: false });
+      }
+
+      // Collect SSE stream into a single CompletionResponse
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let content = "";
+      let finishReason: string | undefined;
+      let usage: CompletionResponse["usage"] | undefined;
+      let model = req.model;
 
       try {
-        return await Promise.race([requestPromise, timeoutPromise]);
-      } catch (err) {
-        controller.abort(); // cancel underlying fetch if timeout won
-        if (err instanceof ProviderError) {
-          lastError = err;
-          if (err.retryable && attempt < MAX_ATTEMPTS - 1) continue;
-          throw err;
+        outer: while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const data = trimmed.slice(5).trim();
+            if (data === "[DONE]") break outer;
+
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              continue;
+            }
+
+            const chunk = parsed as OpenAIStreamChunk;
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) content += delta;
+            const fr = chunk.choices?.[0]?.finish_reason;
+            if (fr) finishReason = fr;
+            const u = (chunk as { usage?: OpenAIUsage }).usage;
+            if (u) {
+              usage = {
+                promptTokens: u.prompt_tokens ?? 0,
+                completionTokens: u.completion_tokens ?? 0,
+                totalTokens: u.total_tokens ?? 0,
+              };
+            }
+            const m = (chunk as { model?: string }).model;
+            if (m) model = m;
+          }
         }
-        throw new ProviderError(String(err), { retryable: false });
+      } catch (err) {
+        clearTimeout(timer);
+        reader.releaseLock();
+        const isAbort = err instanceof Error && err.name === "AbortError";
+        throw new ProviderError(
+          isAbort ? "Request timed out" : `Stream read error: ${String(err)}`,
+          {
+            retryable: !isAbort,
+          },
+        );
       }
+
+      clearTimeout(timer);
+      reader.releaseLock();
+
+      return {
+        rawContent: content,
+        usage,
+        model,
+        finishReason,
+        truncated: finishReason === "length",
+      };
     }
 
-    // Should not reach here, but satisfy TS
     throw lastError ?? new ProviderError("Max retries exceeded", { retryable: false });
   }
 
@@ -257,32 +304,4 @@ export class OpenAICompatibleClient implements Provider {
 
     yield { delta: "", done: true };
   }
-}
-
-function parseCompletionResponse(raw: unknown, fallbackModel: string): CompletionResponse {
-  const data = raw as OpenAIResponse;
-
-  const choice = data.choices?.[0];
-  const rawContent = choice?.message?.content ?? "";
-  const finishReason = choice?.finish_reason ?? undefined;
-
-  // Truncation: explicitly cut short by token budget.
-  const truncated = finishReason === "length";
-
-  let usage: CompletionResponse["usage"];
-  if (data.usage) {
-    usage = {
-      promptTokens: data.usage.prompt_tokens ?? 0,
-      completionTokens: data.usage.completion_tokens ?? 0,
-      totalTokens: data.usage.total_tokens ?? 0,
-    };
-  }
-
-  return {
-    rawContent,
-    usage,
-    model: data.model ?? fallbackModel,
-    finishReason: finishReason ?? undefined,
-    truncated,
-  };
 }

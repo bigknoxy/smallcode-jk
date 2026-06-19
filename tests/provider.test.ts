@@ -88,28 +88,22 @@ describe("buildSamplingParams", () => {
 
 describe("OpenAICompatibleClient.complete()", () => {
   test("sends correct request body and maps response", async () => {
-    const mockResponseBody = {
-      model: "test-model",
-      choices: [
-        {
-          message: { content: "Hello, world!" },
-          finish_reason: "stop",
-        },
-      ],
-      usage: {
-        prompt_tokens: 10,
-        completion_tokens: 5,
-        total_tokens: 15,
-      },
-    };
+    // complete() now uses streaming internally for clean cancellation.
+    // Mock returns SSE format.
+    const sse = [
+      `data: ${JSON.stringify({ model: "test-model", choices: [{ delta: { content: "Hello," }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ model: "test-model", choices: [{ delta: { content: " world!" }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ model: "test-model", choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join("");
 
     let capturedInit: RequestInit | undefined;
 
     setMockFetch(async (_input, init) => {
       capturedInit = init;
-      return new Response(JSON.stringify(mockResponseBody), {
+      return new Response(sse, {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/event-stream" },
       });
     });
 
@@ -127,31 +121,29 @@ describe("OpenAICompatibleClient.complete()", () => {
     expect(response.usage?.completionTokens).toBe(5);
     expect(response.usage?.totalTokens).toBe(15);
 
-    // Verify request body details
+    // complete() uses stream:true internally
     expect(capturedInit).toBeDefined();
     const body = JSON.parse(capturedInit?.body as string) as ParsedBody;
     expect(body.model).toBe("test-model");
     expect(body.temperature).toBe(0.5);
-    expect(body.stream).toBe(false);
+    expect(body.stream).toBe(true);
     expect(body.messages?.[0]?.role).toBe("user");
   });
 
   // 4. retries on 429 and succeeds on second attempt
   test("retries on 429 and succeeds on second attempt", async () => {
     let callCount = 0;
+    const sse = [
+      `data: ${JSON.stringify({ model: "test-model", choices: [{ delta: { content: "OK" }, finish_reason: "stop" }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ].join("");
 
     setMockFetch(async () => {
       callCount++;
       if (callCount === 1) {
         return new Response("Too Many Requests", { status: 429, statusText: "Too Many Requests" });
       }
-      return new Response(
-        JSON.stringify({
-          model: "test-model",
-          choices: [{ message: { content: "OK" }, finish_reason: "stop" }],
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(sse, { status: 200, headers: { "Content-Type": "text/event-stream" } });
     });
 
     const client = new OpenAICompatibleClient({ ...baseConfig, timeoutMs: 10_000 });
