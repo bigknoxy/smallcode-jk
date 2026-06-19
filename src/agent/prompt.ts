@@ -5,6 +5,8 @@ import type { AgentConfig, AgentState } from "./types.ts";
 export function buildSystemPrompt(_profile: ModelProfile, _config: AgentConfig): string {
   return `You are smallcode, a coding assistant. Edit files to complete coding tasks.
 
+**IMPORTANT: Output the edit block immediately. Do NOT write long reasoning. Be terse.**
+
 ## HOW TO EDIT A FILE
 
 Output the file path on one line, then a SEARCH/REPLACE block:
@@ -42,6 +44,7 @@ Finish a goal:    TOOL: finish {"summary": "what was done"}
 6. Do NOT output numbered lists of steps. Output edit blocks and tool calls only.
 7. The SEARCH text must be COPIED EXACTLY from the file shown in "Relevant Context" above.
    If the edit fails, read the context again and copy the exact text.
+8. Keep your <think> block brief — 2-3 sentences max. Spend tokens on the edit, not reasoning.
 
 ## EXAMPLE: edit failed and retry
 
