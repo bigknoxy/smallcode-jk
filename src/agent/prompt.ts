@@ -109,7 +109,9 @@ export function buildTurnPrompt(state: AgentState, context: ContextBundle): stri
         parts.push("**Tool results:**");
         for (const tr of turn.toolResults) {
           const icon = tr.success ? "✓" : "✗";
-          parts.push(`  ${icon} ${tr.name}: ${tr.output.slice(0, 300)}`);
+          // Surface enough output that a failing test's expected/received diff is
+          // visible — the model needs the concrete failure to self-correct.
+          parts.push(`  ${icon} ${tr.name}: ${tr.output.slice(0, 600)}`);
         }
       }
     }

@@ -8,6 +8,7 @@ import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
+import { type ToolContext, executeTool } from "./tools.ts";
 import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./types.ts";
 
 export interface LoopDependencies {
@@ -133,6 +134,16 @@ export async function runLoop(
 
   const readFileFn = buildReadFile(state.repoRoot);
   const writeFileFn = buildWriteFile(state.repoRoot);
+
+  // Tool execution context. Model-emitted tool calls (run_tests, run_command,
+  // read_file) were previously parsed but never executed — the agent flew blind,
+  // calling `finish` without ever verifying. We now execute them and, critically,
+  // run the test suite at the end of each turn as a deterministic pass-oracle.
+  const toolCtx: ToolContext = {
+    repoRoot: state.repoRoot,
+    allowedCommands: config.allowedCommands ?? ["bun", "tsc", "biome", "git"],
+    requireApproval: config.requireApproval ?? false,
+  };
 
   // Planning phase: decompose the task into goals if none exist yet.
   if (state.goals.length === 0) {
@@ -264,7 +275,7 @@ export async function runLoop(
       .filter((tc) => tc.success)
       .map((tc) => ({ name: tc.name, args: tc.args }));
 
-    // Build tool results for failed parses
+    // Build tool results: start with failed parses.
     const toolResults: TurnRecord["toolResults"] = parsedToolCalls
       .filter((tc) => !tc.success)
       .map((tc) => ({
@@ -273,6 +284,41 @@ export async function runLoop(
         output: "",
         error: tc.error,
       }));
+
+    // Execute model-emitted side-effecting tool calls (read_file, run_command,
+    // run_tests) so their real output feeds back into the next turn. think/finish
+    // are control-flow only and handled separately below.
+    let testResult: import("./types.ts").ToolResult | undefined;
+    for (const call of toolCalls) {
+      if (call.name === "think" || call.name === "finish") continue;
+      try {
+        const result = await executeTool(call, toolCtx);
+        toolResults.push(result);
+        if (call.name === "run_tests") testResult = result;
+      } catch (err) {
+        toolResults.push({
+          name: call.name,
+          success: false,
+          output: "",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Deterministic pass-oracle: if the model did not already run tests, run them
+    // now. Tests in the trial dir are the same suite the grader uses, so
+    // green == guaranteed pass. This early-stops (saving wasted turns), prevents
+    // later turns from clobbering an already-correct solution, and instantly
+    // resolves negative "should-not-edit" tasks whose tests start green.
+    if (testResult === undefined) {
+      try {
+        const result = await executeTool({ name: "run_tests", args: {} }, toolCtx);
+        toolResults.push(result);
+        testResult = result;
+      } catch {
+        // Test execution failure is non-fatal — continue the loop.
+      }
+    }
 
     const turn: TurnRecord = {
       turn: state.turns.length + 1,
@@ -292,6 +338,15 @@ export async function runLoop(
 
     addTurn(state, turn);
     await saveState(state, statePath);
+
+    // Early-stop: tests green == task solved. Stop immediately to lock in the
+    // passing solution and avoid burning turns that could regress it.
+    if (testResult?.success === true) {
+      for (const g of state.goals) g.status = "done";
+      state.status = "done";
+      await saveState(state, statePath);
+      break;
+    }
 
     // Check for finish tool call
     const hasFinish = parsedToolCalls.some((tc) => tc.name === "finish" && tc.success);

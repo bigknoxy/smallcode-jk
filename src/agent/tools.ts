@@ -165,10 +165,13 @@ async function runTests(args: Record<string, unknown>, ctx: ToolContext): Promis
   const failMatch = combined.match(/(\d+)\s+fail/i);
   const failCount = failMatch ? parseInt(failMatch[1] ?? "0", 10) : 0;
 
+  // Success requires a clean exit AND zero failures. `bun test` exits non-zero
+  // when no test files are found, so exitCode===0 also guards against treating
+  // an empty/no-tests run as green (which would falsely early-stop the agent loop).
   const durationMs = Date.now() - start;
   return {
     name,
-    success: failCount === 0,
+    success: proc.exitCode === 0 && failCount === 0,
     output: combined,
     durationMs,
   };
