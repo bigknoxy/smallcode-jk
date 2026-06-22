@@ -338,8 +338,8 @@ describe("buildSystemPrompt", () => {
     const config = makeConfig();
     const prompt = buildSystemPrompt(profile, config);
 
-    expect(prompt).toContain("<<<<<<< SEARCH");
-    expect(prompt).toContain(">>>>>>> REPLACE");
+    expect(prompt).toContain("FILE:");
+    expect(prompt).toContain("WHOLE file");
     expect(prompt).toContain("TOOL: finish");
     expect(prompt).toContain("smallcode");
   });

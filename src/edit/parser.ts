@@ -118,6 +118,83 @@ function parseSearchReplace(raw: string): { blocks: EditBlock[]; errors: ParseEr
 }
 
 // ---------------------------------------------------------------------------
+// Full-file format
+// ---------------------------------------------------------------------------
+//
+// Small models botch SEARCH/REPLACE anchors (exact-match whitespace, marker
+// chars, the ======= separator). The whole-file format removes all of that: the
+// model names a file and emits its complete corrected contents in a fenced block.
+//
+//   FILE: src/math.ts
+//   ```ts
+//   export function add(a: number, b: number): number {
+//     return a + b;
+//   }
+//   ```
+//
+// search="" tells the applier to overwrite the whole file (see applyBlock).
+const FILE_RE = /^\s*FILE:\s*(.+?)\s*$/i;
+const FENCE_RE = /^\s*```/;
+
+function parseFullFile(raw: string): { blocks: EditBlock[]; errors: ParseError[] } {
+  const blocks: EditBlock[] = [];
+  const errors: ParseError[] = [];
+  const lines = raw.split("\n");
+  let i = 0;
+
+  while (i < lines.length) {
+    const m = (lines[i] ?? "").match(FILE_RE);
+    if (!m) {
+      i++;
+      continue;
+    }
+    const pathCandidate = m[1] ?? "";
+    const fileMarkerLine = i;
+    i++;
+
+    // Skip blank lines, then require an opening fence.
+    while (i < lines.length && (lines[i] ?? "").trim() === "") i++;
+    if (i >= lines.length || !FENCE_RE.test(lines[i] ?? "")) {
+      errors.push({
+        message: "FILE: marker found but no opening ``` code fence followed",
+        line: fileMarkerLine + 1,
+        raw: lines[fileMarkerLine] ?? "",
+      });
+      continue;
+    }
+    i++; // consume opening fence
+
+    // Collect until closing fence.
+    const contentLines: string[] = [];
+    let closed = false;
+    while (i < lines.length) {
+      if (FENCE_RE.test(lines[i] ?? "")) {
+        closed = true;
+        i++;
+        break;
+      }
+      contentLines.push(lines[i] ?? "");
+      i++;
+    }
+    if (!closed) {
+      errors.push({
+        message: "FILE: block missing closing ``` fence",
+        line: fileMarkerLine + 1,
+        raw: pathCandidate,
+      });
+      continue;
+    }
+
+    const filePath = normalizePath(pathCandidate);
+    // Preserve a trailing newline (most source files end with one).
+    const replace = `${contentLines.join("\n")}\n`;
+    blocks.push({ filePath, search: "", replace, format: "full-file" });
+  }
+
+  return { blocks, errors };
+}
+
+// ---------------------------------------------------------------------------
 // JSON format
 // ---------------------------------------------------------------------------
 
@@ -253,7 +330,15 @@ function validateBlocks(blocks: EditBlock[], errors: ParseError[]): EditBlock[] 
 export function parse(raw: string): ParseResult {
   const errors: ParseError[] = [];
 
-  // Try search/replace first
+  // Full-file format first — it is the primary format for small models and the
+  // most reliable. An explicit `FILE:` marker makes it unambiguous vs S/R.
+  const ffResult = parseFullFile(raw);
+  if (ffResult.blocks.length > 0) {
+    const validBlocks = validateBlocks(ffResult.blocks, errors);
+    if (validBlocks.length > 0) return { blocks: validBlocks, errors, raw };
+  }
+
+  // Then search/replace
   const srResult = parseSearchReplace(raw);
   errors.push(...srResult.errors);
 

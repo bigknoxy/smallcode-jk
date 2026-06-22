@@ -7,19 +7,16 @@ export function buildSystemPrompt(_profile: ModelProfile, _config: AgentConfig):
 
 ## HOW TO EDIT A FILE
 
-Output the file path on one line, then a SEARCH/REPLACE block:
+Write \`FILE:\` then the path, then a fenced code block containing the COMPLETE
+corrected file. Always output the WHOLE file, not a snippet — include every
+line, even unchanged ones.
 
-src/math.ts
-<<<<<<< SEARCH
-export function add(a: number, b: number): number {
-  // TODO: implement
-  return 0;
-}
-=======
+FILE: src/math.ts
+\`\`\`ts
 export function add(a: number, b: number): number {
   return a + b;
 }
->>>>>>> REPLACE
+\`\`\`
 
 Then run tests and finish:
 TOOL: run_tests {}
@@ -34,31 +31,34 @@ Finish a goal:    TOOL: finish {"summary": "what was done"}
 
 ## RULES
 
-1. Output edit blocks IMMEDIATELY — do not describe what you will do, just do it.
-2. The SEARCH text must EXACTLY match existing code (whitespace matters).
-3. After editing, always call TOOL: run_tests {} to verify.
-4. After tests pass, call TOOL: finish {"summary": "..."}.
-5. If no change is needed, call TOOL: finish {"summary": "no changes needed"}.
-6. Do NOT output numbered lists of steps. Output edit blocks and tool calls only.
-7. The SEARCH text must be COPIED EXACTLY from the file shown in "Relevant Context" above.
-   If the edit fails, read the context again and copy the exact text.
+1. Output the FILE: block IMMEDIATELY — do not describe what you will do, just do it.
+2. Always emit the ENTIRE file inside the fence, keeping all existing code that
+   should stay. Do NOT use SEARCH/REPLACE markers, diffs, or "...". Just the full file.
+3. Copy the unchanged parts EXACTLY from the file shown in "Relevant Context" above.
+4. After editing, call TOOL: run_tests {} to verify.
+5. After tests pass, call TOOL: finish {"summary": "..."}.
+6. If no change is needed, call TOOL: finish {"summary": "no changes needed"} with NO FILE: block.
+7. Do NOT output numbered lists of steps. Output the FILE: block and tool calls only.
 
-## EXAMPLE: edit failed and retry
+## EXAMPLE: fixing a bug
 
-If your edit fails, retry with text copied exactly from the file:
+Relevant Context shows:
+  export async function getValue(): Promise<number> {
+    const v = fetchValue();          // BUG: missing await
+    return (v as unknown as number);
+  }
 
-Turn 2 result:
-✗ src/math.ts (not_found) — Your SEARCH block did not match the file.
+Your response — the whole file, fixed:
 
-Turn 3 — retry with exact SEARCH:
-src/math.ts
-<<<<<<< SEARCH
-function add(a, b) {
-=======
-function add(a: number, b: number): number {
-  return a + b;
+FILE: src/async-utils.ts
+\`\`\`ts
+export async function getValue(): Promise<number> {
+  const v = await fetchValue();
+  return v;
 }
->>>>>>> REPLACE`;
+\`\`\`
+TOOL: run_tests {}
+TOOL: finish {"summary": "awaited fetchValue"}`;
 }
 
 export function buildTurnPrompt(state: AgentState, context: ContextBundle): string {
@@ -72,7 +72,7 @@ export function buildTurnPrompt(state: AgentState, context: ContextBundle): stri
 
   parts.push(`\n## Current Action (step ${state.currentGoalIndex + 1}/${state.goals.length})`);
   parts.push(goal !== undefined ? goal.description : "No active goal.");
-  parts.push("\nExecute this action NOW using edit blocks or tool calls. Do not describe — act.");
+  parts.push("\nExecute this action NOW with a FILE: block or tool calls. Do not describe — act.");
 
   parts.push(`\n## Turn ${turnNumber}`);
 
@@ -91,15 +91,15 @@ export function buildTurnPrompt(state: AgentState, context: ContextBundle): stri
           parts.push(`  ${icon} ${result.filePath} (${result.status})${detail}`);
 
           if (result.status !== "applied") {
-            parts.push(`  ✗ ${result.filePath} — Your SEARCH block did not match the file.`);
-            // Find the file content in context chunks so the model can copy exact text
+            parts.push(`  ✗ ${result.filePath} — edit did not apply.`);
+            // Show current file content so the model can re-emit the full file.
             const matchingChunk = context.chunks.find((c) => c.filePath === result.filePath);
             if (matchingChunk) {
               parts.push(`  The file currently contains:`);
               parts.push("  ```");
               parts.push(matchingChunk.content);
               parts.push("  ```");
-              parts.push("  Rewrite your SEARCH block to EXACTLY match these lines.");
+              parts.push("  Re-emit the COMPLETE corrected file in a FILE: block.");
             }
           }
         }

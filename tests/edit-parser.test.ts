@@ -17,6 +17,44 @@ function srBlock(
   return `${path}\n${searchTag}\n${search}\n${sep}\n${replace}\n${replaceTag}`;
 }
 
+describe("full-file format", () => {
+  test("parses FILE: + fenced block into a full-file block", () => {
+    const raw = [
+      "Here is the fix:",
+      "FILE: src/math.ts",
+      "```ts",
+      "export function add(a: number, b: number): number {",
+      "  return a + b;",
+      "}",
+      "```",
+      "TOOL: run_tests {}",
+    ].join("\n");
+    const result = parse(raw);
+
+    expect(result.blocks).toHaveLength(1);
+    const block = result.blocks[0]!;
+    expect(block.filePath).toBe("src/math.ts");
+    expect(block.search).toBe("");
+    expect(block.format).toBe("full-file");
+    expect(block.replace).toBe(
+      "export function add(a: number, b: number): number {\n  return a + b;\n}\n",
+    );
+  });
+
+  test("full-file is preferred over a stray SEARCH marker in prose", () => {
+    const raw = ["FILE: src/x.ts", "```", "const x = 1;", "```"].join("\n");
+    const result = parse(raw);
+    expect(result.blocks).toHaveLength(1);
+    expect(result.blocks[0]!.format).toBe("full-file");
+  });
+
+  test("FILE: without a fence yields no block (error recorded)", () => {
+    const raw = "FILE: src/x.ts\nsome prose but no fence";
+    const result = parse(raw);
+    expect(result.blocks).toHaveLength(0);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 1. Parses single search/replace block correctly
 // ---------------------------------------------------------------------------
