@@ -276,12 +276,18 @@ flowchart TD
     GETCTX --> BUILDPROMPT[Build turn prompt\nsystem + user messages]
     BUILDPROMPT --> CALLMODEL[Call provider.complete\nwith model sampling defaults]
     CALLMODEL --> PARSETHINK[Reasoning handler\nstrip think tags → answer]
-    PARSETHINK --> PARSEEDITS[Edit parser\nSEARCH/REPLACE blocks → EditBlock list]
-    PARSEEDITS --> APPLYEDITS[Apply edits\nexact match → ApplyResult per block]
+    PARSETHINK --> PARSEEDITS[Edit parser\nFILE: full-file rewrite → EditBlock\nSEARCH/REPLACE + JSON as fallback]
+    PARSEEDITS --> APPLYEDITS[Apply edits\noverwrite file or exact-match replace → ApplyResult]
     APPLYEDITS --> PARSETOOLS[Tool call parser\nTOOL: name json lines]
-    PARSETOOLS --> ADDTURN[Add TurnRecord\nsave state to disk]
+    PARSETOOLS --> EXECTOOLS[Execute tool calls\nrun_tests · run_command · read_file]
+    EXECTOOLS --> ADDTURN[Add TurnRecord\nsave state to disk]
 
-    ADDTURN --> CHECKEDITS{Any edits\napplied?}
+    ADDTURN --> RUNTESTS[Run bun test\ntest-oracle: exitCode + failures]
+    RUNTESTS --> TESTSPASSED{Tests pass?\nexitCode=0 ∧ failures=0}
+    TESTSPASSED -- yes → early-stop --> DONE
+    TESTSPASSED -- no --> CHECKEDITS
+
+    CHECKEDITS{Any edits\napplied?}
     CHECKEDITS -- yes --> RUNVERIFY[Run checker suite\nformat · lint · typecheck · test]
     CHECKEDITS -- no --> CHECKFINISH
 
@@ -392,7 +398,7 @@ flowchart LR
         <tr>
           <td><strong>Edit</strong></td>
           <td><code>src/edit/</code></td>
-          <td>Parse SEARCH/REPLACE blocks and JSON patch edits from model output. Apply exact-match replacements and report diffs.</td>
+          <td>Parse model output as full-file rewrites (<code>FILE: &lt;path&gt;</code> + fenced block, primary format), SEARCH/REPLACE blocks (fallback), or JSON patch edits (fallback). Apply by overwriting the whole file or exact-match replacement. Parser: <code>parseFullFile</code> in <code>src/edit/parser.ts</code>.</td>
           <td><code>EditBlock</code>, <code>ParseResult</code>, <code>ApplyResult</code>, <code>parse</code>, <code>applyBatch</code></td>
         </tr>
         <tr>
@@ -634,7 +640,7 @@ flowchart LR
 
 <footer>
   <span>smallcode &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; <a href="../README.md">README</a></span>
-  <span>Last updated: 2026-06-17</span>
+  <span>Last updated: 2026-06-22</span>
 </footer>
 
 <script>

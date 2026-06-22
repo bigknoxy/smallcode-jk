@@ -196,9 +196,9 @@ smallcode is organized into eight cooperating pillars:
 
 3. **Context engine** (`src/context/`) — builds a minimal `ContextBundle` from a `RepoMap` of symbols and file chunks. Respects a token budget so the model never sees more than its context window can hold. Truncation is explicit and logged.
 
-4. **Edit protocol** (`src/edit/`) — models emit edits as `SEARCH/REPLACE` blocks or JSON patches. The parser produces `EditBlock` values; the applier performs exact-match replacement and returns a unified diff. Failed matches surface `not_found` or `ambiguous` status for self-correction.
+4. **Edit protocol** (`src/edit/`) — models emit edits as full-file rewrites (`FILE: <path>` followed by a fenced code block with the complete corrected file) as the primary format, with `SEARCH/REPLACE` blocks and JSON patches as fallbacks. The parser (`parseFullFile`) produces `EditBlock` values; the applier overwrites the whole file for full-file rewrites or performs exact-match replacement for SEARCH/REPLACE, and returns a unified diff. Failed matches surface `not_found` or `ambiguous` status for self-correction.
 
-5. **Agent loop** (`src/agent/`) — drives the per-turn cycle: fetch context → build prompt → call model → parse reasoning → parse edits → apply edits → detect tool calls → advance goal → persist state. State is written to `.smallcode/state.json` after every turn so sessions are resumable.
+5. **Agent loop** (`src/agent/`) — drives the per-turn cycle: fetch context → build prompt → call model → parse reasoning → parse edits → apply edits → execute tool calls (`run_tests`, `run_command`, `read_file`) → run `bun test` as a deterministic pass-oracle → **early-stop** if tests pass (exitCode 0, zero failures), locking the solution and preventing later turns from clobbering it → advance goal → persist state. State is written to `.smallcode/state.json` after every turn so sessions are resumable. Real test output (up to 600 chars) is fed back into the next turn for self-debug.
 
 6. **Verification loop** (`src/verify/`) — runs a configurable checker suite (format, lint, typecheck, test) after edits are applied. On failure, feeds the truncated output back to the model as a self-correction prompt. `maxCorrectionIterations` bounds the retry depth.
 
