@@ -110,127 +110,141 @@ export class OpenAICompatibleClient implements Provider {
       const body = buildRequestBody(req, true); // stream:true
       body.stream_options = { include_usage: true }; // request token counts in final chunk
 
-      let response: Response;
-      try {
-        response = await fetch(`${this.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
-      } catch (err) {
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
-          retryable: !isAbort,
-        });
-      }
-
-      if (!response.ok) {
-        const retryable = isRetryableStatus(response.status);
-        lastError = new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
-          statusCode: response.status,
-          retryable,
-        });
-        if (retryable && attempt < MAX_ATTEMPTS - 1) continue;
-        throw lastError;
-      }
-
-      if (!response.body) {
-        throw new ProviderError("Response body is null", { retryable: false });
-      }
-
-      // Collect SSE stream into a single CompletionResponse.
-      // Race each read() against the timeout. Bun's AbortController does not
-      // interrupt a pending reader.read() — the abort signal on the fetch is
-      // sufficient to cancel the HTTP connection, but read() keeps blocking.
-      // Explicitly racing with a timeout Promise ensures timely cancellation.
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let content = "";
-      let finishReason: string | undefined;
-      let usage: CompletionResponse["usage"] | undefined;
-      let model = req.model;
-
-      // Race each reader.read() against a persistent abort promise (created ONCE).
-      // reader.cancel() alone does not interrupt a pending read() in Bun — the
-      // read() keeps blocking until the next SSE chunk arrives. A persistent
-      // rejected promise that fires on timeout interrupts the Promise.race
-      // regardless of where reader.read() is in its blocking I/O.
-      let rejectStream!: (err: ProviderError) => void;
-      const streamAbortPromise = new Promise<never>((_, reject) => {
-        rejectStream = reject;
+      // Create ONE timeout that covers fetch() + SSE read loop.
+      // The timer is started BEFORE fetch() so a hanging response-headers phase
+      // is bounded by the same deadline as the stream read phase.
+      let rejectTimeout!: (err: ProviderError) => void;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        rejectTimeout = reject;
       });
-      const streamTimer = setTimeout(() => {
+      const timer = setTimeout(() => {
         controller.abort();
-        reader.cancel().catch(() => {});
-        rejectStream(new ProviderError("Request timed out", { retryable: false }));
+        rejectTimeout(new ProviderError("Request timed out", { retryable: false }));
       }, this.timeoutMs);
 
-      try {
-        outer: while (true) {
-          const { done, value } = await Promise.race([reader.read(), streamAbortPromise]);
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data:")) continue;
-            const data = trimmed.slice(5).trim();
-            if (data === "[DONE]") break outer;
-
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(data);
-            } catch {
-              continue;
-            }
-
-            const chunk = parsed as OpenAIStreamChunk;
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) content += delta;
-            const fr = chunk.choices?.[0]?.finish_reason;
-            if (fr) finishReason = fr;
-            const u = (chunk as { usage?: OpenAIUsage }).usage;
-            if (u) {
-              usage = {
-                promptTokens: u.prompt_tokens ?? 0,
-                completionTokens: u.completion_tokens ?? 0,
-                totalTokens: u.total_tokens ?? 0,
-              };
-            }
-            const m = (chunk as { model?: string }).model;
-            if (m) model = m;
-          }
+      // Inner async operation: fetch + full SSE read. Raced against timeoutPromise.
+      const innerOp = async (): Promise<CompletionResponse> => {
+        let response: Response;
+        try {
+          response = await fetch(`${this.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${this.apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          throw new ProviderError(isAbort ? "Request timed out" : `Network error: ${String(err)}`, {
+            retryable: !isAbort,
+          });
         }
-      } catch (err) {
-        clearTimeout(streamTimer);
-        reader.cancel().catch(() => {});
+
+        if (!response.ok) {
+          const retryable = isRetryableStatus(response.status);
+          throw new ProviderError(`HTTP ${response.status}: ${response.statusText}`, {
+            statusCode: response.status,
+            retryable,
+          });
+        }
+
+        if (!response.body) {
+          throw new ProviderError("Response body is null", { retryable: false });
+        }
+
+        // Collect SSE stream into a single CompletionResponse.
+        // Race each read() against timeoutPromise. Bun's AbortController does not
+        // interrupt a pending reader.read() — the abort signal on the fetch is
+        // sufficient to cancel the HTTP connection, but read() keeps blocking.
+        // Explicitly racing with a timeout Promise ensures timely cancellation.
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let content = "";
+        let finishReason: string | undefined;
+        let usage: CompletionResponse["usage"] | undefined;
+        let model = req.model;
+
+        try {
+          outer: while (true) {
+            const { done, value } = await Promise.race([reader.read(), timeoutPromise]);
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith("data:")) continue;
+              const data = trimmed.slice(5).trim();
+              if (data === "[DONE]") break outer;
+
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(data);
+              } catch {
+                continue;
+              }
+
+              const chunk = parsed as OpenAIStreamChunk;
+              const delta = chunk.choices?.[0]?.delta?.content;
+              if (delta) content += delta;
+              const fr = chunk.choices?.[0]?.finish_reason;
+              if (fr) finishReason = fr;
+              const u = (chunk as { usage?: OpenAIUsage }).usage;
+              if (u) {
+                usage = {
+                  promptTokens: u.prompt_tokens ?? 0,
+                  completionTokens: u.completion_tokens ?? 0,
+                  totalTokens: u.total_tokens ?? 0,
+                };
+              }
+              const m = (chunk as { model?: string }).model;
+              if (m) model = m;
+            }
+          }
+        } catch (err) {
+          reader.cancel().catch(() => {});
+          reader.releaseLock();
+          if (err instanceof ProviderError) throw err;
+          const isAbort = err instanceof Error && err.name === "AbortError";
+          throw new ProviderError(
+            isAbort ? "Request timed out" : `Stream read error: ${String(err)}`,
+            { retryable: !isAbort },
+          );
+        }
+
         reader.releaseLock();
-        if (err instanceof ProviderError) throw err;
-        const isAbort = err instanceof Error && err.name === "AbortError";
-        throw new ProviderError(
-          isAbort ? "Request timed out" : `Stream read error: ${String(err)}`,
-          { retryable: !isAbort },
-        );
+
+        return {
+          rawContent: content,
+          usage,
+          model,
+          finishReason,
+          truncated: finishReason === "length",
+        };
+      };
+
+      let result: CompletionResponse;
+      try {
+        result = await Promise.race([innerOp(), timeoutPromise]);
+      } catch (err) {
+        clearTimeout(timer);
+        // Propagate retryable HTTP errors through the retry loop; throw the rest.
+        if (err instanceof ProviderError && err.retryable && attempt < MAX_ATTEMPTS - 1) {
+          lastError = err;
+          continue;
+        }
+        throw err instanceof ProviderError
+          ? err
+          : new ProviderError(`Unexpected error: ${String(err)}`, { retryable: false });
       }
 
-      clearTimeout(streamTimer);
-      reader.releaseLock();
-
-      return {
-        rawContent: content,
-        usage,
-        model,
-        finishReason,
-        truncated: finishReason === "length",
-      };
+      clearTimeout(timer);
+      return result;
     }
 
     throw lastError ?? new ProviderError("Max retries exceeded", { retryable: false });
