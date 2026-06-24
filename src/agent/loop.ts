@@ -405,8 +405,8 @@ export async function runLoop(
         state.redraftCount = (state.redraftCount ?? 0) + 1;
         turnRedrafted = true;
       }
-    } else if (verdict?.outcome !== "failing") {
-      // Non-failing outcome resets the stall counter.
+    } else {
+      // Non-failing outcome (solved / clean / none) resets the stall counter.
       state.stallCount = 0;
       state.lastFailureSignature = undefined;
     }
