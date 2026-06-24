@@ -7,10 +7,15 @@ import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
+import { rotateStrategy } from "./strategy.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
 import { type ToolContext, executeTool } from "./tools.ts";
 import { captureTestBaseline, runTieredOracle } from "@/verify/oracle.ts";
+import { failureSignature } from "@/verify/failure-extract.ts";
 import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./types.ts";
+
+const STALL_LIMIT = 2;
+const MAX_REDRAFTS = 2;
 
 export interface LoopDependencies {
   provider: Provider;
@@ -180,6 +185,10 @@ export async function runLoop(
   // the baseline set is empty and behaviour is identical to before this fix.
   const testBaseline = captureTestBaseline(state.repoRoot);
 
+  // Stall/redraft carry-forward: tracks whether the NEXT turn should be a redraft.
+  let redraftNext = false;
+  let redraftStrategyHint: string | undefined;
+
   while (!isTerminal(state) && state.turns.length < state.maxTurns) {
     const goal = currentGoal(state);
     if (goal === null) {
@@ -209,7 +218,14 @@ export async function runLoop(
       };
     }
 
-    const turnPrompt = buildTurnPrompt(state, context);
+    // Build turn prompt — pass redraft opts if a stall was detected last turn.
+    const turnPromptOpts = redraftNext
+      ? { redraft: true, strategyHint: redraftStrategyHint }
+      : undefined;
+    const turnPrompt = buildTurnPrompt(state, context, turnPromptOpts);
+    // Consume the redraft flag (it applies to this turn only).
+    redraftNext = false;
+    redraftStrategyHint = undefined;
 
     try {
       const response = await provider.complete({
@@ -343,6 +359,58 @@ export async function runLoop(
       // Verification failure is non-fatal — continue the loop.
     }
 
+    // Stall detection: compute failure signature and check if we're stuck.
+    //
+    // Fix 3b: Gate stall on verdict.outcome === "failing" ALONE — do NOT require
+    // verdict.diagnostic to be present. When diagnostic is available use it for
+    // a stable signature; otherwise fall back to a stable hash of the feedback
+    // text. This ensures typecheck-tier failures (where extractFirstFailure
+    // previously returned null) also participate in stall detection.
+    let turnFailureSig: string | undefined;
+    let turnRedrafted = false;
+
+    if (verdict?.outcome === "failing") {
+      // Compute a stable signature: prefer the structured diagnostic; fall back
+      // to the first 200 chars of feedback (already stable — no timing, no paths
+      // in tsc/feedback text after normalization).
+      if (verdict.diagnostic) {
+        turnFailureSig = failureSignature(verdict.diagnostic);
+      } else {
+        // Stable fallback from feedback text — normalize timing/paths/whitespace.
+        const fbStable = (verdict.feedback ?? "")
+          .replace(/\[\d+(?:\.\d+)?ms\]/g, "")
+          .replace(/\/[^\s'"]+\/([^/\s'"]+)/g, "<path>/$1")
+          .replace(/:\d+:\d+/g, ":<loc>")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+        turnFailureSig = `feedback:${fbStable}`;
+      }
+
+      if (turnFailureSig === state.lastFailureSignature) {
+        // Same failure again — increment stall counter.
+        state.stallCount = (state.stallCount ?? 0) + 1;
+      } else {
+        // Different failure — reset stall counter.
+        state.stallCount = 0;
+      }
+      state.lastFailureSignature = turnFailureSig;
+
+      // Fire redraft when stall limit reached and we haven't exhausted redrafts.
+      if (state.stallCount >= STALL_LIMIT && (state.redraftCount ?? 0) < MAX_REDRAFTS) {
+        redraftNext = true;
+        redraftStrategyHint = rotateStrategy(state.redraftCount ?? 0);
+        state.stallCount = 0;
+        state.lastFailureSignature = undefined;
+        state.redraftCount = (state.redraftCount ?? 0) + 1;
+        turnRedrafted = true;
+      }
+    } else {
+      // Non-failing outcome (solved / clean / none) resets the stall counter.
+      state.stallCount = 0;
+      state.lastFailureSignature = undefined;
+    }
+
     const turn: TurnRecord = {
       turn: state.turns.length + 1,
       goalId: goal.id,
@@ -357,6 +425,9 @@ export async function runLoop(
       promptTokens,
       completionTokens,
       timestamp: Date.now(),
+      ...(turnFailureSig !== undefined && { failureSignature: turnFailureSig }),
+      ...(turnRedrafted && { redrafted: true }),
+      ...(verdict?.diagnostic && { diagnostic: verdict.diagnostic }),
     };
 
     addTurn(state, turn);

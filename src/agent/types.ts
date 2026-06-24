@@ -1,5 +1,6 @@
 import type { ApplyResult, EditBlock } from "../edit/types.ts";
 import type { PromptSet } from "./prompt-set.ts";
+import type { FailureDiagnostic } from "../verify/failure-extract.ts";
 
 export type GoalStatus = "pending" | "in_progress" | "done" | "failed" | "skipped";
 export type SessionStatus = "running" | "done" | "failed" | "max_turns" | "abandoned";
@@ -46,6 +47,12 @@ export interface TurnRecord {
   promptTokens: number;
   completionTokens: number;
   timestamp: number;
+  /** Stable failure signature for stall detection (set when oracle returns failing). */
+  failureSignature?: string;
+  /** True when this turn triggered a redraft (cleared history, rotated strategy). */
+  redrafted?: boolean;
+  /** Structured diagnostic for this turn's failure, if any. */
+  diagnostic?: FailureDiagnostic;
 }
 
 export interface AgentState {
@@ -61,6 +68,12 @@ export interface AgentState {
   startedAt: number;
   updatedAt: number;
   maxTurns: number;
+  /** Failure signature from the most recent failing turn (for stall detection). */
+  lastFailureSignature?: string;
+  /** How many consecutive turns have produced the same failure signature. */
+  stallCount?: number;
+  /** How many redraft resets have been triggered in this session. */
+  redraftCount?: number;
 }
 
 export interface Candidate {
