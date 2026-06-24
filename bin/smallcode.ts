@@ -3,6 +3,7 @@ import { parseArgs } from "../src/cli/args.ts";
 import { runCommand } from "../src/cli/commands/run.ts";
 import { configInitCommand } from "../src/cli/commands/config-init.ts";
 import { configModelsCommand } from "../src/cli/commands/config-models.ts";
+import { updateCommand, uninstallCommand } from "../src/cli/commands/selfmanage.ts";
 import { evalRunCommand } from "../src/eval/cli.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
@@ -30,6 +31,8 @@ Usage:
   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>] [--force]
   smallcode config list-models
+  smallcode update
+  smallcode uninstall [--yes|-y]
   smallcode --version
   smallcode --help
 `);
@@ -62,6 +65,14 @@ try {
         printUsage();
         process.exit(1);
       }
+      break;
+
+    case "update":
+      await updateCommand(parsed);
+      break;
+
+    case "uninstall":
+      await uninstallCommand(parsed);
       break;
 
     case "eval": {
