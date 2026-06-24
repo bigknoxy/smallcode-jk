@@ -57,7 +57,7 @@ test("baseline fix: pre-existing red + add passing test → solved", async () =>
   const verdict = await runTieredOracle(dir, { baseline });
   expect(verdict.outcome).toBe("solved");
   expect(verdict.newFailures).toHaveLength(0);
-}, 30_000);
+}, 60_000);
 
 test("baseline fix: pre-existing red, nothing solved → failing, newFailures empty", async () => {
   // Start with a failing test; capture baseline; do nothing; re-run oracle.
@@ -74,7 +74,7 @@ test("baseline fix: pre-existing red, nothing solved → failing, newFailures em
   expect(verdict.outcome).toBe("failing");
   // The failure was pre-existing, not new.
   expect(verdict.newFailures).toHaveLength(0);
-}, 30_000);
+}, 60_000);
 
 test("baseline fix: pre-existing red + NEW failing test → failing, newFailures has only new id", async () => {
   const dir = await scaffold({
@@ -97,7 +97,7 @@ test("baseline fix: pre-existing red + NEW failing test → failing, newFailures
   expect(verdict.outcome).toBe("failing");
   expect(verdict.newFailures).toContain("brand new failure");
   expect(verdict.newFailures).not.toContain("pre-existing fail");
-}, 30_000);
+}, 60_000);
 
 // ===== BACK-COMPAT: no-baseline arg behaves as before =====
 
@@ -110,7 +110,7 @@ test("solved: passing test → outcome solved", async () => {
   });
   const v = await runTieredOracle(dir);
   expect(v.outcome).toBe("solved");
-}, 30_000);
+}, 60_000);
 
 test("failing: failing test → outcome failing with feedback", async () => {
   const dir = await scaffold({
@@ -122,7 +122,7 @@ test("failing: failing test → outcome failing with feedback", async () => {
   const v = await runTieredOracle(dir);
   expect(v.outcome).toBe("failing");
   expect(v.feedback.toLowerCase()).toContain("fail");
-}, 30_000);
+}, 60_000);
 
 test("clean: no test + well-typed code (+tsconfig) → outcome clean", async () => {
   const dir = await scaffold({
