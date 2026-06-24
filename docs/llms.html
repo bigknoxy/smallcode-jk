@@ -297,7 +297,8 @@
       </thead>
       <tbody>
         <tr><td><code>openai-client.ts</code></td><td>OpenAI-compatible HTTP client. Sends <code>POST /chat/completions</code>. Forwards <code>ollamaOptions</code> as the <code>options</code> field. Handles streaming.</td></tr>
-        <tr><td><code>factory.ts</code></td><td><code>createProvider(config, registry)</code> — currently returns an <code>OpenAICompatibleClient</code>. Extension point for future backends.</td></tr>
+        <tr><td><code>factory.ts</code></td><td><code>createProvider(config, registry)</code> — returns an <code>OpenAICompatibleClient</code>, wrapped by <code>maybeWrapWatchdog</code> (on unless <code>SMALLCODE_WATCHDOG=0</code>). Extension point for future backends.</td></tr>
+        <tr><td><code>watchdog.ts</code></td><td><code>WatchdogProvider</code> — wraps a <code>Provider</code>, measures real-generation throughput (<code>completionTokens</code> / wall-time). After <code>consecutiveSlow</code> (2) gens below <code>thresholdTps</code> (20 tok/s), runs <code>ollama stop &lt;model&gt;</code> to defrag the KV-cache; next call reloads at full speed. Ignores errored + sub-<code>minTokens</code> (64) gens; never probes (single-slot-safe). Injectable <code>reload</code>/<code>now</code>.</td></tr>
         <tr><td><code>sampler.ts</code></td><td>Sampling utilities — top-p/top-k post-processing helpers.</td></tr>
         <tr><td><code>types.ts</code></td><td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ChatMessage</code>, <code>TokenUsage</code>, <code>StreamChunk</code>, <code>ProviderError</code>.</td></tr>
       </tbody>
@@ -412,6 +413,7 @@
         <tr><td><code>validate-e1.ts</code></td><td>Validate the E1 eval suite fixtures against their reference solutions.</td></tr>
         <tr><td><code>regression-gate.ts</code></td><td>CI gate script — compare current run to baseline, exit 1 on regression.</td></tr>
         <tr><td><code>smoke-e0.ts</code></td><td>Tiny smoke run of E0 tasks to quickly verify the harness is wired up correctly.</td></tr>
+        <tr><td><code>ollama-serve.sh</code></td><td>Drop-in for <code>ollama serve</code> that exports <code>OLLAMA_FLASH_ATTENTION=1</code> + <code>OLLAMA_KV_CACHE_TYPE=q8_0</code> (halve KV-cache VRAM, slow fragmentation decay). Use for long sessions.</td></tr>
       </tbody>
     </table>
   </section>
@@ -644,6 +646,24 @@ function add(a: number, b: number): number { return a + b; }
           <td>—</td>
           <td><code>loadConfigFromEnv</code></td>
           <td>Override activeModel ID</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_WATCHDOG</code></td>
+          <td>on</td>
+          <td><code>provider/factory.ts</code></td>
+          <td>Set <code>0</code> to disable the throughput watchdog (auto <code>ollama stop</code> on KV-cache decay)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_DISCIPLINE</code></td>
+          <td>on</td>
+          <td><code>run-baseline.ts</code></td>
+          <td>Set <code>0</code> to strip the discipline rules from the system prompt (A/B)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_PRESOLVE</code></td>
+          <td>off</td>
+          <td><code>run-baseline.ts</code></td>
+          <td>Set <code>1</code> to enable planner pre-solve reflection (A/B)</td>
         </tr>
         <tr>
           <td><code>SMALLCODE_HE_LIMIT</code></td>

@@ -255,7 +255,7 @@ graph TD
     REG["Model Registry<br/><small>src/models/registry.ts</small>"]
 
     CLI["CLI / Script runner<br/><small>src/cli/ &amp; scripts/</small>"]
-    PROV["Provider Layer<br/><small>src/provider/ — OpenAI-compat HTTP</small>"]
+    PROV["Provider Layer<br/><small>src/provider/ — OpenAI-compat HTTP + tok/s watchdog</small>"]
     OLLAMA["Ollama<br/><small>localhost:11434/v1<br/>VibeThinker-3B (Q8_0)</small>"]
     REASON["Reasoning Handler<br/><small>src/reasoning/ — strips &lt;think&gt; tags</small>"]
     CTX["Context Engine<br/><small>src/context/ — RepoMap + token budget</small>"]
@@ -611,8 +611,8 @@ flowchart TD
         <tr>
           <td><strong>Provider</strong></td>
           <td><code>src/provider/</code></td>
-          <td>OpenAI-compatible HTTP client for chat completions and streaming. <code>ProviderError</code> for retryable error classification. Forwards <code>ollamaOptions</code> verbatim.</td>
-          <td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ProviderError</code>, <code>createProvider</code></td>
+          <td>OpenAI-compatible HTTP client for chat completions and streaming. <code>ProviderError</code> for retryable error classification. Forwards <code>ollamaOptions</code> verbatim. <code>WatchdogProvider</code> wraps the client and auto-runs <code>ollama stop</code> when real-generation throughput decays below 20 tok/s for 2 consecutive gens (KV-cache fragmentation self-heal).</td>
+          <td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ProviderError</code>, <code>createProvider</code>, <code>WatchdogProvider</code></td>
         </tr>
         <tr>
           <td><strong>Reasoning</strong></td>
