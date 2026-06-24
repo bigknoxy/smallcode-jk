@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.0.0...v1.0.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **install:** log() to stderr — real release-path install was broken ([679ecad](https://github.com/bigknoxy/smallcode-jk/commit/679ecade0b3a4c7dc7e1829ee74863e838a36a50))
+* **install:** send log() to stderr so it can't pollute captured tarball URL ([fe1503c](https://github.com/bigknoxy/smallcode-jk/commit/fe1503ca92a4401e7610cb9f0cc988125d5e9922))
+
 ## 1.0.0 (2026-06-24)
 
 
