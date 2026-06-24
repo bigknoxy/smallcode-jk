@@ -1,4 +1,8 @@
 import type { ApplyBatchResult, ApplyResult, EditBlock } from "./types.ts";
+import { applyPatchBlock } from "./patch-function.ts";
+
+/** Sentinel prefix stored in EditBlock.search for patch-function blocks. */
+const PATCH_SENTINEL = "\x00PATCH\x00";
 
 // ---------------------------------------------------------------------------
 // Diff generation
@@ -180,6 +184,12 @@ export function generateDiff(original: string, modified: string, filePath: strin
 
 export function applyBlock(block: EditBlock, content: string): ApplyResult {
   const { filePath, search, replace } = block;
+
+  // Patch-function dispatch: sentinel prefix identifies this as a PATCH block.
+  if (block.format === "patch-function" && search.startsWith(PATCH_SENTINEL)) {
+    const functionName = search.slice(PATCH_SENTINEL.length);
+    return applyPatchBlock({ filePath, functionName, replacement: replace, format: "patch-function" }, content);
+  }
 
   // Full-file replace (or new file)
   if (search === "") {
