@@ -304,28 +304,48 @@ graph TD
       A test-baseline is captured before the first turn; "solved" means zero <em>new</em> failures vs
       baseline AND ≥1 pass — pre-existing unrelated failures never block early-stop.
     </p>
+    <p style="margin-top:8px">
+      <strong>Structured failure feedback</strong>: on every "failing" oracle verdict,
+      <code>extractFirstFailure</code> parses the first failing assertion (Expected/Received),
+      errorType, and test label into a <code>FailureDiagnostic</code>.
+      This is stored on the turn and rendered as a <code>Failure (fix THIS):</code> header in the
+      next turn's prompt — replacing a blind 600-char raw slice with a structured block the model
+      can directly act on.
+    </p>
+    <p style="margin-top:8px">
+      <strong>Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
+      diagnostic (strips timings, paths, hex addrs) into a stable hash. When
+      <code>STALL_LIMIT=2</code> consecutive turns produce the same signature, the next turn's
+      prompt is marked as a redraft: Recent History is suppressed (dead-end context cleared) and
+      a rotating strategy hint nudges a fresh approach. After <code>MAX_REDRAFTS=2</code> the
+      mechanism is disarmed so the loop doesn't cycle forever.
+    </p>
     <div class="diagram-wrap">
       <div class="mermaid">
 flowchart TD
     START([Task received]) --> PLAN[planTask — optional pre-solve reflection,\nthen model decomposes task into ≤8 Goals]
-    PLAN --> GOAL{Current goal?}
+    PLAN --> BASELINE[captureTestBaseline\nrecord pre-existing failing IDs + red count]
+    BASELINE --> GOAL{Current goal?}
     GOAL -- none --> DONE([status: done])
     GOAL -- pending --> CTX[Build ContextBundle\nwalk repoRoot, token budget 8K]
 
-    CTX --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks]
+    CTX --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks\n+ Failure diagnostic if last turn failed]
     PROMPT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
     MODEL --> STRIP[ReasoningHandler\nstrip think tags → answer]
     STRIP --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
     PARSEEDITS --> APPLY[applyBatch\noverwrite file or exact-match replace]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
-    EXECTOOLS --> ORACLE[Auto run_tests\nbun test — deterministic pass oracle]
-    ORACLE --> ADDTURN[addTurn + saveState]
+    EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
+    ORACLE --> ADDTURN[addTurn + saveState\nstore turn.failureSignature + diagnostic]
 
     ADDTURN --> GREEN{newFailures=0\npassCount≥1?}
     GREEN -- yes --> ALLDONE[mark all goals done\nstatus = done]
     ALLDONE --> DONE
-    GREEN -- no --> FINISH{TOOL: finish\ncalled?}
+    GREEN -- no --> STALL{outcome=failing\n+ same signature?}
+    STALL -- "stallCount >= STALL_LIMIT\nAND redraftCount < MAX_REDRAFTS" --> REDRAFT[Set redraftNext=true\nrotateStrategy hint\nreset stallCount\nredraftCount++]
+    REDRAFT --> FINISH
+    STALL -- different sig or count ok --> FINISH{TOOL: finish\ncalled?}
     FINISH -- yes --> ADVANCE[advanceGoal\ncurrentGoalIndex++]
     ADVANCE --> GOAL
     FINISH -- no --> MAXCHECK{turns ≥ maxTurns?}
@@ -336,6 +356,8 @@ flowchart TD
     style DONE fill:#14532d,stroke:#16a34a,color:#bbf7d0
     style MAXED fill:#450a0a,stroke:#dc2626,color:#fca5a5
     style ORACLE fill:#451a03,stroke:#d97706,color:#fcd34d
+    style REDRAFT fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
+    style STALL fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
       </div>
     </div>
   </section>
