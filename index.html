@@ -537,7 +537,7 @@
       The easy first-30 subset scores 0.967 / 0.900 / 1.000. The full-159 number is lower because it includes the harder tail
       (15 genuine traps remain). The run hit Ollama KV-cache slowdown over ~16h (105→0.5 tok/s, 50 trial timeouts); the clean
       number above re-ran affected problems on a fresh server (<code>scripts/rerun-timeouts.ts</code>) and merged them back.
-      Next: oracle-verified best-of-N + AlphaCodium pre-solve — see <a href="docs/ROADMAP.md" style="color:#7c8ff5;">ROADMAP</a>.
+      Next: oracle-verified best-of-N + AlphaCodium pre-solve. Prompt-optimization (GEPA) seam is live — <code>AgentConfig.promptSet</code> injects candidate prompts end-to-end; <code>src/improve/gepa/</code> provides the Pareto-front evolution engine. See <a href="docs/ROADMAP.md" style="color:#7c8ff5;">ROADMAP</a>.
     </p>
   </section>
 

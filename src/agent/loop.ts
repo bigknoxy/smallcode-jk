@@ -168,6 +168,8 @@ export async function runLoop(
       profile,
       repoRoot: state.repoRoot,
       preSolveReflection: config.preSolveReflection,
+      plannerPrompt: config.promptSet?.planner,
+      reflectionPrompt: config.promptSet?.reflection,
     });
     await saveState(state, statePath);
   }

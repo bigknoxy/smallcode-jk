@@ -1,4 +1,6 @@
 export type { BestOfNOptions } from "./bestofn.ts";
+export type { PromptSet } from "./prompt-set.ts";
+export { defaultPromptSet, DEFAULT_PLANNER_SYSTEM_PROMPT, DEFAULT_REFLECTION_SYSTEM_PROMPT } from "./prompt-set.ts";
 export { selectBestCandidate } from "./bestofn.ts";
 export type { LoopDependencies } from "./loop.ts";
 export { runLoop } from "./loop.ts";
