@@ -1,0 +1,2 @@
+# Only @bigknoxy can approve PRs (enforced via branch protection: require code owner review)
+* @bigknoxy

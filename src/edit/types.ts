@@ -1,4 +1,4 @@
-export type EditFormat = "search-replace" | "json" | "full-file";
+export type EditFormat = "search-replace" | "json" | "full-file" | "patch-function";
 
 export interface EditBlock {
   filePath: string; // relative to repo root

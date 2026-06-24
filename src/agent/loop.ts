@@ -9,6 +9,7 @@ import { planTask } from "./planner.ts";
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
 import { type ToolContext, executeTool } from "./tools.ts";
+import { captureTestBaseline, runTieredOracle } from "@/verify/oracle.ts";
 import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./types.ts";
 
 export interface LoopDependencies {
@@ -16,6 +17,12 @@ export interface LoopDependencies {
   profile: ModelProfile;
   reasoningHandler: ReasoningHandler;
   config: AgentConfig;
+  /**
+   * Optional per-run sampling override. Best-of-N uses this to vary temperature
+   * across attempts so independent retries explore different solutions instead
+   * of re-drawing the same one. Falls back to the model profile defaults.
+   */
+  samplingOverride?: { temperature?: number; top_p?: number };
 }
 
 interface ParsedToolCall {
@@ -130,6 +137,8 @@ export async function runLoop(
   getContext: (goal: string) => Promise<ContextBundle>,
 ): Promise<AgentState> {
   const { provider, profile, reasoningHandler, config } = deps;
+  const sampleTemp = deps.samplingOverride?.temperature ?? profile.samplingDefaults.temperature;
+  const sampleTopP = deps.samplingOverride?.top_p ?? profile.samplingDefaults.top_p;
   const systemPrompt = buildSystemPrompt(profile, config);
 
   const readFileFn = buildReadFile(state.repoRoot);
@@ -158,9 +167,18 @@ export async function runLoop(
       modelId: state.modelId,
       profile,
       repoRoot: state.repoRoot,
+      preSolveReflection: config.preSolveReflection,
+      plannerPrompt: config.promptSet?.planner,
+      reflectionPrompt: config.promptSet?.reflection,
     });
     await saveState(state, statePath);
   }
+
+  // Capture a pre-loop baseline of any already-failing tests so that
+  // pre-existing unrelated failures don't prevent early-stop after the task
+  // is solved.  On fresh single-file benchmark repos (no pre-existing failures)
+  // the baseline set is empty and behaviour is identical to before this fix.
+  const testBaseline = captureTestBaseline(state.repoRoot);
 
   while (!isTerminal(state) && state.turns.length < state.maxTurns) {
     const goal = currentGoal(state);
@@ -200,8 +218,8 @@ export async function runLoop(
           { role: "system", content: systemPrompt },
           { role: "user", content: turnPrompt },
         ],
-        temperature: profile.samplingDefaults.temperature,
-        top_p: profile.samplingDefaults.top_p,
+        temperature: sampleTemp,
+        top_p: sampleTopP,
         max_tokens: profile.samplingDefaults.max_tokens,
         ollamaOptions: profile.ollamaOptions,
       });
@@ -288,13 +306,10 @@ export async function runLoop(
     // Execute model-emitted side-effecting tool calls (read_file, run_command,
     // run_tests) so their real output feeds back into the next turn. think/finish
     // are control-flow only and handled separately below.
-    let testResult: import("./types.ts").ToolResult | undefined;
     for (const call of toolCalls) {
       if (call.name === "think" || call.name === "finish") continue;
       try {
-        const result = await executeTool(call, toolCtx);
-        toolResults.push(result);
-        if (call.name === "run_tests") testResult = result;
+        toolResults.push(await executeTool(call, toolCtx));
       } catch (err) {
         toolResults.push({
           name: call.name,
@@ -305,19 +320,27 @@ export async function runLoop(
       }
     }
 
-    // Deterministic pass-oracle: if the model did not already run tests, run them
-    // now. Tests in the trial dir are the same suite the grader uses, so
-    // green == guaranteed pass. This early-stops (saving wasted turns), prevents
-    // later turns from clobbering an already-correct solution, and instantly
-    // resolves negative "should-not-edit" tasks whose tests start green.
-    if (testResult === undefined) {
-      try {
-        const result = await executeTool({ name: "run_tests", args: {} }, toolCtx);
-        toolResults.push(result);
-        testResult = result;
-      } catch {
-        // Test execution failure is non-fatal — continue the loop.
-      }
+    // Tiered verification oracle (authoritative end-of-turn check). Tier 1 is the
+    // test suite — green == solved (the trial/grader suite is the same one). When
+    // NO test covers the change (real repos editing untested code), it falls back
+    // to a typecheck so the agent still gets ground-truth feedback instead of
+    // flying blind. Outcome drives early-stop below.
+    let verdict: Awaited<ReturnType<typeof runTieredOracle>> | undefined;
+    try {
+      verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
+      toolResults.push({
+        name: "run_tests",
+        success: verdict.outcome === "solved",
+        output:
+          verdict.outcome === "solved"
+            ? "verified: tests pass"
+            : verdict.outcome === "clean"
+              ? "no failing checks (no test covers this change yet)"
+              : verdict.feedback,
+        error: verdict.outcome === "failing" ? verdict.feedback : undefined,
+      });
+    } catch {
+      // Verification failure is non-fatal — continue the loop.
     }
 
     const turn: TurnRecord = {
@@ -339,17 +362,19 @@ export async function runLoop(
     addTurn(state, turn);
     await saveState(state, statePath);
 
-    // Early-stop: tests green == task solved. Stop immediately to lock in the
-    // passing solution and avoid burning turns that could regress it.
-    if (testResult?.success === true) {
+    const hasFinish = parsedToolCalls.some((tc) => tc.name === "finish" && tc.success);
+
+    // Early-stop: "solved" (tests green) is proven complete — lock it in and stop
+    // before a later turn can regress it. "clean"/"failing" do not early-stop; for
+    // untested changes the oracle's value is the feedback (type errors surfaced,
+    // no-tests not treated as a hard fail), while completion still flows through
+    // the model's finish → goal-advance → goal-exhaustion path below.
+    if (verdict?.outcome === "solved") {
       for (const g of state.goals) g.status = "done";
       state.status = "done";
       await saveState(state, statePath);
       break;
     }
-
-    // Check for finish tool call
-    const hasFinish = parsedToolCalls.some((tc) => tc.name === "finish" && tc.success);
     if (hasFinish) {
       advanceGoal(state);
       await saveState(state, statePath);

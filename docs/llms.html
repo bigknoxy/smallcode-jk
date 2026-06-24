@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>smallcode — LLM Reference</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 0 0 64px;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 28px 48px;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: #94a3b8;
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    header a {
+      color: #7c8ff5;
+      text-decoration: none;
+    }
+
+    header a:hover { text-decoration: underline; }
+
+    nav {
+      background: #151820;
+      border-bottom: 1px solid #2d3148;
+      padding: 0 48px;
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+    }
+
+    nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      padding: 14px 18px;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    nav a:hover {
+      color: #e2e8f0;
+      border-bottom-color: #7c8ff5;
+    }
+
+    nav a.active {
+      color: #a5b4fc;
+      border-bottom-color: #7c8ff5;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 48px 0;
+    }
+
+    section {
+      margin-bottom: 72px;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #2d3148;
+      letter-spacing: -0.01em;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin: 28px 0 12px;
+    }
+
+    p {
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-bottom: 24px;
+    }
+
+    thead tr {
+      background: #1e2130;
+    }
+
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      color: #94a3b8;
+      font-weight: 600;
+      border-bottom: 1px solid #2d3148;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid #1e2130;
+      color: #cbd5e1;
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1a1d27; }
+
+    code {
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.8em;
+      background: #1e2130;
+      color: #a5b4fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .code-block {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.82rem;
+      color: #a5b4fc;
+      overflow-x: auto;
+      line-height: 1.8;
+      margin-bottom: 16px;
+    }
+
+    .code-block .comment { color: #475569; }
+    .code-block .cmd { color: #86efac; }
+    .code-block .key { color: #fcd34d; }
+    .code-block .val { color: #a5b4fc; }
+    .code-block .str { color: #86efac; }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.72em;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .badge-green  { background: #14532d; color: #86efac; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+    .badge-yellow { background: #451a03; color: #fcd34d; }
+    .badge-red    { background: #450a0a; color: #fca5a5; }
+
+    .tool-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 14px;
+    }
+
+    .tool-card h3 {
+      margin: 0 0 8px;
+      color: #a5b4fc;
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.9rem;
+    }
+
+    .tool-card .tool-sig {
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+
+    .tool-card p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin: 0;
+    }
+
+    .tool-card ul {
+      margin: 8px 0 0 18px;
+    }
+
+    .tool-card li {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+
+    footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 48px;
+      border-top: 1px solid #2d3148;
+      color: #475569;
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    footer a { color: #64748b; text-decoration: none; }
+    footer a:hover { color: #94a3b8; }
+
+    @media (max-width: 700px) {
+      header, nav, main, footer { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>smallcode — LLM Reference</h1>
+  <p>Dense technical reference for developers and LLMs &nbsp;·&nbsp; <a href="../index.html">Home</a> &nbsp;·&nbsp; <a href="architecture.html">Architecture</a> &nbsp;·&nbsp; MIT License</p>
+</header>
+
+<nav>
+  <a href="../index.html">Home</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="llms.html" class="active">LLM Reference</a>
+  <a href="#module-map">Module map</a>
+  <a href="#tools">Tool contracts</a>
+  <a href="#edit-format">Edit format spec</a>
+  <a href="#config">Config &amp; env vars</a>
+  <a href="#scripts">How to run</a>
+</nav>
+
+<main>
+
+  <!-- ===== MODULE MAP ===== -->
+  <section id="module-map">
+    <h2>Module map</h2>
+    <p>Every important file in <code>src/</code> and <code>scripts/</code> with a one-line purpose.</p>
+
+    <h3>src/agent/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>loop.ts</code></td><td>Core agent turn loop — planning, model calls, edit application, tool execution, baseline-relative test-oracle early-stop. Captures a <code>TestBaseline</code> before the loop starts; passes it to every <code>runTieredOracle</code> call. Entry point: <code>runLoop(state, statePath, deps, getContext)</code></td></tr>
+        <tr><td><code>planner.ts</code></td><td>Calls the model to decompose a task into ≤8 ordered sub-goals. Falls back to a single goal if the model returns nothing parseable. Optional <code>preSolveReflection</code> (default off): one extra cheap call to restate the problem + key edge case, fed into goal generation (AlphaCodium-lite).</td></tr>
+        <tr><td><code>prompt.ts</code></td><td><code>buildSystemPrompt</code> — delegates to <code>config.promptSet ?? defaultPromptSet()</code>; the discipline-rules toggle relocates to <code>prompt-set.ts</code>. <code>buildTurnPrompt</code> — assembles task, goal, turn number, last 2 turns of history, and context chunks.</td></tr>
+        <tr><td><code>prompt-set.ts</code></td><td><code>PromptSet { system, planner, reflection }</code> — groups all three agent prompts so a GEPA candidate can carry a mutated variant. <code>defaultPromptSet(opts?)</code> assembles the canonical set (discipline-rules toggle honoured). Single source of truth for the prompt strings.</td></tr>
+        <tr><td><code>state.ts</code></td><td>Create, load, save (atomic rename), and mutate <code>AgentState</code>. <code>addTurn</code>, <code>advanceGoal</code>, <code>failGoal</code>, <code>isTerminal</code>, <code>currentGoal</code>.</td></tr>
+        <tr><td><code>tools.ts</code></td><td>Tool implementations (<code>read_file</code>, <code>write_file</code>, <code>run_command</code>, <code>run_tests</code>, <code>think</code>, <code>finish</code>) and the <code>executeTool</code> dispatcher. All paths guarded by <code>resolveSafe</code>.</td></tr>
+        <tr><td><code>bestofn.ts</code></td><td><code>selectBestCandidate</code> — generate N completions in parallel, apply each, run verifier, pick winner by verifierScore, revert losers, apply winner.</td></tr>
+        <tr><td><code>types.ts</code></td><td>TypeScript types: <code>AgentState</code>, <code>AgentConfig</code> (now includes optional <code>promptSet?: PromptSet</code> for GEPA seam), <code>Goal</code>, <code>TurnRecord</code>, <code>ToolCall</code>, <code>ToolResult</code>, <code>ToolName</code>.</td></tr>
+        <tr><td><code>index.ts</code></td><td>Re-exports the public agent API including <code>PromptSet</code>, <code>defaultPromptSet</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/edit/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>parser.ts</code></td><td>Parse model output into <code>EditBlock[]</code>. Tries <code>PATCH:</code> (function-level) first, then full-file, then search-replace, then JSON. Public: <code>parse(raw)</code>.</td></tr>
+        <tr><td><code>applier.ts</code></td><td>Apply <code>EditBlock</code> to disk. Full-file (search='') overwrites whole file. Search-replace does exact-match. <code>patch-function</code> blocks dispatch to the patch applier via a sentinel prefix. Public: <code>applyBatch</code>.</td></tr>
+        <tr><td><code>patch-function.ts</code></td><td>Function-level edits for large files: <code>parsePatchBlocks</code>, <code>applyPatchBlock</code> (anchor = first replacement line; brace-depth scan finds the region), <code>chooseEditFormat</code> (&gt;300 lines or &gt;8KB → <code>patch</code> eligible). Fail-safe: ambiguous/not-found anchor → error <code>ApplyResult</code>, no write.</td></tr>
+        <tr><td><code>repair.ts</code></td><td>Fuzzy repair for failed search-replace blocks — strategies: exact, fuzzy, whitespace-normalize.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>EditBlock</code>, <code>EditFormat</code> (incl. <code>patch-function</code>), <code>ParseResult</code>, <code>ParseError</code>, <code>ApplyResult</code>, <code>ApplyStatus</code>, <code>ApplyBatchResult</code>, <code>RepairResult</code>.</td></tr>
+        <tr><td><code>index.ts</code></td><td>Re-exports <code>parse</code> and <code>applyBatch</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/provider/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>openai-client.ts</code></td><td>OpenAI-compatible HTTP client. Sends <code>POST /chat/completions</code>. Forwards <code>ollamaOptions</code> as the <code>options</code> field. Handles streaming.</td></tr>
+        <tr><td><code>factory.ts</code></td><td><code>createProvider(config, registry)</code> — returns an <code>OpenAICompatibleClient</code>, wrapped by <code>maybeWrapWatchdog</code> (on unless <code>SMALLCODE_WATCHDOG=0</code>). Extension point for future backends.</td></tr>
+        <tr><td><code>watchdog.ts</code></td><td><code>WatchdogProvider</code> — wraps a <code>Provider</code>, measures real-generation throughput (<code>completionTokens</code> / wall-time). After <code>consecutiveSlow</code> (2) gens below <code>thresholdTps</code> (20 tok/s), runs <code>ollama stop &lt;model&gt;</code> to defrag the KV-cache; next call reloads at full speed. Ignores errored + sub-<code>minTokens</code> (64) gens; never probes (single-slot-safe). Injectable <code>reload</code>/<code>now</code>.</td></tr>
+        <tr><td><code>sampler.ts</code></td><td>Sampling utilities — top-p/top-k post-processing helpers.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ChatMessage</code>, <code>TokenUsage</code>, <code>StreamChunk</code>, <code>ProviderError</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/models/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>registry.ts</code></td><td>Built-in profiles for vibethinker-3b, qwen2.5-coder-7b, qwen2.5-coder-14b. <code>ModelRegistry</code> class + <code>defaultRegistry</code> singleton. <code>register(profile)</code> for custom models.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>ModelProfile</code> Zod schema and TypeScript type. Fields: id, label, contextWindow, samplingDefaults, reasoningTags, supportsGrammar, supportsJsonSchema, ollamaOptions, notes.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/reasoning/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>handler.ts</code></td><td><code>ReasoningHandler</code> — parse/strip/detect <code>&lt;think&gt;…&lt;/think&gt;</code> blocks. Detects truncated completions (think-only, empty answer). Configurable tags via <code>ModelProfile.reasoningTags</code>.</td></tr>
+        <tr><td><code>logger.ts</code></td><td>Log reasoning traces to disk separately from answer content. Never feeds back into prompt.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>ParsedResponse</code>: <code>{ reasoning, answer, hasReasoning }</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/context/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>walker.ts</code></td><td>Recursively walk a repo directory, skip node_modules/.git/.smallcode, collect source files by extension.</td></tr>
+        <tr><td><code>extractor.ts</code></td><td>Extract <code>CodeSymbol</code>s (functions, classes, exports, etc.) from source files via regex.</td></tr>
+        <tr><td><code>scorer.ts</code></td><td>Score <code>ContextChunk</code>s by relevance to a query. Used to prioritize chunks within the token budget.</td></tr>
+        <tr><td><code>builder.ts</code></td><td>Build a <code>ContextBundle</code> — collect, score, and truncate chunks to fit the token budget (default 8,000 tokens).</td></tr>
+        <tr><td><code>tokens.ts</code></td><td><code>estimateTokens(text)</code> — fast estimate via <code>Math.ceil(text.length / 4)</code>.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>ContextChunk</code>, <code>ContextBundle</code>, <code>CodeSymbol</code>, <code>FileMap</code>, <code>RepoMap</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/config/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>loader.ts</code></td><td><code>loadConfig(path?)</code> — search <code>smallcode.config.json</code> then <code>.smallcode.json</code>. Parse+validate with Zod. <code>loadConfigFromEnv()</code> — read <code>SMALLCODE_BASE_URL</code> and <code>SMALLCODE_MODEL</code>.</td></tr>
+        <tr><td><code>types.ts</code></td><td>Zod schemas: <code>SmallcodeConfigSchema</code>, <code>ProviderConfigSchema</code>, <code>SandboxConfigSchema</code>, <code>EvalConfigSchema</code>. TypeScript inferred types.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/eval/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>harness.ts</code></td><td>Top-level eval harness — load suite, run all tasks, aggregate metrics.</td></tr>
+        <tr><td><code>runner.ts</code></td><td><code>runSuite(suite, opts)</code> — iterate tasks, call <code>runTask</code>, collect <code>EvalRunResult</code>.</td></tr>
+        <tr><td><code>task-runner.ts</code></td><td><code>runTask(task, opts)</code> — create trial env, run agent loop k times, grade each trial, compute pass@1/pass@k.</td></tr>
+        <tr><td><code>task-loader.ts</code></td><td><code>loadSuite(dir)</code> — read and validate all task JSON files from a suite directory.</td></tr>
+        <tr><td><code>trial-env.ts</code></td><td><code>createTrialEnv(task, fixturesRoot)</code> — copy fixture into a temp dir, return dir path and cleanup fn.</td></tr>
+        <tr><td><code>graders/deterministic.ts</code></td><td>Run <code>bun test</code> in the trial dir and map exit code + failure count to pass/fail verdict.</td></tr>
+        <tr><td><code>graders/static.ts</code></td><td>Run a configurable static analysis command (e.g. <code>tsc --noEmit</code>) and grade by exit code.</td></tr>
+        <tr><td><code>graders/llm.ts</code></td><td>Call the model with an evaluation rubric; parse pass/fail from the response.</td></tr>
+        <tr><td><code>metrics.ts</code></td><td>Compute <code>pass@1</code>, <code>pass@k</code>, <code>pass^k</code>, partial scores from trial results.</td></tr>
+        <tr><td><code>transcript-store.ts</code></td><td>Persist and load <code>Transcript</code> objects to <code>evals/transcripts/</code>.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>EvalTask</code>, <code>EvalSuite</code>, <code>EvalRunResult</code>, <code>TaskEvalResult</code>, <code>TrialResult</code>, <code>GraderConfig</code>, <code>GraderResult</code>, <code>Transcript</code>.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>src/improve/ &amp; src/verify/ &amp; src/cli/</h3>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>src/improve/session-logger.ts</code></td><td>Log agent sessions (status, turns, tokens) to <code>evals/transcripts/</code> for later task extraction.</td></tr>
+        <tr><td><code>src/improve/task-extractor.ts</code></td><td>Extract <code>CandidateTask</code>s from failed session transcripts for promotion to eval suite.</td></tr>
+        <tr><td><code>src/improve/promoter.ts</code></td><td>Write candidate tasks as JSON to the eval suite directory.</td></tr>
+        <tr><td><code>src/improve/metrics-store.ts</code></td><td>Append <code>MetricsSnapshot</code> to <code>evals/metrics-history.jsonl</code>. Read baseline snapshot for regression gate.</td></tr>
+        <tr><td><code>src/improve/regression-gate.ts</code></td><td>Compare current eval run against baseline snapshot. Fail if pass@1 regressed or any task moved from pass to fail.</td></tr>
+        <tr><td><code>src/improve/ab-compare.ts</code></td><td>Run two prompt variants against the same suite and compare pass@1.</td></tr>
+        <tr><td><code>src/verify/oracle.ts</code></td><td>Tiered verification oracle. <code>runTieredOracle(repoRoot, opts)</code> — Tier 1: baseline-relative <code>bun test</code> (solved = zero new failures vs <code>opts.baseline</code> AND ≥1 pass); Tier 2: advisory typecheck fallback when no tests exist. <code>captureTestBaseline(repoRoot)</code> — snapshot failing test IDs before the loop. <code>parseFailingTestIds(output)</code> — parse <code>(fail) label [Xms]</code> lines into a stable id set.</td></tr>
+        <tr><td><code>src/improve/gepa/types.ts</code></td><td>GEPA types: <code>Candidate</code> (id, prompts, parentId, generation, scores, meanScore), <code>GepaConfig</code> (taskIds, populationCap, maxGenerations, trialsPerTask), <code>FailedInstance</code>.</td></tr>
+        <tr><td><code>src/improve/gepa/pareto-front.ts</code></td><td><code>dominates(a,b,taskIds)</code> — Pareto dominance check. <code>ParetoFront</code> — non-dominated set with population cap and GEPA-weighted selection: each task contributes weight to the front member that maximises it; sample proportional to weight count.</td></tr>
+        <tr><td><code>src/improve/gepa/mutator.ts</code></td><td><code>ReflectiveMutator</code> interface — <code>mutate(parent, failures)</code>. <code>MockMutator</code> — deterministic stub for tests (appends versioned tag, records calls).</td></tr>
+        <tr><td><code>src/improve/gepa/evaluate-adapter.ts</code></td><td><code>evaluateCandidate(cand, deps)</code> — scores a candidate by injecting <code>cand.prompts</code> as <code>AgentConfig.promptSet</code> and calling <code>runTask</code> (or injectable mock) per task. Returns <code>Record&lt;taskId, passAt1&gt;</code>.</td></tr>
+        <tr><td><code>src/improve/gepa/engine.ts</code></td><td><code>runGepa(seed, mutator, evalDeps, cfg, rng?)</code> — evolution loop: select parent → gather failed transcripts → mutate → score → front.add × maxGenerations.</td></tr>
+        <tr><td><code>src/improve/gepa/index.ts</code></td><td>GEPA barrel re-export.</td></tr>
+        <tr><td><code>scripts/gepa-smoke.ts</code></td><td>Smoke script for the GEPA engine — wires real eval runner + MockMutator against E0–E2, K=1, 3 generations. Created but not run; guarded by <code>import.meta.main</code>.</td></tr>
+        <tr><td><code>src/verify/runner.ts</code></td><td>Run a configurable checker suite (format, lint, typecheck, test) after edits. Return <code>VerifyResult</code>.</td></tr>
+        <tr><td><code>src/verify/corrector.ts</code></td><td>Feed verify failures back to the model as a correction prompt. Up to <code>maxCorrectionIterations</code>.</td></tr>
+        <tr><td><code>src/verify/sandbox.ts</code></td><td>Sandbox enforcement for verify-phase commands — allowlist check and path traversal guard.</td></tr>
+        <tr><td><code>src/cli/commands/run.ts</code></td><td>CLI command to run the agent on a task. Parses args, loads config, calls <code>runLoop</code>.</td></tr>
+        <tr><td><code>src/cli/progress.ts</code></td><td>Terminal progress rendering — turn count, goal status, test results.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>scripts/</h3>
+    <table>
+      <thead>
+        <tr><th>Script</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>run-humaneval.ts</code></td><td>External benchmark — fetch nuprl/MultiPL-E humaneval-ts, run full agent loop on each problem × k trials, grade with <code>bun test</code>, print pass@1/pass^k/pass@k.</td></tr>
+        <tr><td><code>run-evalplus.ts</code></td><td>EvalPlus-style robustness benchmark. Splits each test body into base/extra tiers (<code>SMALLCODE_EP_BASE_SPLIT</code>, default 0.5); extra graded only if base passes. Reports pass@1/pass^k per tier. Injectable <code>SolutionSource</code> + <code>--dry-run</code> (no Ollama). <em>Harness ready; needs live run.</em></td></tr>
+        <tr><td><code>run-livecodebench.ts</code></td><td>LiveCodeBench-style contamination-guard benchmark. Each problem carries <code>releasedAt</code>; <code>SMALLCODE_LCB_AFTER</code> filters pre-cutoff problems. Per-difficulty breakdown. <em>Runner ready; needs a real <code>/tmp/lcb-ts.json</code> dataset (no TS-translated HF API yet).</em></td></tr>
+        <tr><td><code>run-bakeoff.ts</code></td><td>Multi-model comparison. Takes model IDs (validated via <code>ModelRegistry</code>, never called directly), runs a benchmark per model through an injectable runner, emits a pass@1/pass^k/pass@k comparison table. <em>Harness ready; needs live run.</em></td></tr>
+        <tr><td><code>run-baseline.ts</code></td><td>In-house capability suite runner. <code>SMALLCODE_DRY_RUN=1</code>: validate fixtures. Live mode: run k trials per task and append <code>MetricsSnapshot</code> to history.</td></tr>
+        <tr><td><code>debug-task.ts</code></td><td>Debug a single capability task end-to-end without cleanup. Dumps turn-by-turn raw model output, final file contents, and grader verdicts. Trial dir preserved for manual inspection.</td></tr>
+        <tr><td><code>rerun-timeouts.ts</code></td><td>Parse a HumanEval marathon log for timeout-affected problems, re-run them with fresh Ollama and higher per-trial cap, report clean pass@1.</td></tr>
+        <tr><td><code>show-transcript.ts</code></td><td>Pretty-print a saved eval transcript from <code>evals/transcripts/</code>.</td></tr>
+        <tr><td><code>show-metrics.ts</code></td><td>Print the <code>metrics-history.jsonl</code> table: timestamp, model, pass@1 per run.</td></tr>
+        <tr><td><code>triage-transcripts.ts</code></td><td>Scan transcripts for failed trials; group by failure mode (max_turns, tool errors, parse errors).</td></tr>
+        <tr><td><code>validate-capability.ts</code></td><td>Quick smoke test — run a subset of capability tasks and assert pass@1 ≥ threshold.</td></tr>
+        <tr><td><code>validate-e1.ts</code></td><td>Validate the E1 eval suite fixtures against their reference solutions.</td></tr>
+        <tr><td><code>regression-gate.ts</code></td><td>CI gate script — compare current run to baseline, exit 1 on regression.</td></tr>
+        <tr><td><code>smoke-e0.ts</code></td><td>Tiny smoke run of E0 tasks to quickly verify the harness is wired up correctly.</td></tr>
+        <tr><td><code>ollama-serve.sh</code></td><td>Drop-in for <code>ollama serve</code> that exports <code>OLLAMA_FLASH_ATTENTION=1</code> + <code>OLLAMA_KV_CACHE_TYPE=q8_0</code> (halve KV-cache VRAM, slow fragmentation decay). Use for long sessions.</td></tr>
+        <tr><td><code>smoke-watchdog.ts</code></td><td>Live smoke for <code>WatchdogProvider</code>: forces the threshold high so the real <code>ollama stop</code>+reload path fires after 2 gens and verifies generations recover. Serial (uses live Ollama).</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== TOOL CONTRACTS ===== -->
+  <section id="tools">
+    <h2>Tool contracts</h2>
+    <p>
+      The model emits tool calls as <code>TOOL: name {"arg": "value"}</code> lines.
+      The harness parses them with a line-level regex and executes each in order.
+      <code>think</code> and <code>finish</code> are control-flow only; others are side-effecting.
+    </p>
+
+    <div class="tool-card">
+      <h3>read_file</h3>
+      <div class="tool-sig">TOOL: read_file {"path": "src/foo.ts"}</div>
+      <p>Read a file relative to <code>repoRoot</code>. Returns file contents (truncated at 8,000 chars with <code>[truncated]</code> marker). Returns <code>(file not found)</code> if missing. Path must stay within repoRoot (traversal check).</p>
+      <ul>
+        <li><strong>path</strong> (string, required) — relative path to file</li>
+        <li>Output fed back as tool result in next turn's prompt history</li>
+      </ul>
+    </div>
+
+    <div class="tool-card">
+      <h3>write_file</h3>
+      <div class="tool-sig">TOOL: write_file {"path": "src/foo.ts", "content": "..."}</div>
+      <p>Write content to a file. Creates intermediate directories. If <code>requireApproval: true</code>, throws <code>ApprovalRequiredError</code> before writing. Path traversal check enforced. Prefer the <code>FILE:</code> edit format — it is parsed before tool calls and is the intended write mechanism.</p>
+      <ul>
+        <li><strong>path</strong> (string, required)</li>
+        <li><strong>content</strong> (string, required)</li>
+      </ul>
+    </div>
+
+    <div class="tool-card">
+      <h3>run_command</h3>
+      <div class="tool-sig">TOOL: run_command {"cmd": "bun tsc --noEmit"}</div>
+      <p>Run a shell command in <code>repoRoot</code>. Command basename must be in <code>allowedCommands</code>
+      (default: <code>bun, tsc, biome, git</code>). Timeout: 30 seconds. Output truncated at 4,000 chars.
+      Combined stdout+stderr returned.</p>
+      <ul>
+        <li><strong>cmd</strong> (string, required) — space-separated argv</li>
+        <li>Returns: <code>{ success: exitCode===0, output, durationMs }</code></li>
+      </ul>
+    </div>
+
+    <div class="tool-card">
+      <h3>run_tests</h3>
+      <div class="tool-sig">TOOL: run_tests {}</div>
+      <p>Run <code>bun test</code> (or <code>bun test &lt;pattern&gt;</code>) in <code>repoRoot</code>. Timeout: 60 seconds.
+      "Solved" means zero <em>new</em> failures relative to a pre-loop baseline AND ≥1 passing test.
+      Pre-existing failures captured in the baseline are excluded, so unrelated failing tests in a
+      real repo never block early-stop. On fresh single-file benchmark repos (empty baseline) the
+      behaviour is identical to the original whole-suite-green check.
+      This is the deterministic pass-oracle: when outcome is <code>"solved"</code>, the loop breaks immediately.</p>
+      <ul>
+        <li><strong>pattern</strong> (string, optional) — test file glob/path</li>
+        <li>Returns: <code>{ success: exitCode===0 &amp;&amp; failCount===0, output, durationMs }</code></li>
+      </ul>
+    </div>
+
+    <div class="tool-card">
+      <h3>think</h3>
+      <div class="tool-sig">TOOL: think {"content": "reasoning here..."}</div>
+      <p>No-op control tool. The harness records it but takes no action. Allows the model to emit
+      explicit reasoning steps outside <code>&lt;think&gt;</code> tags. Always returns success.</p>
+    </div>
+
+    <div class="tool-card">
+      <h3>finish</h3>
+      <div class="tool-sig">TOOL: finish {"summary": "implemented add()"}</div>
+      <p>Signal goal completion. The harness calls <code>advanceGoal</code> — marks the current goal done
+      and increments <code>currentGoalIndex</code>. If all goals are done, status becomes <code>done</code>.
+      <strong>Note:</strong> if the oracle returns <code>"solved"</code> (zero new failures + ≥1 pass vs baseline),
+      the loop early-stops before checking for finish — the baseline-relative early-stop oracle takes precedence.</p>
+      <ul>
+        <li><strong>summary</strong> (string, optional) — brief description of what was done</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== EDIT FORMAT SPEC ===== -->
+  <section id="edit-format">
+    <h2>Edit format spec</h2>
+
+    <h3>Primary: full-file</h3>
+    <p>
+      Emit <code>FILE: &lt;path&gt;</code> on its own line, then a fenced code block with the <em>complete</em>
+      corrected file. The <code>search</code> field is empty — the applier overwrites the whole file.
+      This is what the system prompt instructs and what VibeThinker-3B reliably emits.
+    </p>
+    <div class="code-block">
+<span class="comment"># Full-file format</span>
+FILE: src/math.ts
+```ts
+export function add(a: number, b: number): number {
+  return a + b;
+}
+```
+TOOL: run_tests {}
+TOOL: finish {"summary": "implemented add()"}
+    </div>
+    <p>
+      Rules enforced by the parser: path must not be empty, absolute, or contain <code>..</code>.
+      Leading <code>./</code> is normalized. Backslashes are converted to forward slashes.
+    </p>
+
+    <h3>Large files: patch-function</h3>
+    <p>
+      For files past <code>chooseEditFormat</code>'s threshold (&gt;300 lines or &gt;8KB), re-emitting the
+      whole file wastes context and risks the small model dropping unchanged lines. The
+      <code>PATCH:</code> format replaces a single function instead. The <em>anchor</em> is the first
+      line of the replacement body (typically the signature); the applier finds the one matching
+      line, brace-depth-scans to the closing <code>}</code>, and swaps only that region. If the anchor
+      is missing or ambiguous it returns an error <code>ApplyResult</code> (no write) so the loop can
+      fall back to full-file — it never silently mis-applies.
+    </p>
+    <div class="code-block">
+<span class="comment"># patch-function format (large files)</span>
+PATCH: src/foo.ts
+FUNCTION: parseConfig
+```ts
+export function parseConfig(raw: string): Config {
+  return JSON.parse(raw);
+}
+```
+    </div>
+
+    <h3>Fallback 1: search-replace</h3>
+    <p>
+      Classic diff-like format. The file path is on the line immediately before the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; SEARCH</code>
+      marker (3+ angle brackets, case-insensitive). VibeThinker-3B has trouble with this format;
+      use full-file instead.
+    </p>
+    <div class="code-block">
+src/math.ts
+&lt;&lt;&lt;&lt;&lt;&lt;&lt; SEARCH
+function add(a, b) { return a; }
+=======
+function add(a: number, b: number): number { return a + b; }
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; REPLACE
+    </div>
+
+    <h3>Fallback 2: JSON</h3>
+    <p>
+      JSON object or array with <code>"type": "edit"</code>. Extracted from fences or bare JSON spans.
+      Only activated if the raw output contains <code>"type":"edit"</code>.
+    </p>
+    <div class="code-block">
+{"type": "edit", "file": "src/math.ts", "search": "return a;", "replace": "return a + b;"}
+    </div>
+
+    <h3>Parse priority</h3>
+    <table>
+      <thead>
+        <tr><th>Priority</th><th>Format</th><th>Trigger</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-green">1st</span></td>
+          <td>patch-function</td>
+          <td><code>PATCH:</code> marker</td>
+          <td>Checked first, but only matches when a <code>PATCH:</code> block is present (large-file opt-in). Anchored, fail-safe.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">2nd</span></td>
+          <td>Full-file</td>
+          <td><code>FILE:</code> marker</td>
+          <td>Returns immediately if blocks found and valid. Primary/default format.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-yellow">3rd</span></td>
+          <td>Search-replace</td>
+          <td><code>&lt;&lt;&lt; SEARCH</code> / <code>=====</code> / <code>&gt;&gt;&gt; REPLACE</code></td>
+          <td>Fallback. VibeThinker-3B unreliable on this format.</td>
+        </tr>
+        <tr>
+          <td>4th</td>
+          <td>JSON</td>
+          <td><code>"type":"edit"</code> anywhere in output</td>
+          <td>Last resort. Also parses from markdown fences.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== CONFIG AND ENV VARS ===== -->
+  <section id="config">
+    <h2>Config &amp; env vars</h2>
+
+    <h3>smallcode.config.json</h3>
+    <p>Config file searched at <code>smallcode.config.json</code>, then <code>.smallcode.json</code>. Override location with explicit path arg to <code>loadConfig(path)</code>.</p>
+    <div class="code-block">
+{
+  <span class="key">"config"</span>: {
+    <span class="key">"provider"</span>: {
+      <span class="key">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span>,   <span class="comment">// Ollama OpenAI-compat endpoint</span>
+      <span class="key">"apiKey"</span>: <span class="str">"none"</span>,                             <span class="comment">// unused for local Ollama</span>
+      <span class="key">"timeoutMs"</span>: <span class="val">180000</span>                           <span class="comment">// 3 min per HTTP call</span>
+    },
+    <span class="key">"activeModel"</span>: <span class="str">"vibethinker-3b"</span>,
+    <span class="key">"maxTurns"</span>: <span class="val">15</span>,
+    <span class="key">"bestOfN"</span>: <span class="val">1</span>,
+    <span class="key">"sandbox"</span>: {
+      <span class="key">"enabled"</span>: <span class="val">true</span>,
+      <span class="key">"requireApproval"</span>: <span class="val">false</span>,                    <span class="comment">// false = fully automated</span>
+      <span class="key">"allowedCommands"</span>: [<span class="str">"bun"</span>, <span class="str">"tsc"</span>, <span class="str">"biome"</span>, <span class="str">"git"</span>],
+      <span class="key">"networkAccess"</span>: <span class="val">false</span>
+    },
+    <span class="key">"eval"</span>: {
+      <span class="key">"suitesDir"</span>: <span class="str">"evals/suites"</span>,
+      <span class="key">"transcriptsDir"</span>: <span class="str">"evals/transcripts"</span>,
+      <span class="key">"defaultTrials"</span>: <span class="val">5</span>
+    }
+  },
+  <span class="key">"models"</span>: []  <span class="comment">// optional: custom ModelProfile objects</span>
+}
+    </div>
+
+    <h3>Environment variable reference</h3>
+    <table>
+      <thead>
+        <tr><th>Variable</th><th>Default</th><th>Used by</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>SMALLCODE_BASE_URL</code></td>
+          <td>—</td>
+          <td><code>loadConfigFromEnv</code></td>
+          <td>Override provider baseUrl (e.g. point at a different Ollama instance)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_MODEL</code></td>
+          <td>—</td>
+          <td><code>loadConfigFromEnv</code></td>
+          <td>Override activeModel ID</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_WATCHDOG</code></td>
+          <td>on</td>
+          <td><code>provider/factory.ts</code></td>
+          <td>Set <code>0</code> to disable the throughput watchdog (auto <code>ollama stop</code> on KV-cache decay)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_DISCIPLINE</code></td>
+          <td>on</td>
+          <td><code>run-baseline.ts</code></td>
+          <td>Set <code>0</code> to strip the discipline rules from the system prompt (A/B)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_PRESOLVE</code></td>
+          <td>off</td>
+          <td><code>run-baseline.ts</code></td>
+          <td>Set <code>1</code> to enable planner pre-solve reflection (A/B)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_HE_LIMIT</code></td>
+          <td>20</td>
+          <td><code>run-humaneval.ts</code></td>
+          <td>Number of HumanEval problems to run</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_HE_OFFSET</code></td>
+          <td>0</td>
+          <td><code>run-humaneval.ts</code></td>
+          <td>Start index into the 159/164 problems</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_HE_K</code></td>
+          <td>3</td>
+          <td><code>run-humaneval.ts</code>, <code>rerun-timeouts.ts</code></td>
+          <td>Number of trials per problem (k in pass@k)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_HE_MAX_TURNS</code></td>
+          <td>5</td>
+          <td><code>run-humaneval.ts</code></td>
+          <td>Max agent turns per trial in HumanEval benchmark</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_HE_TIMEOUT_MS</code></td>
+          <td>600000 (10 min)</td>
+          <td><code>run-humaneval.ts</code></td>
+          <td>Per-trial timeout. Increase when Ollama slows (use 1200000 for rerun)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_DRY_RUN</code></td>
+          <td>—</td>
+          <td><code>run-baseline.ts</code></td>
+          <td>Set to <code>1</code> to validate fixtures without running the agent</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_EVAL_MAX_TURNS</code></td>
+          <td>5</td>
+          <td><code>run-baseline.ts</code>, <code>debug-task.ts</code></td>
+          <td>Max agent turns per eval trial (override for capability suite)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_EVAL_K</code></td>
+          <td>3</td>
+          <td><code>run-baseline.ts</code></td>
+          <td>Trials per task in live capability suite run</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_RERUN_TIMEOUT_MS</code></td>
+          <td>1200000 (20 min)</td>
+          <td><code>rerun-timeouts.ts</code></td>
+          <td>Per-trial timeout for timeout re-run (generous to account for fresh Ollama)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_EP_*</code></td>
+          <td>see script</td>
+          <td><code>run-evalplus.ts</code></td>
+          <td><code>_LIMIT/_OFFSET/_K/_MAX_TURNS/_TIMEOUT_MS/_CACHE/_BASE_SPLIT/_DRY_RUN</code> — EvalPlus harness controls</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_LCB_*</code></td>
+          <td>see script</td>
+          <td><code>run-livecodebench.ts</code></td>
+          <td><code>_LIMIT/_OFFSET/_K/_MAX_TURNS/_TIMEOUT_MS/_CACHE/_AFTER/_DRY_RUN</code> — LiveCodeBench harness (<code>_AFTER</code> = contamination cutoff date)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_BO_*</code></td>
+          <td>see script</td>
+          <td><code>run-bakeoff.ts</code></td>
+          <td><code>_K/_LIMIT/_OFFSET/_TIMEOUT_MS/_CACHE/_MAX_TURNS/_DRY_RUN</code> — multi-model bake-off controls</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ===== HOW TO RUN ===== -->
+  <section id="scripts">
+    <h2>How to run</h2>
+
+    <h3>Run the HumanEval-TS benchmark</h3>
+    <p>Fetches problems from the HuggingFace API. Requires Ollama running with VibeThinker-3B.</p>
+    <div class="code-block">
+<span class="comment"># First 30 problems, k=3 (reproduces the 0.967 result)</span>
+<span class="cmd">SMALLCODE_HE_LIMIT=30 SMALLCODE_HE_K=3 bun scripts/run-humaneval.ts</span>
+
+<span class="comment"># Full set (159 problems, k=3) — expect 8-12 hours</span>
+<span class="cmd">SMALLCODE_HE_LIMIT=164 SMALLCODE_HE_K=3 bun scripts/run-humaneval.ts 2&gt;&amp;1 | tee /tmp/humaneval-full.log</span>
+
+<span class="comment"># Re-run timeout-affected problems with fresh Ollama + 20-min cap</span>
+<span class="cmd">bun scripts/rerun-timeouts.ts /tmp/humaneval-full.log</span>
+    </div>
+
+    <h3>Run the in-house capability suite</h3>
+    <div class="code-block">
+<span class="comment"># Dry-run: validate all reference solutions pass their graders (no agent needed)</span>
+<span class="cmd">SMALLCODE_DRY_RUN=1 bun scripts/run-baseline.ts</span>
+
+<span class="comment"># Live run: k=3 trials per task with the agent</span>
+<span class="cmd">SMALLCODE_EVAL_K=3 bun scripts/run-baseline.ts</span>
+
+<span class="comment"># Faster: k=1, max 3 turns per task</span>
+<span class="cmd">SMALLCODE_EVAL_K=1 SMALLCODE_EVAL_MAX_TURNS=3 bun scripts/run-baseline.ts</span>
+    </div>
+
+    <h3>Debug a single task</h3>
+    <p>Runs one task end-to-end, preserves the trial directory, dumps all raw model output.</p>
+    <div class="code-block">
+<span class="comment"># List available task IDs</span>
+<span class="cmd">SMALLCODE_DRY_RUN=1 bun scripts/run-baseline.ts | grep "task-id"</span>
+
+<span class="comment"># Debug a specific task</span>
+<span class="cmd">bun scripts/debug-task.ts cap-group-by_1</span>
+
+<span class="comment"># Increase turns for harder tasks</span>
+<span class="cmd">SMALLCODE_EVAL_MAX_TURNS=10 bun scripts/debug-task.ts cap-group-by_1</span>
+    </div>
+
+    <h3>Re-run timeout problems from a marathon log</h3>
+    <div class="code-block">
+<span class="comment"># Reads the log, finds "trial timeout" lines, re-runs those problems</span>
+<span class="comment"># Restart Ollama first: ollama stop vibethinker-3b (reloads on next call)</span>
+<span class="cmd">SMALLCODE_HE_K=3 bun scripts/rerun-timeouts.ts /tmp/humaneval-full.log</span>
+    </div>
+
+    <h3>Check metrics history</h3>
+    <div class="code-block">
+<span class="cmd">bun scripts/show-metrics.ts</span>
+
+<span class="comment"># Show a transcript</span>
+<span class="cmd">bun scripts/show-transcript.ts evals/transcripts/&lt;id&gt;.json</span>
+    </div>
+
+    <h3>Smoke test the harness</h3>
+    <div class="code-block">
+<span class="comment"># Quick sanity check — runs E0 tasks, exits 0 if pass@1 &gt;= threshold</span>
+<span class="cmd">bun scripts/smoke-e0.ts</span>
+
+<span class="comment"># Validate capability (E1) fixtures</span>
+<span class="cmd">bun scripts/validate-e1.ts</span>
+
+<span class="comment"># Run bun test suite for the harness itself</span>
+<span class="cmd">bun test</span>
+    </div>
+
+    <h3>Config and model setup</h3>
+    <div class="code-block">
+<span class="comment"># Initialize config interactively</span>
+<span class="cmd">bun run src/cli/index.ts config init</span>
+
+<span class="comment"># List available model profiles</span>
+<span class="cmd">bun run src/cli/index.ts config models</span>
+    </div>
+
+    <h3>VibeThinker-3B Modelfile (for top_k=-1)</h3>
+    <p>
+      The OpenAI-compat route silently ignores <code>top_k</code>. To set <code>top_k=-1</code> (disable top-k
+      sampling as the model was trained), create a Modelfile:
+    </p>
+    <div class="code-block">
+<span class="comment"># Modelfile</span>
+FROM vibethinker-3b
+PARAMETER top_k -1
+PARAMETER num_ctx 8192
+
+<span class="comment"># Build and use the custom version</span>
+<span class="cmd">ollama create vibethinker-3b-topk -f Modelfile</span>
+<span class="comment"># Then update activeModel in smallcode.config.json</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span>smallcode &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; <a href="../index.html">Home</a> &nbsp;·&nbsp; <a href="architecture.html">Architecture</a></span>
+  <span>Last updated: 2026-06-23</span>
+</footer>
+
+</body>
+</html>

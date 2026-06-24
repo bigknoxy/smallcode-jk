@@ -74,6 +74,15 @@ curl http://localhost:11434/v1/models
 
 The Ollama OpenAI-compatible endpoint is at `http://localhost:11434/v1`. Use this as `provider.baseUrl` in your config.
 
+**Long sessions (recommended):** For sessions longer than ~1 hour, launch Ollama via the provided script instead of `ollama serve`. It sets `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`, which halve KV-cache VRAM usage and slow the llama.cpp KV-cache fragmentation that causes throughput decay on Apple Silicon:
+
+```bash
+chmod +x scripts/ollama-serve.sh
+scripts/ollama-serve.sh   # drop-in replacement for `ollama serve`
+```
+
+The throughput watchdog (`SMALLCODE_WATCHDOG`, on by default) also detects decay automatically and unloads/reloads the model mid-session, but starting with the optimised flags defers the first decay event considerably.
+
 ### llama.cpp
 
 ```bash
@@ -265,4 +274,16 @@ MIT
 - `SMALLCODE_DRY_RUN`: _(add description)_
 - `SMALLCODE_EVAL_MAX_TURNS`: _(add description)_
 - `SMALLCODE_EVAL_K`: _(add description)_
+- `SMALLCODE_HE_LIMIT`: _(add description)_
+- `SMALLCODE_HE_OFFSET`: _(add description)_
+- `SMALLCODE_HE_K`: _(add description)_
+- `SMALLCODE_HE_MAX_TURNS`: _(add description)_
+- `SMALLCODE_HE_TIMEOUT_MS`: _(add description)_
+- `SMALLCODE_RERUN_TIMEOUT_MS`: _(add description)_
+- `SMALLCODE_HE_CACHE`: _(add description)_
+- `SMALLCODE_SMOKE_OFFSET`: _(add description)_
+- `SMALLCODE_SMOKE_N`: _(add description)_
+- `SMALLCODE_SMOKE_MAX_TURNS`: _(add description)_
+- `SMALLCODE_DISCIPLINE`: _(add description)_
+- `SMALLCODE_PRESOLVE`: _(add description)_
 <!-- agent-skills:doc-keeper:end -->

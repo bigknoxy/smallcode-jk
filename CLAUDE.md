@@ -1,3 +1,19 @@
+## Public docs sync (MANDATORY)
+
+Three public pages live at repo root / `docs/` and WILL be published to GitHub Pages in a later phase. They must NEVER drift from the code:
+
+- **`index.html`** — landing page. What smallcode is (coding harness making small local models output real code), headline benchmark numbers, quick start, prominent links to the architecture + docs pages.
+- **`docs/architecture.html`** — living design document. Mermaid diagrams of the agent loop (planTask → executor turns → edit-apply → graders), tool-exec + test-oracle early-stop flow, edit-format pipeline, eval/benchmark harness. Footer timestamp = today.
+- **`docs/llms.html`** — reference for LLMs and devs. Module map, tool contracts, edit formats, config/env vars, how to run evals/benchmarks. Dense, factual, link-rich.
+
+**On EVERY commit, run this checklist:**
+1. Loop/routing/tool/edit-format/early-stop logic changed → update architecture diagrams + llms.html flow.
+2. Feature/endpoint/config/env-var added or removed → update index.html quick start + llms.html.
+3. Benchmark/eval numbers changed → update headline numbers in index.html AND any tables in architecture.html.
+4. New script in `scripts/` or new module in `src/` → add to llms.html module map.
+5. Update `docs/architecture.html` footer timestamp to today.
+
+Pages must be standalone HTML (no build step) — open-in-browser must work. If a change touches code but none of the above, state "docs: no public-page impact" in the commit body so the skip is deliberate, not forgotten.
 
 Default to using Bun instead of Node.js.
 

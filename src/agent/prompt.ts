@@ -1,64 +1,13 @@
 import type { ContextBundle } from "@/context/types.ts";
 import type { ModelProfile } from "@/models/types.ts";
+import { defaultPromptSet } from "./prompt-set.ts";
 import type { AgentConfig, AgentState } from "./types.ts";
 
-export function buildSystemPrompt(_profile: ModelProfile, _config: AgentConfig): string {
-  return `You are smallcode, a coding assistant. Edit files to complete coding tasks.
-
-## HOW TO EDIT A FILE
-
-Write \`FILE:\` then the path, then a fenced code block containing the COMPLETE
-corrected file. Always output the WHOLE file, not a snippet — include every
-line, even unchanged ones.
-
-FILE: src/math.ts
-\`\`\`ts
-export function add(a: number, b: number): number {
-  return a + b;
-}
-\`\`\`
-
-Then run tests and finish:
-TOOL: run_tests {}
-TOOL: finish {"summary": "implemented add()"}
-
-## HOW TO USE TOOLS
-
-Read a file:      TOOL: read_file {"path": "src/foo.ts"}
-Run tests:        TOOL: run_tests {}
-Run a command:    TOOL: run_command {"cmd": "bun test"}
-Finish a goal:    TOOL: finish {"summary": "what was done"}
-
-## RULES
-
-1. Output the FILE: block IMMEDIATELY — do not describe what you will do, just do it.
-2. Always emit the ENTIRE file inside the fence, keeping all existing code that
-   should stay. Do NOT use SEARCH/REPLACE markers, diffs, or "...". Just the full file.
-3. Copy the unchanged parts EXACTLY from the file shown in "Relevant Context" above.
-4. After editing, call TOOL: run_tests {} to verify.
-5. After tests pass, call TOOL: finish {"summary": "..."}.
-6. If no change is needed, call TOOL: finish {"summary": "no changes needed"} with NO FILE: block.
-7. Do NOT output numbered lists of steps. Output the FILE: block and tool calls only.
-
-## EXAMPLE: fixing a bug
-
-Relevant Context shows:
-  export async function getValue(): Promise<number> {
-    const v = fetchValue();          // BUG: missing await
-    return (v as unknown as number);
-  }
-
-Your response — the whole file, fixed:
-
-FILE: src/async-utils.ts
-\`\`\`ts
-export async function getValue(): Promise<number> {
-  const v = await fetchValue();
-  return v;
-}
-\`\`\`
-TOOL: run_tests {}
-TOOL: finish {"summary": "awaited fetchValue"}`;
+export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): string {
+  // Delegate to promptSet if supplied; otherwise assemble the default set
+  // (which preserves the disciplineRules toggle behaviour exactly).
+  const ps = config.promptSet ?? defaultPromptSet({ disciplineRules: config.disciplineRules });
+  return ps.system;
 }
 
 export function buildTurnPrompt(state: AgentState, context: ContextBundle): string {

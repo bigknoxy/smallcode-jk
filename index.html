@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>smallcode — agentic coding for small local models</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 0 0 64px;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 28px 48px;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: #94a3b8;
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    header a {
+      color: #7c8ff5;
+      text-decoration: none;
+    }
+
+    header a:hover { text-decoration: underline; }
+
+    nav {
+      background: #151820;
+      border-bottom: 1px solid #2d3148;
+      padding: 0 48px;
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+    }
+
+    nav a {
+      color: #94a3b8;
+      text-decoration: none;
+      padding: 14px 18px;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    nav a:hover {
+      color: #e2e8f0;
+      border-bottom-color: #7c8ff5;
+    }
+
+    nav a.active {
+      color: #a5b4fc;
+      border-bottom-color: #7c8ff5;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 48px 0;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 64px 0 56px;
+      border-bottom: 1px solid #2d3148;
+      margin-bottom: 64px;
+    }
+
+    .hero-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #7c8ff5;
+      margin-bottom: 16px;
+    }
+
+    .hero h2 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: 20px;
+      max-width: 760px;
+    }
+
+    .hero h2 em {
+      font-style: normal;
+      color: #a5b4fc;
+    }
+
+    .hero-sub {
+      font-size: 1.05rem;
+      color: #94a3b8;
+      max-width: 640px;
+      line-height: 1.7;
+      margin-bottom: 32px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 22px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: #3b4fd4;
+      color: #e8ecff;
+      border: 1px solid #4f63e8;
+    }
+
+    .btn-primary:hover {
+      background: #4f63e8;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #2d3148;
+    }
+
+    .btn-secondary:hover {
+      color: #e2e8f0;
+      border-color: #4f5b8a;
+    }
+
+    /* ── Stats ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 72px;
+    }
+
+    .stat-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      padding: 28px 28px 24px;
+    }
+
+    .stat-value {
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: #a5b4fc;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+    }
+
+    .stat-detail {
+      font-size: 0.78rem;
+      color: #64748b;
+      line-height: 1.4;
+    }
+
+    /* ── Sections ── */
+    section {
+      margin-bottom: 72px;
+    }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #2d3148;
+      letter-spacing: -0.01em;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin: 24px 0 12px;
+    }
+
+    p {
+      color: #94a3b8;
+      margin-bottom: 12px;
+    }
+
+    /* ── How it works ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .step {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 24px;
+    }
+
+    .step-num {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      background: #1e3a5f;
+      color: #93c5fd;
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-align: center;
+      line-height: 28px;
+      margin-bottom: 14px;
+    }
+
+    .step h3 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+      color: #e2e8f0;
+    }
+
+    .step p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin: 0;
+    }
+
+    /* ── Quick start ── */
+    .code-block {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.83rem;
+      color: #a5b4fc;
+      overflow-x: auto;
+      line-height: 1.8;
+    }
+
+    .code-block .comment {
+      color: #475569;
+    }
+
+    .code-block .cmd {
+      color: #86efac;
+    }
+
+    code {
+      font-family: "JetBrains Mono", "Fira Code", ui-monospace, Consolas, monospace;
+      font-size: 0.8em;
+      background: #1e2130;
+      color: #a5b4fc;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── Design decisions ── */
+    .decision-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .decision {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-left: 3px solid #3b4fd4;
+      border-radius: 6px;
+      padding: 16px 20px;
+    }
+
+    .decision strong {
+      color: #e2e8f0;
+      font-size: 0.9rem;
+    }
+
+    .decision p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin: 4px 0 0;
+    }
+
+    /* ── Nav links section ── */
+    .doc-links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .doc-link-card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 24px;
+      text-decoration: none;
+      transition: border-color 0.15s;
+      display: block;
+    }
+
+    .doc-link-card:hover {
+      border-color: #4f5b8a;
+    }
+
+    .doc-link-card h3 {
+      color: #a5b4fc;
+      margin: 0 0 8px;
+      font-size: 1rem;
+    }
+
+    .doc-link-card p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin: 0;
+    }
+
+    footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 48px;
+      border-top: 1px solid #2d3148;
+      color: #475569;
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    footer a { color: #64748b; text-decoration: none; }
+    footer a:hover { color: #94a3b8; }
+
+    @media (max-width: 700px) {
+      header, nav, main, footer { padding-left: 20px; padding-right: 20px; }
+      .hero h2 { font-size: 1.75rem; }
+      .hero { padding: 40px 0 36px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>smallcode</h1>
+  <p>Agentic coding harness for small, local models &nbsp;·&nbsp; <a href="docs/architecture.html">Architecture</a> &nbsp;·&nbsp; <a href="docs/llms.html">LLM Reference</a> &nbsp;·&nbsp; MIT License</p>
+</header>
+
+<nav>
+  <a href="index.html" class="active">Home</a>
+  <a href="docs/architecture.html">Architecture</a>
+  <a href="docs/llms.html">LLM Reference</a>
+  <a href="docs/ROADMAP.md">Roadmap</a>
+</nav>
+
+<main>
+
+  <!-- ===== HERO ===== -->
+  <div class="hero">
+    <div class="hero-label">open source &middot; fully local &middot; no API keys</div>
+    <h2>A 3B model that writes <em>shippable code</em>.<br>The harness, not the model size.</h2>
+    <p class="hero-sub">
+      smallcode is an agentic coding harness engineered to make small local models produce real,
+      correct, shippable code. Target model: VibeThinker-3B (Q8_0) via Ollama — fully offline.
+      The thesis: harness design (tool-exec loop, full-file edit format, deterministic test-oracle
+      early-stop, best-of-N) unlocks usable coding without cloud APIs or frontier models.
+    </p>
+    <div class="hero-actions">
+      <a href="#quickstart" class="btn btn-primary">Quick start</a>
+      <a href="docs/architecture.html" class="btn btn-secondary">Architecture</a>
+      <a href="docs/llms.html" class="btn btn-secondary">LLM Reference</a>
+    </div>
+  </div>
+
+  <!-- ===== STATS ===== -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value">0.96</div>
+      <div class="stat-label">In-house suite pass@1</div>
+      <div class="stat-detail">24/25 tasks — capability suite of real coding problems, graded by <code>bun test</code></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">0.828</div>
+      <div class="stat-label">HumanEval-TS pass@1</div>
+      <div class="stat-detail">Full 159 problems, k=3 (clean). External validation on nuprl/MultiPL-E humaneval-ts</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">0.906</div>
+      <div class="stat-label">HumanEval-TS solve-rate</div>
+      <div class="stat-detail">pass@3 (any of 3 trials) — 144/159 problems solved. First-30 subset hits 0.967 / 1.000</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">3B</div>
+      <div class="stat-label">Model size</div>
+      <div class="stat-detail">VibeThinker-3B Q8_0 via Ollama. Runs on a laptop, fully offline, no API key</div>
+    </div>
+  </div>
+
+  <!-- ===== HOW IT WORKS ===== -->
+  <section id="how-it-works">
+    <h2>How it works</h2>
+    <p>
+      Four structural choices do the heavy lifting. VibeThinker-3B raw single-shot HumanEval pass@1
+      is ~0.45–0.60. The agentic loop lifts the same model to 0.828 pass@1 / 0.906 solve-rate on the full TypeScript HumanEval.
+    </p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Plan &rarr; Goals</h3>
+        <p>The harness calls the model to decompose the task into ordered sub-goals (max 8). Each goal is attempted independently, so failures are local.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Tool-exec turns</h3>
+        <p>Each turn the model emits edits and tool calls. The harness actually executes them — <code>read_file</code>, <code>write_file</code>, <code>run_command</code>, <code>run_tests</code> — and feeds real output back. No blind flying.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Full-file edit format</h3>
+        <p>Model writes <code>FILE: path</code> + a fenced block with the entire corrected file. No diffs, no SEARCH/REPLACE markers. The key fix: VibeThinker burned its whole budget on marker syntax; full-file jumped the suite from 0.40 → 0.96.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Deterministic test-oracle early-stop</h3>
+        <p>After every turn the harness auto-runs <code>bun test</code>. Tests green = task solved. Break immediately to lock the pass, prevent regressions from later turns, and stop burning budget.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BENCHMARK JOURNEY ===== -->
+  <section id="benchmark">
+    <h2>Benchmark results</h2>
+
+    <h3>In-house capability suite (25 tasks)</h3>
+    <p>
+      Real coding problems — bug fixes, feature implementations, refactors — graded by
+      <code>bun test</code> in an isolated trial directory. Journey to 0.96:
+    </p>
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:20px 24px;margin-bottom:24px;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="background:#1e2130;">
+            <th style="text-align:left;padding:8px 12px;color:#94a3b8;border-bottom:1px solid #2d3148;">Stage</th>
+            <th style="text-align:left;padding:8px 12px;color:#94a3b8;border-bottom:1px solid #2d3148;">pass@1</th>
+            <th style="text-align:left;padding:8px 12px;color:#94a3b8;border-bottom:1px solid #2d3148;">What changed</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#cbd5e1;">Baseline</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#fca5a5;font-weight:700;">0.60</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#64748b;">Naive loop, tools parsed but not executed, model flew blind</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#cbd5e1;">Regression</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#fca5a5;font-weight:700;">0.40</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#64748b;">SEARCH/REPLACE format added; VibeThinker confused by marker syntax</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#cbd5e1;">Fix 1: tool exec + early-stop</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#fcd34d;font-weight:700;">↑</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#64748b;">Actually execute tools; run <code>bun test</code> after every turn</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;color:#cbd5e1;">Fix 2: full-file format</td>
+            <td style="padding:8px 12px;color:#86efac;font-weight:700;">0.96</td>
+            <td style="padding:8px 12px;color:#64748b;">Replace SEARCH/REPLACE with <code>FILE: path</code> + full file rewrite</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>HumanEval-TS — full 159 problems, k=3 (2026-06-24)</h3>
+    <p>
+      External validation on <a href="https://huggingface.co/datasets/nuprl/MultiPL-E" style="color:#7c8ff5;">nuprl/MultiPL-E</a>
+      humaneval-ts (TypeScript translation of OpenAI HumanEval; 159 of 164 ship in TS). Agent context contains <em>only the function stub</em> —
+      the test file is on disk but never shown to the model. Results reflect general solutions, not assert pattern-matching.
+    </p>
+    <div style="background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:20px 24px;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="background:#1e2130;">
+            <th style="text-align:left;padding:8px 12px;color:#94a3b8;border-bottom:1px solid #2d3148;">Metric</th>
+            <th style="text-align:left;padding:8px 12px;color:#94a3b8;border-bottom:1px solid #2d3148;">Value</th>
+            <th style="text-align:left;padding:8px 12px;color:#94a3b8;border-bottom:1px solid #2d3148;">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#cbd5e1;font-weight:600;">pass@1</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#86efac;font-weight:700;">0.828</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#64748b;">395/477 trials (clean; raw 0.759 before infra-timeout correction)</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#cbd5e1;font-weight:600;">pass^3 (all 3 pass)</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#86efac;font-weight:700;">0.748</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e2130;color:#64748b;">119/159 problems</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 12px;color:#cbd5e1;font-weight:600;">pass@3 (any pass)</td>
+            <td style="padding:8px 12px;color:#86efac;font-weight:700;">0.906</td>
+            <td style="padding:8px 12px;color:#64748b;">144/159 problems solved — oracle best-of-N target</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:12px;font-size:0.82rem;color:#475569;">
+      The easy first-30 subset scores 0.967 / 0.900 / 1.000. The full-159 number is lower because it includes the harder tail
+      (15 genuine traps remain). The run hit Ollama KV-cache slowdown over ~16h (105→0.5 tok/s, 50 trial timeouts); the clean
+      number above re-ran affected problems on a fresh server (<code>scripts/rerun-timeouts.ts</code>) and merged them back.
+      Next: oracle-verified best-of-N + AlphaCodium pre-solve. Prompt-optimization (GEPA) seam is live — <code>AgentConfig.promptSet</code> injects candidate prompts end-to-end; <code>src/improve/gepa/</code> provides the Pareto-front evolution engine. See <a href="docs/ROADMAP.md" style="color:#7c8ff5;">ROADMAP</a>.
+    </p>
+  </section>
+
+  <!-- ===== QUICK START ===== -->
+  <section id="quickstart">
+    <h2>Quick start</h2>
+    <div class="code-block">
+<span class="comment"># 1. Install dependencies</span>
+<span class="cmd">bun install</span>
+
+<span class="comment"># 2. Start Ollama with VibeThinker-3B</span>
+<span class="cmd">ollama pull vibethinker-3b</span>
+<span class="cmd">ollama serve</span>
+
+<span class="comment"># 3. Run the first 30 HumanEval problems, k=3 trials each</span>
+<span class="cmd">SMALLCODE_HE_LIMIT=30 SMALLCODE_HE_K=3 bun scripts/run-humaneval.ts</span>
+
+<span class="comment"># 4. Run the full in-house capability suite (dry-run validates fixtures)</span>
+<span class="cmd">SMALLCODE_DRY_RUN=1 bun scripts/run-baseline.ts</span>
+<span class="cmd">bun scripts/run-baseline.ts</span>
+
+<span class="comment"># 5. Debug a single task end-to-end</span>
+<span class="cmd">bun scripts/debug-task.ts &lt;task-id&gt;</span>
+    </div>
+    <p style="margin-top:12px;font-size:0.85rem;">
+      Config is in <code>smallcode.config.json</code>. The default points at
+      <code>http://localhost:11434/v1</code> (Ollama) with model <code>vibethinker-3b</code>.
+      See <a href="docs/llms.html" style="color:#7c8ff5;">LLM Reference</a> for all env vars and config options.
+    </p>
+  </section>
+
+  <!-- ===== KEY DESIGN DECISIONS ===== -->
+  <section id="design">
+    <h2>Key design decisions</h2>
+    <div class="decision-list">
+      <div class="decision">
+        <strong>Why full-file edits instead of SEARCH/REPLACE?</strong>
+        <p>VibeThinker-3B burned its entire context budget agonizing over exact marker syntax (bracket counts, the === separator, whitespace). It emitted nothing parseable. Switching to whole-file rewrite — just <code>FILE: path</code> + a fenced block — is unambiguous. The suite jumped from 0.40 to 0.96 in one change.</p>
+      </div>
+      <div class="decision">
+        <strong>Why test-oracle early-stop?</strong>
+        <p>Tests green = task solved with certainty. Breaking immediately locks the pass: subsequent turns cannot accidentally regress a correct solution, and the budget stops being spent. The oracle also handles "should-not-edit" tasks — if tests start green, the loop exits on turn 1.</p>
+      </div>
+      <div class="decision">
+        <strong>Why temperature &ge;0.6? Never 0.2?</strong>
+        <p>VibeThinker-3B was not trained for low-temperature exploration. At temp 0.2 it degenerates into repetitive, low-diversity output that fails to self-correct. Required sampling: temp 1.0 (or minimum 0.6), top_p 0.95. High variance is addressed by best-of-N and the k=3 eval protocol.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DOC LINKS ===== -->
+  <section id="docs">
+    <h2>Documentation</h2>
+    <div class="doc-links">
+      <a href="docs/architecture.html" class="doc-link-card">
+        <h3>Architecture &rarr;</h3>
+        <p>Living design document. Mermaid diagrams of system topology, agent loop, edit-format pipeline, and eval harness. Benchmark results table. Key design decisions.</p>
+      </a>
+      <a href="docs/llms.html" class="doc-link-card">
+        <h3>LLM Reference &rarr;</h3>
+        <p>Dense technical reference. Module map, tool contracts, edit format spec with examples, config + env vars, and how to run every script.</p>
+      </a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span>smallcode &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; <a href="docs/architecture.html">Architecture</a> &nbsp;·&nbsp; <a href="docs/llms.html">LLM Reference</a></span>
+  <span>Last updated: 2026-06-23</span>
+</footer>
+
+</body>
+</html>
