@@ -372,7 +372,7 @@ graph TD
       <div class="diagram-wrap">
         <div class="mermaid">
 flowchart TD
-    START([Task received]) --> PLAN[planTask — optional pre-solve reflection,\nthen model decomposes task into ≤8 Goals]
+    START([Task received]) --> PLAN[planTask — optional pre-solve reflection,\nthen model decomposes task into ≤5 Goals\nfilters path-echo non-actionable goals\ncaps: single-file→3, multi-file→5]
     PLAN --> BASELINE[captureTestBaseline\nrecord pre-existing failing IDs + red count]
     BASELINE --> GOAL{Current goal?}
     GOAL -- none --> DONE([status: done])
