@@ -65,6 +65,19 @@ export function parseFailingTestIds(output: string): Set<string> {
 export interface TestBaseline {
   failingIds: Set<string>;
   hadAnyTests: boolean;
+  /**
+   * Total red count at baseline = `N fail` + `N error` from bun's summary.
+   * Not every failure prints a parseable `(fail) <name>` line — module-load
+   * errors and unhandled throws show only in the summary counts. Tracking the
+   * count lets us catch agent-introduced failures the id-parser can't see,
+   * so a new crash can never be mistaken for "solved".
+   */
+  redCount: number;
+}
+
+/** Parse bun's summary red count: `N fail` + `N error`. Exported for testing. */
+export function parseRedCount(output: string): number {
+  return num(output.match(/(\d+)\s+fail/i)) + num(output.match(/(\d+)\s+error/i));
 }
 
 export type TestState = "green" | "red" | "absent";
@@ -105,6 +118,7 @@ export function captureTestBaseline(repoRoot: string): TestBaseline {
   return {
     failingIds: parseFailingTestIds(result.output),
     hadAnyTests: state !== "absent",
+    redCount: parseRedCount(result.output),
   };
 }
 
@@ -152,7 +166,15 @@ export async function runTieredOracle(
     const newFailures = [...currentFailing].filter((id) => !baselineFailing.has(id));
     const passCount = num(test.result.output.match(/(\d+)\s+pass/i));
 
-    if (newFailures.length === 0 && passCount >= 1) {
+    // Count guard: not every failure prints a parseable `(fail)` line (module
+    // errors, unhandled throws appear only in the summary counts). If the total
+    // red count grew vs baseline, the agent introduced a failure we can't name —
+    // never call that "solved", even when no new (fail) id was parsed.
+    const baselineRed = opts.baseline?.redCount ?? 0;
+    const currentRed = parseRedCount(test.result.output);
+    const countRegression = currentRed > baselineRed;
+
+    if (newFailures.length === 0 && passCount >= 1 && !countRegression) {
       return {
         outcome: "solved",
         checks: [test.result],
@@ -166,7 +188,9 @@ export async function runTieredOracle(
     const feedbackBody =
       newFailures.length > 0
         ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
-        : test.result.output.slice(0, MAX_FEEDBACK);
+        : countRegression
+          ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+          : test.result.output.slice(0, MAX_FEEDBACK);
 
     return {
       outcome: "failing",

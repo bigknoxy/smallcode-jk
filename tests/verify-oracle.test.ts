@@ -1,5 +1,10 @@
 import { test, expect, describe } from "bun:test";
-import { classifyTest, parseFailingTestIds, tscHasRealErrors } from "../src/verify/oracle.ts";
+import {
+  classifyTest,
+  parseFailingTestIds,
+  parseRedCount,
+  tscHasRealErrors,
+} from "../src/verify/oracle.ts";
 
 describe("classifyTest", () => {
   test("green: passes, zero fails, exit 0", () => {
@@ -92,6 +97,18 @@ describe("baseline diff logic", () => {
     const currentIds = new Set(["brand new fail"]);
     const newFailures = [...currentIds].filter((id) => !baselineIds.has(id));
     expect(newFailures).toEqual(["brand new fail"]);
+  });
+});
+
+describe("parseRedCount (count guard for unparseable failures)", () => {
+  test("fail + error counts sum", () => {
+    expect(parseRedCount("3 pass\n1 fail\n1 error\nRan 5 tests")).toBe(2);
+  });
+  test("zero red", () => {
+    expect(parseRedCount("5 pass\n0 fail")).toBe(0);
+  });
+  test("error-only (module crash, no (fail) line) is still counted red", () => {
+    expect(parseRedCount("0 pass\n0 fail\n1 error")).toBe(1);
   });
 });
 

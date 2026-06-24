@@ -172,3 +172,51 @@ test("captureTestBaseline: absent-tests repo → hadAnyTests false, oracle falls
   const verdict = await runTieredOracle(dir, { baseline });
   expect(verdict.outcome).toBe("clean");
 }, 60_000);
+
+// ===== COUNT-GUARD: unparseable (error-type) failures =====
+
+test("count guard: agent introduces a module-error failure (no (fail) line) → failing, not solved", async () => {
+  // Baseline: one passing test, repo green.
+  const dir = await scaffold({
+    "src/m.ts": "export const add = (a: number, b: number) => a + b;\n",
+    "tests/ok.test.ts":
+      'import { test, expect } from "bun:test";\nimport { add } from "../src/m.ts";\ntest("ok", () => expect(add(2, 3)).toBe(5));\n',
+    "package.json": '{"name":"t","type":"module"}',
+  });
+  const baseline = captureTestBaseline(dir);
+  expect(baseline.redCount).toBe(0);
+
+  // Agent "edit": add a test file that throws at import (module-load error).
+  // Bun reports this as an `error` in the summary with NO `(fail) <name>` line,
+  // so the id-parser sees nothing — only the count guard catches it.
+  await writeFile(
+    join(dir, "tests", "crash.test.ts"),
+    'import { nope } from "../src/does-not-exist.ts";\nimport { test } from "bun:test";\ntest("never", () => nope());\n',
+    "utf-8",
+  );
+
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("failing");
+}, 60_000);
+
+test("count guard: pre-existing module error + task solved → still solved (red count unchanged)", async () => {
+  // A pre-existing crashing test (unparseable error) plus a normal passing test.
+  const dir = await scaffold({
+    "src/m.ts": "export const add = (a: number, b: number) => a + b;\n",
+    "tests/crash.test.ts":
+      'import { gone } from "../src/missing.ts";\nimport { test } from "bun:test";\ntest("x", () => gone());\n',
+    "package.json": '{"name":"t","type":"module"}',
+  });
+  const baseline = captureTestBaseline(dir);
+  expect(baseline.redCount).toBeGreaterThanOrEqual(1);
+
+  // Agent solves its task: adds a passing test. Pre-existing crash unchanged.
+  await writeFile(
+    join(dir, "tests", "feature.test.ts"),
+    'import { test, expect } from "bun:test";\nimport { add } from "../src/m.ts";\ntest("feature", () => expect(add(1, 1)).toBe(2));\n',
+    "utf-8",
+  );
+
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("solved");
+}, 60_000);
