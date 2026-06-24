@@ -99,6 +99,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
     return { command: "run", positionals: rest, flags };
   }
 
+  if (cmd === "update") {
+    return { command: "update", positionals: rest, flags };
+  }
+
+  if (cmd === "uninstall") {
+    return { command: "uninstall", positionals: rest, flags };
+  }
+
   if (cmd === "help") {
     return { command: "help", positionals: rest, flags };
   }
