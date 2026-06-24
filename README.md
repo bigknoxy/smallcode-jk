@@ -8,7 +8,46 @@ smallcode wraps 3B–14B class models in scaffolding that compensates for their 
 
 ---
 
-## Quick start
+## Quickstart
+
+### Prerequisites
+
+- **[Bun](https://bun.sh)** (JavaScript runtime + package manager) — `curl -fsSL https://bun.sh/install | bash`
+- **[Ollama](https://ollama.com/download)** (local model server) — then pull the model:
+  ```bash
+  ollama pull weiboai/vibethinker-3b
+  ollama serve   # default: http://localhost:11434
+  ```
+
+### One-line install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bigknoxy/smallcode-jk/main/install.sh | sh
+```
+
+This installs smallcode to `~/.smallcode` and writes a wrapper to `~/.local/bin/smallcode`.
+If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to your shell config.
+
+### Verify, update, uninstall
+
+```bash
+smallcode --version   # prints: smallcode v0.1.0
+smallcode update      # re-downloads latest release (or SMALLCODE_TARBALL) and reinstalls
+smallcode uninstall   # dry-run: shows what would be removed
+smallcode uninstall --yes   # actually removes ~/.smallcode and the wrapper
+```
+
+### Environment overrides
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SMALLCODE_HOME` | `~/.smallcode` | Where smallcode source lives |
+| `SMALLCODE_BIN_DIR` | `~/.local/bin` | Where the `smallcode` wrapper is written |
+| `SMALLCODE_TARBALL` | — | Local path or URL; skips the GitHub release query |
+
+---
+
+## Manual quick start (dev / no install)
 
 **1. Install Ollama and pull VibeThinker-3B**
 
