@@ -51,6 +51,20 @@ Evolve from single-file stub to real multi-file repos. Keep the two confirmed st
 
 ---
 
+## NEXT+ — evolve the harness's prompts (GEPA)
+
+Once the E0–E5 eval suite is stable, use it as the fitness function to auto-search for better prompts. Reference: [GEPA — Generative Evolutionary Prompt Architect, arxiv 2507.19457](https://arxiv.org/abs/2507.19457).
+
+16. **Prompt-as-variable seam** (done). `src/agent/prompt-set.ts` defines `PromptSet { system, planner, reflection }` + `defaultPromptSet()`. `AgentConfig.promptSet?` injects a candidate's prompts end-to-end (executor + planner + reflection). Default output is byte-identical to before. `PlannerOptions.plannerPrompt?` / `.reflectionPrompt?` are the internal injection points.
+
+17. **GEPA core** (done). `src/improve/gepa/`: `Candidate` (id, prompts, parentId, generation, scores, meanScore), `ParetoFront` (dominates + GEPA-weighted selection), `ReflectiveMutator` interface + `MockMutator`, `evaluateCandidate` (injects `candidate.prompts` into `AgentConfig.promptSet`), `runGepa` (select → gather failures → mutate → score → front.add × maxGenerations). Unit-tested with mock mutator and mock eval runner — no model calls in CI.
+
+18. **Cheap-subset proof gate** (~2d, compute-gated). Run `scripts/gepa-smoke.ts` on E0–E2 (3 tasks, K=1, 3 generations, `MockMutator`) to verify the plumbing end-to-end before spending GPU-hours. Promote `MockMutator` to a live LLM mutator (provider-agnostic, same interface) once the plumbing is confirmed. Gate criterion: at least one mutated candidate achieves `meanScore > seed.meanScore` on the 3-task subset.
+
+19. **Scaled evolution — compute-gated, watchdog-dependent** (~tens of GPU-hours). Prerequisites: llama.cpp throughput watchdog (step 6) stable across 10h+ runs; E0–E5 suite fully locked (no fixture churn). Run 5–10 generations × 5 candidates × 5 tasks × K=3 trials. Expected wall-clock: ~4–8h at 100 tok/s. Convergence criterion: Pareto front meanScore plateaus for 3 consecutive generations. Winner prompt ships as `defaultPromptSet()`.
+
+---
+
 ## Key judgment call — the VibeThinker question
 
 Thread D recommends switching to Qwen3-8B (VibeThinker's model card: *"not trained on tool-calling or agent-based programming… do not recommend for autonomous coding agents"*). **Recommendation: do not switch reflexively.** Our harness already reached 0.87 *by routing around* that weakness (full-file format exists precisely because the 3B fails at diffs). The rigorous move is **step 10's bake-off** — one experiment that both answers "which model" and delivers the thesis proof. VibeThinker stays as the control that demonstrates domain-fit matters.

@@ -1,4 +1,5 @@
 import type { ApplyResult, EditBlock } from "../edit/types.ts";
+import type { PromptSet } from "./prompt-set.ts";
 
 export type GoalStatus = "pending" | "in_progress" | "done" | "failed" | "skipped";
 export type SessionStatus = "running" | "done" | "failed" | "max_turns" | "abandoned";
@@ -90,4 +91,5 @@ export interface AgentConfig {
   requireApproval?: boolean; // gate destructive actions behind user approval
   disciplineRules?: boolean; // include Karpathy-style discipline rules in system prompt (default: true)
   preSolveReflection?: boolean; // planner briefly reflects before decomposing goals (default: false)
+  promptSet?: PromptSet; // override all three agent prompts (system, planner, reflection); takes precedence over disciplineRules
 }

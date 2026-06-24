@@ -266,12 +266,13 @@
       <tbody>
         <tr><td><code>loop.ts</code></td><td>Core agent turn loop — planning, model calls, edit application, tool execution, test-oracle early-stop. Entry point: <code>runLoop(state, statePath, deps, getContext)</code></td></tr>
         <tr><td><code>planner.ts</code></td><td>Calls the model to decompose a task into ≤8 ordered sub-goals. Falls back to a single goal if the model returns nothing parseable. Optional <code>preSolveReflection</code> (default off): one extra cheap call to restate the problem + key edge case, fed into goal generation (AlphaCodium-lite).</td></tr>
-        <tr><td><code>prompt.ts</code></td><td><code>buildSystemPrompt</code> — instructs the model to use full-file edits + tool calls; appends discipline rules (minimal-change, surgical, no speculation) gated by <code>AgentConfig.disciplineRules</code> (default on). <code>buildTurnPrompt</code> — assembles task, goal, turn number, last 2 turns of history, and context chunks.</td></tr>
+        <tr><td><code>prompt.ts</code></td><td><code>buildSystemPrompt</code> — delegates to <code>config.promptSet ?? defaultPromptSet()</code>; the discipline-rules toggle relocates to <code>prompt-set.ts</code>. <code>buildTurnPrompt</code> — assembles task, goal, turn number, last 2 turns of history, and context chunks.</td></tr>
+        <tr><td><code>prompt-set.ts</code></td><td><code>PromptSet { system, planner, reflection }</code> — groups all three agent prompts so a GEPA candidate can carry a mutated variant. <code>defaultPromptSet(opts?)</code> assembles the canonical set (discipline-rules toggle honoured). Single source of truth for the prompt strings.</td></tr>
         <tr><td><code>state.ts</code></td><td>Create, load, save (atomic rename), and mutate <code>AgentState</code>. <code>addTurn</code>, <code>advanceGoal</code>, <code>failGoal</code>, <code>isTerminal</code>, <code>currentGoal</code>.</td></tr>
         <tr><td><code>tools.ts</code></td><td>Tool implementations (<code>read_file</code>, <code>write_file</code>, <code>run_command</code>, <code>run_tests</code>, <code>think</code>, <code>finish</code>) and the <code>executeTool</code> dispatcher. All paths guarded by <code>resolveSafe</code>.</td></tr>
         <tr><td><code>bestofn.ts</code></td><td><code>selectBestCandidate</code> — generate N completions in parallel, apply each, run verifier, pick winner by verifierScore, revert losers, apply winner.</td></tr>
-        <tr><td><code>types.ts</code></td><td>TypeScript types: <code>AgentState</code>, <code>AgentConfig</code>, <code>Goal</code>, <code>TurnRecord</code>, <code>ToolCall</code>, <code>ToolResult</code>, <code>ToolName</code>.</td></tr>
-        <tr><td><code>index.ts</code></td><td>Re-exports the public agent API.</td></tr>
+        <tr><td><code>types.ts</code></td><td>TypeScript types: <code>AgentState</code>, <code>AgentConfig</code> (now includes optional <code>promptSet?: PromptSet</code> for GEPA seam), <code>Goal</code>, <code>TurnRecord</code>, <code>ToolCall</code>, <code>ToolResult</code>, <code>ToolName</code>.</td></tr>
+        <tr><td><code>index.ts</code></td><td>Re-exports the public agent API including <code>PromptSet</code>, <code>defaultPromptSet</code>.</td></tr>
       </tbody>
     </table>
 
@@ -385,6 +386,13 @@
         <tr><td><code>src/improve/metrics-store.ts</code></td><td>Append <code>MetricsSnapshot</code> to <code>evals/metrics-history.jsonl</code>. Read baseline snapshot for regression gate.</td></tr>
         <tr><td><code>src/improve/regression-gate.ts</code></td><td>Compare current eval run against baseline snapshot. Fail if pass@1 regressed or any task moved from pass to fail.</td></tr>
         <tr><td><code>src/improve/ab-compare.ts</code></td><td>Run two prompt variants against the same suite and compare pass@1.</td></tr>
+        <tr><td><code>src/improve/gepa/types.ts</code></td><td>GEPA types: <code>Candidate</code> (id, prompts, parentId, generation, scores, meanScore), <code>GepaConfig</code> (taskIds, populationCap, maxGenerations, trialsPerTask), <code>FailedInstance</code>.</td></tr>
+        <tr><td><code>src/improve/gepa/pareto-front.ts</code></td><td><code>dominates(a,b,taskIds)</code> — Pareto dominance check. <code>ParetoFront</code> — non-dominated set with population cap and GEPA-weighted selection: each task contributes weight to the front member that maximises it; sample proportional to weight count.</td></tr>
+        <tr><td><code>src/improve/gepa/mutator.ts</code></td><td><code>ReflectiveMutator</code> interface — <code>mutate(parent, failures)</code>. <code>MockMutator</code> — deterministic stub for tests (appends versioned tag, records calls).</td></tr>
+        <tr><td><code>src/improve/gepa/evaluate-adapter.ts</code></td><td><code>evaluateCandidate(cand, deps)</code> — scores a candidate by injecting <code>cand.prompts</code> as <code>AgentConfig.promptSet</code> and calling <code>runTask</code> (or injectable mock) per task. Returns <code>Record&lt;taskId, passAt1&gt;</code>.</td></tr>
+        <tr><td><code>src/improve/gepa/engine.ts</code></td><td><code>runGepa(seed, mutator, evalDeps, cfg, rng?)</code> — evolution loop: select parent → gather failed transcripts → mutate → score → front.add × maxGenerations.</td></tr>
+        <tr><td><code>src/improve/gepa/index.ts</code></td><td>GEPA barrel re-export.</td></tr>
+        <tr><td><code>scripts/gepa-smoke.ts</code></td><td>Smoke script for the GEPA engine — wires real eval runner + MockMutator against E0–E2, K=1, 3 generations. Created but not run; guarded by <code>import.meta.main</code>.</td></tr>
         <tr><td><code>src/verify/runner.ts</code></td><td>Run a configurable checker suite (format, lint, typecheck, test) after edits. Return <code>VerifyResult</code>.</td></tr>
         <tr><td><code>src/verify/corrector.ts</code></td><td>Feed verify failures back to the model as a correction prompt. Up to <code>maxCorrectionIterations</code>.</td></tr>
         <tr><td><code>src/verify/sandbox.ts</code></td><td>Sandbox enforcement for verify-phase commands — allowlist check and path traversal guard.</td></tr>

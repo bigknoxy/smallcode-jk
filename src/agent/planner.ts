@@ -9,6 +9,8 @@ export interface PlannerOptions {
   profile: ModelProfile;
   repoRoot: string;
   preSolveReflection?: boolean; // if true, run a brief reflection step before decomposing (default: false)
+  plannerPrompt?: string; // override the planner system prompt (GEPA seam)
+  reflectionPrompt?: string; // override the reflection system prompt (GEPA seam)
 }
 
 const PLANNER_SYSTEM_PROMPT = `You are a coding assistant that plans tasks as ordered sub-goals.
@@ -71,12 +73,13 @@ async function runReflection(
   contextSummary: string,
   opts: PlannerOptions,
 ): Promise<string> {
+  const systemPrompt = opts.reflectionPrompt ?? REFLECTION_SYSTEM_PROMPT;
   const userMessage = `Task: ${task}\n\nRelevant files: ${contextSummary}\n\nReflect briefly on this task.`;
   try {
     const response = await opts.provider.complete({
       model: opts.modelId,
       messages: [
-        { role: "system", content: REFLECTION_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ],
       temperature: opts.profile.samplingDefaults.temperature,
@@ -113,11 +116,12 @@ Relevant files: ${contextSummary}${reflectionNote}
 
 Plan this task as an ordered list of sub-goals.`;
 
+  const plannerSystemPrompt = opts.plannerPrompt ?? PLANNER_SYSTEM_PROMPT;
   try {
     const response = await opts.provider.complete({
       model: opts.modelId,
       messages: [
-        { role: "system", content: PLANNER_SYSTEM_PROMPT },
+        { role: "system", content: plannerSystemPrompt },
         { role: "user", content: userMessage },
       ],
       temperature: opts.profile.samplingDefaults.temperature,
