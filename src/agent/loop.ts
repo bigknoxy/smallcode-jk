@@ -9,7 +9,7 @@ import { planTask } from "./planner.ts";
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
 import { type ToolContext, executeTool } from "./tools.ts";
-import { runTieredOracle } from "@/verify/oracle.ts";
+import { captureTestBaseline, runTieredOracle } from "@/verify/oracle.ts";
 import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./types.ts";
 
 export interface LoopDependencies {
@@ -172,6 +172,12 @@ export async function runLoop(
     await saveState(state, statePath);
   }
 
+  // Capture a pre-loop baseline of any already-failing tests so that
+  // pre-existing unrelated failures don't prevent early-stop after the task
+  // is solved.  On fresh single-file benchmark repos (no pre-existing failures)
+  // the baseline set is empty and behaviour is identical to before this fix.
+  const testBaseline = captureTestBaseline(state.repoRoot);
+
   while (!isTerminal(state) && state.turns.length < state.maxTurns) {
     const goal = currentGoal(state);
     if (goal === null) {
@@ -319,7 +325,7 @@ export async function runLoop(
     // flying blind. Outcome drives early-stop below.
     let verdict: Awaited<ReturnType<typeof runTieredOracle>> | undefined;
     try {
-      verdict = await runTieredOracle(state.repoRoot);
+      verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
       toolResults.push({
         name: "run_tests",
         success: verdict.outcome === "solved",
