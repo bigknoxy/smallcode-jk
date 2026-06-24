@@ -275,4 +275,6 @@ MIT
 - `SMALLCODE_SMOKE_OFFSET`: _(add description)_
 - `SMALLCODE_SMOKE_N`: _(add description)_
 - `SMALLCODE_SMOKE_MAX_TURNS`: _(add description)_
+- `SMALLCODE_DISCIPLINE`: _(add description)_
+- `SMALLCODE_PRESOLVE`: _(add description)_
 <!-- agent-skills:doc-keeper:end -->

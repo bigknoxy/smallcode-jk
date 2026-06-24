@@ -167,6 +167,7 @@ export async function runLoop(
       modelId: state.modelId,
       profile,
       repoRoot: state.repoRoot,
+      preSolveReflection: config.preSolveReflection,
     });
     await saveState(state, statePath);
   }

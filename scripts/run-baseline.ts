@@ -43,6 +43,11 @@ const DRY_RUN = process.env.SMALLCODE_DRY_RUN === "1";
 // Production config has maxTurns=15; eval only needs enough to attempt + verify a fix.
 const EVAL_MAX_TURNS = Number(process.env.SMALLCODE_EVAL_MAX_TURNS ?? "5");
 const EVAL_K = Number(process.env.SMALLCODE_EVAL_K ?? "3");
+// A/B toggles (default = production behavior). SMALLCODE_DISCIPLINE=0 strips the
+// Karpathy discipline rules from the system prompt; SMALLCODE_PRESOLVE=1 enables
+// the planner pre-solve reflection step. Used to measure each against baseline.
+const DISCIPLINE = process.env.SMALLCODE_DISCIPLINE !== "0";
+const PRESOLVE = process.env.SMALLCODE_PRESOLVE === "1";
 
 // ---------------------------------------------------------------------------
 // Grader dispatch (same as validate-e1)
@@ -179,6 +184,8 @@ async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> 
     bestOfN: 1, // best-of-N inside eval adds noise; use k trials instead
     allowedCommands: config.sandbox.allowedCommands,
     requireApproval: false,
+    disciplineRules: DISCIPLINE,
+    preSolveReflection: PRESOLVE,
   };
 
   const loopDeps = {
