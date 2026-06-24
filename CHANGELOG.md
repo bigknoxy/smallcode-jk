@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/bigknoxy/smallcode-jk/compare/v1.0.1...v1.0.2) (2026-06-24)
+
+
+### Bug Fixes
+
+* **planner:** filter path-echo goals, sanitise context summary, cap decomposition ([dd03f30](https://github.com/bigknoxy/smallcode-jk/commit/dd03f302a8e8badae9b60d06df4c0f523a850bf5))
+* **planner:** stop junk-goal echoes + over-decomposition ([31274e7](https://github.com/bigknoxy/smallcode-jk/commit/31274e79e6450f6d885e4620f65eb3da512b30ad))
+
 ## [1.0.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.0.0...v1.0.1) (2026-06-24)
 
 
