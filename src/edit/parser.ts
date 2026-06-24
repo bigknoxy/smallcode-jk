@@ -1,4 +1,5 @@
 import type { EditBlock, ParseError, ParseResult } from "./types.ts";
+import { parsePatchBlocks, patchBlockToEditBlock } from "./patch-function.ts";
 
 // ---------------------------------------------------------------------------
 // Search/replace format
@@ -329,6 +330,15 @@ function validateBlocks(blocks: EditBlock[], errors: ParseError[]): EditBlock[] 
 
 export function parse(raw: string): ParseResult {
   const errors: ParseError[] = [];
+
+  // PATCH format — check first; `PATCH:` prefix is unambiguous and distinct from FILE:/SEARCH.
+  const patchResult = parsePatchBlocks(raw);
+  errors.push(...(patchResult.errors as ParseError[]));
+  if (patchResult.blocks.length > 0) {
+    const editBlocks = patchResult.blocks.map(patchBlockToEditBlock);
+    const validBlocks = validateBlocks(editBlocks, errors);
+    if (validBlocks.length > 0) return { blocks: validBlocks, errors, raw };
+  }
 
   // Full-file format first — it is the primary format for small models and the
   // most reliable. An explicit `FILE:` marker makes it unambiguous vs S/R.

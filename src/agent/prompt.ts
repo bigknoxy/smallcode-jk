@@ -40,6 +40,18 @@ Run tests:        TOOL: run_tests {}
 Run a command:    TOOL: run_command {"cmd": "bun test"}
 Finish a goal:    TOOL: finish {"summary": "what was done"}
 
+For large files (>300 lines), the system may recommend using PATCH: format — see PATCH: below.
+
+## HOW TO PATCH A LARGE FILE (optional, only when recommended)
+
+PATCH: src/foo.ts
+FUNCTION: functionName
+\`\`\`ts
+<complete replacement of just that function, including its signature line>
+\`\`\`
+
+Use PATCH: only when explicitly told the file is large. Default to FILE: for all other edits.
+
 ## RULES
 
 1. Output the FILE: block IMMEDIATELY — do not describe what you will do, just do it.
