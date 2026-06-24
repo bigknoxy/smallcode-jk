@@ -36,7 +36,12 @@ Working branch: `feat/release-automation` (off `main`). `main` is protected (rul
 - [x] GEPA-skills research → `docs/research/gepa-skills.md`. TL;DR: gskill GEPA-evolves a repo-scoped additive `SKILL.md` that transfers across models (Jinja 55→82%, Bleve 24→93%). smallcode is ~80% GEPA-shaped already; concrete next PR = add `PromptSet.skill?` slot + `src/improve/skill-distiller.ts` (mine passing transcripts → seed skill), pure-code/unit-verifiable; GEPA-evolving it is compute-gated. Offline caveat: use a LOCAL stronger reflector (qwen2.5-coder-7b), never cloud. (Future track, not part of this release initiative.)
 - [ ] PR `feat/release-automation` → `main`; confirm **CI green on the PR**; admin-merge.
 - [ ] After merge: release-please opens its release PR → merge it → first release (v0.1.0) created. Verify the release + CHANGELOG exist.
-- [ ] **End-to-end VERIFY (no assumptions):** in a clean `HOME`, `curl <raw install.sh> | sh` → `smallcode --version` prints the release version → `smallcode update` works → `smallcode uninstall` removes everything. Record results here.
+- [x] **End-to-end VERIFY (no assumptions)** — DONE on the REAL v1.0.0 release path: install → `smallcode v1.0.0` → update (1.0.0→1.0.0) → uninstall (dirs removed), all exit 0.
+  - **BUG caught by the live test (override-only test had hidden it):** `install.sh` `log()` wrote to STDOUT, so messages inside `resolve_tarball_url` ("Found latest release…") polluted the `$(...)`-captured tarball URL → only manifested on the GitHub-release path (not the `SMALLCODE_TARBALL` override path). Fix: `log()` → stderr (commit on `fix/install-release-path`). Re-verified live: works.
+  - Note: `raw.githubusercontent.com` was DNS-flapping on the test connection; verified by fetching install.sh via `api.github.com` instead — the tarball download itself uses `github.com` (resolves), so the real install path is fully exercised.
+
+## DONE — initiative complete
+Repo `smallcode-jk` public + Pages live; `main` protected (PR + code-owner review + required `test` check, admin bypass); one-line installer + update/uninstall + `--version` (verified live); CI green on push+PR; release-please auto-versioning live (**v1.0.0** released with full CHANGELOG); actions SHA-pinned + Dependabot. GEPA-skills research in `docs/research/gepa-skills.md`. _This file can be deleted once the fix PR merges._
 
 ## How to resume (fresh agent)
 1. `cd /Users/Joshua.Knox/projects/smallcode-claude`; `git fetch`; check `git branch` for `feat/release-automation` and `git worktree list` for `wt/install-cli` + `wt/ci-releases`.

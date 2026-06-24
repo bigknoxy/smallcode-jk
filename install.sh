@@ -13,7 +13,7 @@ INSTALL_DIR="${SMALLCODE_HOME:-$HOME/.smallcode}"
 BIN_DIR="${SMALLCODE_BIN_DIR:-$HOME/.local/bin}"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-log()  { printf '[smallcode] %s\n' "$*"; }
+log()  { printf '[smallcode] %s\n' "$*" >&2; }
 warn() { printf '[smallcode] WARNING: %s\n' "$*" >&2; }
 err()  { printf '[smallcode] ERROR: %s\n' "$*" >&2; exit 1; }
 
