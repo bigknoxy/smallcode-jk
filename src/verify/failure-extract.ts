@@ -12,10 +12,16 @@ export interface FailureDiagnostic {
   expected?: string;
   actual?: string;
   message: string;
-  /** "TypeError" | "SyntaxError" | "AssertionError" | "module-load" | ... */
+  /** "TypeError" | "SyntaxError" | "AssertionError" | "module-load" | "TSxxxx" | ... */
   errorType?: string;
   /** Trimmed span of the failure block, capped ~600 chars */
   raw: string;
+}
+
+/** Strip ANSI escape sequences from output (insurance against colored output). */
+function stripAnsi(s: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI strip
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 /**
@@ -25,23 +31,71 @@ export interface FailureDiagnostic {
 export function extractFirstFailure(output: string): FailureDiagnostic | null {
   if (!output || output.trim() === "") return null;
 
+  // Fix 5: strip ANSI at entry point (latent insurance)
+  output = stripAnsi(output);
+
   // -------------------------------------------------------------------------
-  // Module-load / unhandled-error path:
-  //   "# Unhandled error between tests" + "error: Cannot find module …"
-  //   No (fail) line with a test name; no Expected/Received.
+  // TypeScript diagnostic path (Tier-2 typecheck output):
+  //   "path/file.ts(12,3): error TS2322: message"
+  //   No "(fail)" lines — this is tsc output, not bun test output.
   // -------------------------------------------------------------------------
-  const moduleLoadRe = /error:\s+Cannot find module\s+'([^']+)'/i;
-  const unhandledSection = /# Unhandled error between tests/i;
-  if (unhandledSection.test(output) || (moduleLoadRe.test(output) && !hasFail(output))) {
-    const modMatch = output.match(moduleLoadRe);
-    const msg = modMatch ? `Cannot find module '${modMatch[1]}'` : "Module load error";
-    const raw = extractRawSpan(output, 0);
+  const tsDiagRe = /^(.+\.tsx?)\((\d+),(\d+)\):\s+error\s+(TS\d+):\s+(.+)$/m;
+  const tsDiagMatch = output.match(tsDiagRe);
+  if (tsDiagMatch && !hasFail(output)) {
+    const [, filePath, line, col, tsCode, tsMessage] = tsDiagMatch;
+    const raw = output.trim().slice(0, 600);
     return {
-      assertionId: "<module-load>",
-      message: msg,
-      errorType: "module-load",
+      assertionId: `${filePath ?? "unknown"}(${line},${col})`,
+      message: `${tsCode}: ${tsMessage}`,
+      errorType: tsCode ?? "typecheck",
       raw,
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Module-load / unhandled-error path:
+  //   "# Unhandled error between tests" + some error line
+  //   No (fail) line with a test name; no Expected/Received.
+  // -------------------------------------------------------------------------
+  const unhandledSection = /# Unhandled error between tests/i;
+  if (unhandledSection.test(output) || !hasFail(output)) {
+    // Only treat as module-load shortcut when it's literally "Cannot find module"
+    const moduleLoadRe = /error:\s+Cannot find module\s+'([^']+)'/i;
+    const modMatch = output.match(moduleLoadRe);
+    if (modMatch) {
+      const raw = extractRawSpan(output, 0);
+      return {
+        assertionId: "<module-load>",
+        message: `Cannot find module '${modMatch[1]}'`,
+        errorType: "module-load",
+        raw,
+      };
+    }
+
+    // For other unhandled errors, extract the real error line so the model sees
+    // the actual problem and so failureSignature VARIES per distinct error.
+    if (unhandledSection.test(output)) {
+      // Look for lines like "TypeError: ..." or "error: ..." inside the unhandled block
+      const realErrorRe = /^(?:error:\s+.+|(?:\w*(?:Error|Exception)):\s+.+)$/m;
+      const errMatch = output.match(realErrorRe);
+      const errLine = errMatch ? (errMatch[0] ?? "").trim() : "Unhandled error";
+      // Derive errorType from the real error line
+      const etMatch = errLine.match(/^(\w*(?:Error|Exception))\b/);
+      const errorType = etMatch ? etMatch[1] : "UnhandledError";
+      // Use the first ~60 chars of the error message as the assertionId so
+      // different crashes produce different signatures.
+      const assertionId = errLine.slice(0, 60);
+      const raw = extractRawSpan(output, 0);
+      return {
+        assertionId,
+        message: errLine,
+        errorType,
+        raw,
+      };
+    }
+
+    // No (fail) and no unhandled section — nothing to parse
+    return null;
   }
 
   // -------------------------------------------------------------------------
@@ -55,6 +109,31 @@ export function extractFirstFailure(output: string): FailureDiagnostic | null {
   //   \n
   //      at …\n
   //   (fail) suite one > fails with expected/received [0.11ms]
+  //
+  //   error: expect(received).toEqual(expected)
+  //   @@ -2,3 +2,3 @@
+  //       "a": 1,
+  //   -   "b": 99,
+  //   +   "b": 2,
+  //     }
+  //   - Expected  - 1
+  //   + Received  + 1
+  //   (fail) toEqual fail [0.15ms]
+  //
+  //   error: expect(received).toContain(expected)
+  //   Expected to contain: 99
+  //   Received: [ 1, 2, 3 ]
+  //   (fail) toContain fail [0.12ms]
+  //
+  //   error: expect(received).toMatch(expected)
+  //   Expected substring or pattern: /foobar/
+  //   Received: "hello world"
+  //   (fail) toMatch fail [0.16ms]
+  //
+  //   error: expect(received).toThrow()
+  //   Received function did not throw
+  //   Received value: 42
+  //   (fail) toThrow fail [0.11ms]
   //
   //   OR for non-assertion errors:
   //   TypeError: null is not an object …\n
@@ -94,22 +173,72 @@ export function extractFirstFailure(output: string): FailureDiagnostic | null {
       errorType = "AssertionError";
     }
 
-    // Search for Expected:/Received: lines after the error line
+    // Search for expected/actual values after the error line.
+    // Handles multiple bun matcher output formats:
     const afterError = blockBefore.slice((lastError.index ?? 0) + errorLine.length);
+
+    // Format 1 (toBe): "Expected: X" / "Received: X"
     const expectedMatch = afterError.match(/^Expected:\s*(.+)$/m);
     const receivedMatch = afterError.match(/^(?:Received|Actual):\s*(.+)$/m);
 
-    if (expectedMatch) expected = expectedMatch[1]?.trim();
-    if (receivedMatch) actual = receivedMatch[1]?.trim();
+    // Format 2 (toContain/toMatch): "Expected to contain: X" / "Expected substring or pattern: X"
+    const expectedToContainMatch = afterError.match(/^Expected (?:to contain|substring or pattern):\s*(.+)$/m);
+
+    // Format 3 (toThrow): "Received function did not throw" / "Received value: X"
+    const receivedValueMatch = afterError.match(/^Received value:\s*(.+)$/m);
+    const didNotThrowMatch = afterError.match(/^(Received function did not throw)$/m);
+
+    // Format 4 (toEqual): unified diff "- Expected  - N" / "+ Received  + N"
+    // The diff lines look like:
+    //   @@ -2,3 +2,3 @@
+    //       "a": 1,
+    //   -   "b": 99,
+    //   +   "b": 2,
+    //     }
+    //   - Expected  - 1
+    //   + Received  + 1
+    const diffExpectedLines = [...afterError.matchAll(/^-\s+(.+)$/gm)]
+      .map((m) => m[1] ?? "")
+      .filter((l) => !l.startsWith("Expected") && !l.startsWith("Received"));
+    const diffReceivedLines = [...afterError.matchAll(/^\+\s+(.+)$/gm)]
+      .map((m) => m[1] ?? "")
+      .filter((l) => !l.startsWith("Expected") && !l.startsWith("Received"));
+
+    if (expectedMatch) {
+      expected = expectedMatch[1]?.trim();
+    } else if (expectedToContainMatch) {
+      expected = expectedToContainMatch[1]?.trim();
+    } else if (diffExpectedLines.length > 0) {
+      // Compact the diff lines into a short summary
+      expected = diffExpectedLines.join(", ").slice(0, 120);
+    }
+
+    if (didNotThrowMatch) {
+      // toThrow: "Received function did not throw" is the primary diagnostic —
+      // more informative than the "Received value" line.
+      actual = didNotThrowMatch[1]?.trim();
+    } else if (receivedMatch) {
+      actual = receivedMatch[1]?.trim();
+    } else if (receivedValueMatch) {
+      actual = receivedValueMatch[1]?.trim();
+    } else if (diffReceivedLines.length > 0) {
+      actual = diffReceivedLines.join(", ").slice(0, 120);
+    }
   } else {
     // Fallback: use the fail line itself as the message
     message = `Test failed: ${assertionId}`;
   }
 
-  // Also scan for errorType in the broader block if not found yet
+  // Fix 4: derive errorType only from lines that are themselves error headers,
+  // not from echoed source code (e.g. `import { MyError } from ...`).
+  // Anchor scan to lines that START with "error:" or an Error/Exception type name.
   if (!errorType) {
-    const anyErrorType = blockBefore.match(/\b(\w*(?:Error|Exception))\b/);
-    if (anyErrorType) errorType = anyErrorType[1];
+    const anchoredErrorTypeRe = /^(?:error|\w*Error|\w*Exception):/m;
+    const anchoredMatch = blockBefore.match(anchoredErrorTypeRe);
+    if (anchoredMatch) {
+      const etm = anchoredMatch[0].match(/^(\w*(?:Error|Exception))\b/);
+      if (etm) errorType = etm[1];
+    }
   }
 
   // Raw span: from last error anchor to just past the (fail) line, capped ~600
@@ -180,6 +309,9 @@ export function failureSignature(d: FailureDiagnostic): string {
 /**
  * Compact model-facing diagnostic block for use in turn prompts.
  * Capped at ~400 chars to keep prompts lean.
+ *
+ * When BOTH expected and actual are undefined, falls back to a trimmed `d.raw`
+ * snippet so the model always sees something concrete — prevents redraft-blind.
  */
 export function renderDiagnostic(d: FailureDiagnostic): string {
   const lines: string[] = [];
@@ -189,6 +321,13 @@ export function renderDiagnostic(d: FailureDiagnostic): string {
   lines.push(`Message: ${d.message.slice(0, 120)}`);
   if (d.expected !== undefined) lines.push(`Expected: ${d.expected}`);
   if (d.actual !== undefined) lines.push(`Received: ${d.actual}`);
+
+  // When we have no expected/actual, include a trimmed raw snippet so the model
+  // always gets something concrete to reason about.
+  if (d.expected === undefined && d.actual === undefined && d.raw) {
+    const rawSnippet = d.raw.slice(0, 200).trim();
+    if (rawSnippet) lines.push(`Details:\n${rawSnippet}`);
+  }
 
   const block = lines.join("\n");
   // Cap at ~400 chars
