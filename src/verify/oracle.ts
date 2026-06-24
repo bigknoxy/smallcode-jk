@@ -1,5 +1,6 @@
 import { runChecker } from "./runner.ts";
 import type { CheckResult, CheckerConfig } from "./types.ts";
+import { type FailureDiagnostic, extractFirstFailure } from "./failure-extract.ts";
 
 /**
  * Tiered verification oracle.
@@ -37,6 +38,8 @@ export interface OracleVerdict {
   newFailures?: string[];
   /** Failing test IDs that were already failing at baseline capture time. */
   baselineFailures?: string[];
+  /** Structured diagnostic for the first failing assertion (set on failing paths). */
+  diagnostic?: FailureDiagnostic;
 }
 
 /**
@@ -198,6 +201,7 @@ export async function runTieredOracle(
       feedback: `Tests failing:\n${feedbackBody}`,
       newFailures,
       baselineFailures: [...baselineFailing],
+      diagnostic: extractFirstFailure(test.result.output) ?? undefined,
     };
   }
 
@@ -225,6 +229,7 @@ export async function runTieredOracle(
         outcome: "failing",
         checks,
         feedback: `Type errors:\n${tsc.output.slice(0, MAX_FEEDBACK)}`,
+        diagnostic: extractFirstFailure(tsc.output) ?? undefined,
       };
     }
   }
