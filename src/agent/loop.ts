@@ -360,11 +360,32 @@ export async function runLoop(
     }
 
     // Stall detection: compute failure signature and check if we're stuck.
+    //
+    // Fix 3b: Gate stall on verdict.outcome === "failing" ALONE — do NOT require
+    // verdict.diagnostic to be present. When diagnostic is available use it for
+    // a stable signature; otherwise fall back to a stable hash of the feedback
+    // text. This ensures typecheck-tier failures (where extractFirstFailure
+    // previously returned null) also participate in stall detection.
     let turnFailureSig: string | undefined;
     let turnRedrafted = false;
 
-    if (verdict?.outcome === "failing" && verdict.diagnostic) {
-      turnFailureSig = failureSignature(verdict.diagnostic);
+    if (verdict?.outcome === "failing") {
+      // Compute a stable signature: prefer the structured diagnostic; fall back
+      // to the first 200 chars of feedback (already stable — no timing, no paths
+      // in tsc/feedback text after normalization).
+      if (verdict.diagnostic) {
+        turnFailureSig = failureSignature(verdict.diagnostic);
+      } else {
+        // Stable fallback from feedback text — normalize timing/paths/whitespace.
+        const fbStable = (verdict.feedback ?? "")
+          .replace(/\[\d+(?:\.\d+)?ms\]/g, "")
+          .replace(/\/[^\s'"]+\/([^/\s'"]+)/g, "<path>/$1")
+          .replace(/:\d+:\d+/g, ":<loc>")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 200);
+        turnFailureSig = `feedback:${fbStable}`;
+      }
 
       if (turnFailureSig === state.lastFailureSignature) {
         // Same failure again — increment stall counter.

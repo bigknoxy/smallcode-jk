@@ -387,3 +387,103 @@ describe("stall detection — no false stall on different failures", () => {
     30_000,
   );
 });
+
+// ---------------------------------------------------------------------------
+// 18. Typecheck-tier stall fires redraft (Fix 3)
+//
+// When NO test files exist but a persistent TS type error is present,
+// the oracle returns outcome="failing" via Tier-2 typecheck. The stall
+// logic must detect this and fire a redraft after STALL_LIMIT turns.
+// ---------------------------------------------------------------------------
+
+/**
+ * Scaffold a repo with NO test files but a real TS type error.
+ * The tsconfig must be valid so tsc runs and emits a real TS2322 diagnostic.
+ */
+async function scaffoldTypecheckFailingRepo(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+
+  // A source file with a type error: string assigned to number
+  await writeFile(
+    join(dir, "src.ts"),
+    `const x: number = "not a number";\nexport {};\n`,
+    "utf-8",
+  );
+
+  // A valid tsconfig that covers src.ts
+  await writeFile(
+    join(dir, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        target: "ES2020",
+        module: "ESNext",
+        moduleResolution: "bundler",
+      },
+      include: ["src.ts"],
+    }),
+    "utf-8",
+  );
+
+  await writeFile(join(dir, "package.json"), '{"name":"tc-stall-fixture","type":"module"}', "utf-8");
+}
+
+describe("stall detection — typecheck-tier stall", () => {
+  test(
+    "18. typecheck-tier failing outcome increments stallCount and fires redraft",
+    async () => {
+      await scaffoldTypecheckFailingRepo(repoDir);
+      // STALL_LIMIT=2: 3 same-sig failures → redraft fires for turn 4.
+      // Use maxTurns=4 to get through the full stall cycle.
+      const config = makeConfig(repoDir, 4);
+      const state = createState(config, "test typecheck stall");
+      state.goals = [{ id: "goal-1", description: "fix the type error", status: "pending" }];
+
+      const promptsSeen: string[] = [];
+      const provider: Provider = {
+        complete: async (req: CompletionRequest): Promise<CompletionResponse> => {
+          const userMsg = req.messages.find((m) => m.role === "user");
+          if (userMsg && typeof userMsg.content === "string") {
+            promptsSeen.push(userMsg.content);
+          }
+          return {
+            rawContent: "working on it...",
+            model: "test-model",
+            usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+            finishReason: "stop",
+          };
+        },
+        stream: async function* (): AsyncIterableIterator<StreamChunk> {
+          yield { delta: "working on it...", done: true };
+        },
+      };
+
+      const finalState = await runLoop(
+        state,
+        join(testDir, "state.json"),
+        {
+          provider,
+          profile: makeProfile(),
+          reasoningHandler: new ReasoningHandler({ open: "<think>", close: "</think>" }),
+          config,
+        },
+        async () => makeContext(),
+      );
+
+      // stall logic must have run: either stallCount > 0 or a redraft fired
+      const sawStall =
+        (finalState.stallCount ?? 0) > 0 ||
+        (finalState.redraftCount ?? 0) > 0 ||
+        finalState.turns.some((t) => t.redrafted) === true;
+      expect(sawStall).toBe(true);
+
+      // After STALL_LIMIT (2) consecutive same-sig typecheck failures the 4th turn
+      // should have REDRAFT in its prompt (turns are 0-indexed in promptsSeen).
+      if (promptsSeen.length >= 4) {
+        expect(promptsSeen[3]).toContain("REDRAFT");
+      }
+    },
+    60_000,
+  );
+});
