@@ -28,7 +28,11 @@ Working branch: `feat/release-automation` (off `main`). `main` is protected (rul
 - [x] **WT-B CI/releases** — MERGED. `.github/workflows/ci.yml` (job `test`: bun install→tsc→bun test), `release-please.yml` + `release-please-config.json` + `.release-please-manifest.json` (0.1.0), `CHANGELOG.md`. Validated YAML/JSON; CI steps green locally.
 - [x] Flaky integration test hardened (30s→60s timeouts; was load-induced from concurrent agents, not a CI risk).
 - [ ] Mechanical: replace `github.com/bigknoxy/smallcode-claude` → `smallcode-jk` and Pages URL refs across `index.html`, `docs/*.html`, README. (owner: main agent)
-- [ ] Wire CI as a **required status check** in the `main` ruleset (after CI has run once so the check name is known).
+- [x] Wire CI as a **required status check** in the `main` ruleset — done (ruleset 18090982 now has a `required_status_checks` rule for context `test`).
+- [x] PR #3 (distribution) admin-merged to `main`; CI `test` passed on the PR (39s).
+- [x] Security: pinned all GitHub Actions to commit SHAs + added `.github/dependabot.yml` (PR #4). (Automated security review flagged unpinned actions.)
+- **GOTCHA (release-please):** the first run FAILED with "GitHub Actions is not permitted to create or approve pull requests." Fix = `gh api -X PUT repos/bigknoxy/smallcode-jk/actions/permissions/workflow -F default_workflow_permissions=write -F can_approve_pull_request_reviews=true` (this repo setting is OFF by default). After fixing, re-run the release-please workflow.
+- **NOTE:** release-please computed the first version as **1.0.0** (not 0.1.0) — verify the changelog when its PR opens; adjust via a `Release-As: x.y.z` commit footer or config if the major bump is unwanted.
 - [x] GEPA-skills research → `docs/research/gepa-skills.md`. TL;DR: gskill GEPA-evolves a repo-scoped additive `SKILL.md` that transfers across models (Jinja 55→82%, Bleve 24→93%). smallcode is ~80% GEPA-shaped already; concrete next PR = add `PromptSet.skill?` slot + `src/improve/skill-distiller.ts` (mine passing transcripts → seed skill), pure-code/unit-verifiable; GEPA-evolving it is compute-gated. Offline caveat: use a LOCAL stronger reflector (qwen2.5-coder-7b), never cloud. (Future track, not part of this release initiative.)
 - [ ] PR `feat/release-automation` → `main`; confirm **CI green on the PR**; admin-merge.
 - [ ] After merge: release-please opens its release PR → merge it → first release (v0.1.0) created. Verify the release + CHANGELOG exist.
