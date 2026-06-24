@@ -24,14 +24,14 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultRegistry, ModelRegistry } from "../src/models/registry.ts";
+import { defaultRegistry } from "../src/models/registry.ts";
 
-const K = Number(process.env.SMALLCODE_BO_K ?? "3");
-const LIMIT = Number(process.env.SMALLCODE_BO_LIMIT ?? "20");
-const OFFSET = Number(process.env.SMALLCODE_BO_OFFSET ?? "0");
-const TRIAL_TIMEOUT_MS = Number(process.env.SMALLCODE_BO_TIMEOUT_MS ?? `${10 * 60 * 1000}`);
-const CACHE_PATH = process.env.SMALLCODE_BO_CACHE ?? "/tmp/mpe-he-ts.json";
-const MAX_TURNS = Number(process.env.SMALLCODE_BO_MAX_TURNS ?? "5");
+const K = Number(process.env['SMALLCODE_BO_K'] ?? "3");
+const LIMIT = Number(process.env['SMALLCODE_BO_LIMIT'] ?? "20");
+const OFFSET = Number(process.env['SMALLCODE_BO_OFFSET'] ?? "0");
+const TRIAL_TIMEOUT_MS = Number(process.env['SMALLCODE_BO_TIMEOUT_MS'] ?? `${10 * 60 * 1000}`);
+const CACHE_PATH = process.env['SMALLCODE_BO_CACHE'] ?? "/tmp/mpe-he-ts.json";
+const MAX_TURNS = Number(process.env['SMALLCODE_BO_MAX_TURNS'] ?? "5");
 const DATASET_URL =
   "https://datasets-server.huggingface.co/rows?dataset=nuprl/MultiPL-E&config=humaneval-ts&split=test";
 
@@ -257,7 +257,7 @@ async function main(): Promise<void> {
   // Parse model IDs and flags from argv
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const dryRun =
-    process.argv.includes("--dry-run") || process.env.SMALLCODE_BO_DRY_RUN === "1";
+    process.argv.includes("--dry-run") || process.env['SMALLCODE_BO_DRY_RUN'] === "1";
 
   if (args.length === 0) {
     console.error("[bakeoff] Usage: bun scripts/run-bakeoff.ts [--dry-run] <modelId> [modelId ...]");

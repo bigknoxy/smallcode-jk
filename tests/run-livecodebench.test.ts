@@ -106,11 +106,11 @@ describe("fetchProblems (from cache)", () => {
   const setup = () => {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(cachePath, JSON.stringify(sampleProblems), "utf-8");
-    process.env.SMALLCODE_LCB_CACHE = cachePath;
+    process.env['SMALLCODE_LCB_CACHE'] = cachePath;
   };
 
   const teardown = () => {
-    delete process.env.SMALLCODE_LCB_CACHE;
+    delete process.env['SMALLCODE_LCB_CACHE'];
     rmSync(cacheDir, { recursive: true, force: true });
   };
 
@@ -118,7 +118,6 @@ describe("fetchProblems (from cache)", () => {
     setup();
     try {
       // Import fresh after env var is set
-      const { fetchProblems } = await import("../scripts/run-livecodebench.ts");
       // Patch module cache is not straightforward in bun; test via direct file read
       const f = Bun.file(cachePath);
       const data = await f.json() as LcbProblem[];
@@ -131,7 +130,6 @@ describe("fetchProblems (from cache)", () => {
   test("filters by afterDate correctly", async () => {
     setup();
     try {
-      const { fetchProblems } = await import("../scripts/run-livecodebench.ts");
       // We can exercise the filter logic directly on the same data
       const allProblems: LcbProblem[] = JSON.parse(await Bun.file(cachePath).text());
       const cutoff = new Date("2024-09-01").getTime();

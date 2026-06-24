@@ -6,7 +6,6 @@ import {
   buildTestFile,
   aggregateResults,
   stubSolutionSource,
-  type EvalPlusProblem,
   type EvalPlusResult,
 } from "../scripts/run-evalplus.ts";
 

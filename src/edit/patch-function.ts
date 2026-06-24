@@ -243,7 +243,6 @@ function locateFunctionRegion(
   let depth = 0;
   let foundOpenBrace = false;
   let endChar = -1;
-  let scanPos = startChar;
 
   // Scan character by character through content from startChar
   for (let j = startChar; j < content.length; j++) {
@@ -265,7 +264,6 @@ function locateFunctionRegion(
         }
       }
     }
-    scanPos = j + 1;
   }
 
   if (endChar === -1) {

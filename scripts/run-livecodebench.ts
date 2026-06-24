@@ -37,13 +37,13 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const LIMIT = Number(process.env.SMALLCODE_LCB_LIMIT ?? "20");
-const OFFSET = Number(process.env.SMALLCODE_LCB_OFFSET ?? "0");
-const K = Number(process.env.SMALLCODE_LCB_K ?? "3");
-const MAX_TURNS = Number(process.env.SMALLCODE_LCB_MAX_TURNS ?? "5");
-const TRIAL_TIMEOUT_MS = Number(process.env.SMALLCODE_LCB_TIMEOUT_MS ?? `${10 * 60 * 1000}`);
-const CACHE_PATH = process.env.SMALLCODE_LCB_CACHE ?? "/tmp/lcb-ts.json";
-const AFTER_DATE = process.env.SMALLCODE_LCB_AFTER ?? "";
+const LIMIT = Number(process.env['SMALLCODE_LCB_LIMIT'] ?? "20");
+const OFFSET = Number(process.env['SMALLCODE_LCB_OFFSET'] ?? "0");
+const K = Number(process.env['SMALLCODE_LCB_K'] ?? "3");
+const MAX_TURNS = Number(process.env['SMALLCODE_LCB_MAX_TURNS'] ?? "5");
+const TRIAL_TIMEOUT_MS = Number(process.env['SMALLCODE_LCB_TIMEOUT_MS'] ?? `${10 * 60 * 1000}`);
+const CACHE_PATH = process.env['SMALLCODE_LCB_CACHE'] ?? "/tmp/lcb-ts.json";
+const AFTER_DATE = process.env['SMALLCODE_LCB_AFTER'] ?? "";
 
 /**
  * NOTE (dataset URL): LiveCodeBench does not yet publish a Hugging Face rows API for TS problems.
@@ -197,7 +197,7 @@ export const stubSolutionSource: SolutionSource = async (stub) => stub;
 
 async function main(): Promise<void> {
   const dryRun =
-    process.argv.includes("--dry-run") || process.env.SMALLCODE_LCB_DRY_RUN === "1";
+    process.argv.includes("--dry-run") || process.env['SMALLCODE_LCB_DRY_RUN'] === "1";
 
   const afterLabel = AFTER_DATE ? ` | after=${AFTER_DATE}` : "";
   console.log(

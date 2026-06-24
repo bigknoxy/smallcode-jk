@@ -100,7 +100,7 @@ describe("planTask — pre-solve reflection enabled", () => {
       "1. Read src/config.ts\n2. Add null check in parseConfig\n3. Run tests",
     ]);
 
-    const goals = await planTask("fix null bug", makeContext(), makeOpts(provider, { preSolveReflection: true }));
+    await planTask("fix null bug", makeContext(), makeOpts(provider, { preSolveReflection: true }));
 
     expect(calls).toHaveLength(2);
     // First call is the reflection step
@@ -146,7 +146,7 @@ describe("planTask — pre-solve reflection enabled", () => {
   it("falls back gracefully if reflection provider call fails", async () => {
     let callCount = 0;
     const provider: Provider = {
-      complete: async (req: CompletionRequest): Promise<CompletionResponse> => {
+      complete: async (_req: CompletionRequest): Promise<CompletionResponse> => {
         callCount++;
         if (callCount === 1) throw new Error("reflection network error");
         return {
