@@ -5,6 +5,7 @@ import { createState, getStatePath } from "../../agent/state.ts";
 import type { AgentConfig } from "../../agent/types.ts";
 import { loadConfig } from "../../config/loader.ts";
 import type { ContextBundle } from "../../context/types.ts";
+import { buildContext, walkRepo } from "../../context/index.ts";
 import { ModelRegistry } from "../../models/registry.ts";
 import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
@@ -87,17 +88,34 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   const state = createState(agentConfig, task);
   const statePath = getStatePath(agentConfig);
 
-  // 7. Plan task
-  process.stderr.write("[smallcode] Planning...\n");
+  // 6b. Index the repository so the agent can SEE the codebase (symbol map +
+  // query-relevant file chunks). Without this the model runs blind and can only
+  // guess file names. Half the context window is reserved for repo context; the
+  // rest is left for the conversation and the model's reasoning.
+  process.stderr.write("[smallcode] Scanning repository...\n");
+  const ctxBudget = Math.max(2048, Math.floor(profile.contextWindow * 0.5));
+  let repoMap: Awaited<ReturnType<typeof walkRepo>>;
+  try {
+    repoMap = await walkRepo({ root: repoRoot }, Date.now());
+    process.stderr.write(
+      `[smallcode] Indexed ${repoMap.files.length} files, ${repoMap.totalSymbols} symbols\n`,
+    );
+  } catch (err) {
+    progress.showError(`repository scan failed: ${String(err)}`);
+    process.exit(1);
+  }
 
-  // Build a minimal empty context for planning
-  const emptyContext: ContextBundle = {
-    chunks: [],
-    totalTokens: 0,
-    tokenBudget: profile.contextWindow,
-    truncated: false,
-    query: task,
-  };
+  async function buildBundle(query: string): Promise<ContextBundle> {
+    try {
+      return await buildContext(repoMap, query, { repoRoot, tokenBudget: ctxBudget });
+    } catch {
+      return { chunks: [], totalTokens: 0, tokenBudget: ctxBudget, truncated: false, query };
+    }
+  }
+
+  // 7. Plan task — planner sees the repo context for the task.
+  process.stderr.write("[smallcode] Planning...\n");
+  const planningContext = await buildBundle(task);
 
   const plannerOpts = {
     provider,
@@ -108,7 +126,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
 
   let goals: ReturnType<typeof createState>["goals"];
   try {
-    goals = await planTask(task, emptyContext, plannerOpts);
+    goals = await planTask(task, planningContext, plannerOpts);
   } catch (err) {
     progress.showError(`planning failed: ${String(err)}`);
     process.exit(1);
@@ -125,15 +143,9 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     progress.showTurnStart(1, maxTurns, firstGoal.description);
   }
 
-  // 10. getContext callback — returns empty context bundle (symbol-only for large repos)
-  function getContext(_goal: string): Promise<ContextBundle> {
-    return Promise.resolve({
-      chunks: [],
-      totalTokens: 0,
-      tokenBudget: profile.contextWindow,
-      truncated: false,
-      query: _goal,
-    });
+  // 10. getContext callback — returns repo context relevant to the current goal.
+  function getContext(goal: string): Promise<ContextBundle> {
+    return buildBundle(goal);
   }
 
   const deps = {

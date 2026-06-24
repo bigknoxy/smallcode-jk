@@ -265,4 +265,14 @@ MIT
 - `SMALLCODE_DRY_RUN`: _(add description)_
 - `SMALLCODE_EVAL_MAX_TURNS`: _(add description)_
 - `SMALLCODE_EVAL_K`: _(add description)_
+- `SMALLCODE_HE_LIMIT`: _(add description)_
+- `SMALLCODE_HE_OFFSET`: _(add description)_
+- `SMALLCODE_HE_K`: _(add description)_
+- `SMALLCODE_HE_MAX_TURNS`: _(add description)_
+- `SMALLCODE_HE_TIMEOUT_MS`: _(add description)_
+- `SMALLCODE_RERUN_TIMEOUT_MS`: _(add description)_
+- `SMALLCODE_HE_CACHE`: _(add description)_
+- `SMALLCODE_SMOKE_OFFSET`: _(add description)_
+- `SMALLCODE_SMOKE_N`: _(add description)_
+- `SMALLCODE_SMOKE_MAX_TURNS`: _(add description)_
 <!-- agent-skills:doc-keeper:end -->

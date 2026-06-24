@@ -16,6 +16,12 @@ export interface LoopDependencies {
   profile: ModelProfile;
   reasoningHandler: ReasoningHandler;
   config: AgentConfig;
+  /**
+   * Optional per-run sampling override. Best-of-N uses this to vary temperature
+   * across attempts so independent retries explore different solutions instead
+   * of re-drawing the same one. Falls back to the model profile defaults.
+   */
+  samplingOverride?: { temperature?: number; top_p?: number };
 }
 
 interface ParsedToolCall {
@@ -130,6 +136,8 @@ export async function runLoop(
   getContext: (goal: string) => Promise<ContextBundle>,
 ): Promise<AgentState> {
   const { provider, profile, reasoningHandler, config } = deps;
+  const sampleTemp = deps.samplingOverride?.temperature ?? profile.samplingDefaults.temperature;
+  const sampleTopP = deps.samplingOverride?.top_p ?? profile.samplingDefaults.top_p;
   const systemPrompt = buildSystemPrompt(profile, config);
 
   const readFileFn = buildReadFile(state.repoRoot);
@@ -200,8 +208,8 @@ export async function runLoop(
           { role: "system", content: systemPrompt },
           { role: "user", content: turnPrompt },
         ],
-        temperature: profile.samplingDefaults.temperature,
-        top_p: profile.samplingDefaults.top_p,
+        temperature: sampleTemp,
+        top_p: sampleTopP,
         max_tokens: profile.samplingDefaults.max_tokens,
         ollamaOptions: profile.ollamaOptions,
       });

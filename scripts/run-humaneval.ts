@@ -42,8 +42,25 @@ interface MpeProblem {
   tests: string;
 }
 
+/**
+ * Local cache of the full dataset. Built once by scripts/cache-humaneval.ts, it
+ * makes per-problem runs network-independent — a dropped connection mid-run can
+ * no longer turn a solvable problem into a phantom 0/3 fetch failure.
+ */
+const CACHE_PATH = process.env.SMALLCODE_HE_CACHE ?? "/tmp/mpe-he-ts.json";
+
 /** Fetch `count` problems starting at `offset` (HF API caps length at 100/call). */
-async function fetchProblems(offset: number, count: number): Promise<MpeProblem[]> {
+export async function fetchProblems(offset: number, count: number): Promise<MpeProblem[]> {
+  // Prefer the local cache: if it holds the requested slice, no network at all.
+  const cacheFile = Bun.file(CACHE_PATH);
+  if (await cacheFile.exists()) {
+    const all = (await cacheFile.json()) as MpeProblem[];
+    const slice = all.slice(offset, offset + count);
+    if (slice.length === count || (slice.length > 0 && offset + count > all.length)) {
+      return slice;
+    }
+  }
+
   const out: MpeProblem[] = [];
   let got = 0;
   while (got < count) {
@@ -60,7 +77,7 @@ async function fetchProblems(offset: number, count: number): Promise<MpeProblem[
 }
 
 /** Last `function <name>(` in the stub is the target to implement. */
-function entryName(prompt: string, name: string): string {
+export function entryName(prompt: string, name: string): string {
   const matches = [...prompt.matchAll(/function\s+([A-Za-z_$][\w$]*)\s*\(/g)];
   const last = matches.at(-1);
   if (last?.[1]) return last[1];
@@ -68,13 +85,13 @@ function entryName(prompt: string, name: string): string {
 }
 
 /** Export the target function so the test file can import it. */
-function exportedStub(prompt: string, entry: string): string {
+export function exportedStub(prompt: string, entry: string): string {
   if (new RegExp(`export\\s+function\\s+${entry}\\b`).test(prompt)) return prompt;
   return prompt.replace(new RegExp(`function\\s+${entry}\\b`), `export function ${entry}`);
 }
 
 /** Wrap MultiPL-E's node:assert test() into a bun:test that imports the solution. */
-function buildTestFile(tests: string, entry: string, name: string): string {
+export function buildTestFile(tests: string, entry: string, name: string): string {
   let body = tests.replace(/function\s+test\s*\(\s*\)/, "function __mpe_test()");
   body = body.replace(/\n\s*test\s*\(\s*\)\s*;?\s*$/, "\n"); // drop trailing test();
   return [
@@ -88,7 +105,7 @@ function buildTestFile(tests: string, entry: string, name: string): string {
   ].join("\n");
 }
 
-function runBunTest(dir: string): boolean {
+export function runBunTest(dir: string): boolean {
   const proc = Bun.spawnSync(["bun", "test"], { cwd: dir, timeout: 60_000 });
   const out =
     (proc.stdout instanceof Uint8Array ? new TextDecoder().decode(proc.stdout) : "") +
@@ -211,6 +228,7 @@ async function main(): Promise<void> {
   console.log(`  pass@${K} (any-k):   ${(anyPass / nProblems).toFixed(3)}  (${anyPass}/${nProblems} problems)`);
 }
 
+if (import.meta.main)
 main().catch((err: unknown) => {
   console.error("[humaneval] ERROR:", err instanceof Error ? err.message : String(err));
   process.exit(1);
