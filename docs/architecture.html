@@ -299,8 +299,10 @@ graph TD
     <h2>Agent turn loop</h2>
     <p>
       State is persisted to <code>.smallcode/state.json</code> after every turn (atomic rename).
-      The loop terminates when tests go green (early-stop oracle), all goals are done, or
+      The loop terminates when tests are solved (baseline-relative early-stop oracle), all goals are done, or
       <code>maxTurns</code> is reached (default 15, eval uses 5).
+      A test-baseline is captured before the first turn; "solved" means zero <em>new</em> failures vs
+      baseline AND ≥1 pass — pre-existing unrelated failures never block early-stop.
     </p>
     <div class="diagram-wrap">
       <div class="mermaid">
@@ -320,7 +322,7 @@ flowchart TD
     EXECTOOLS --> ORACLE[Auto run_tests\nbun test — deterministic pass oracle]
     ORACLE --> ADDTURN[addTurn + saveState]
 
-    ADDTURN --> GREEN{exitCode=0\nfailures=0?}
+    ADDTURN --> GREEN{newFailures=0\npassCount≥1?}
     GREEN -- yes --> ALLDONE[mark all goals done\nstatus = done]
     ALLDONE --> DONE
     GREEN -- no --> FINISH{TOOL: finish\ncalled?}
@@ -554,12 +556,16 @@ flowchart TD
         </p>
       </div>
       <div class="decision">
-        <strong>Why test-oracle early-stop?</strong>
+        <strong>Why test-oracle early-stop (baseline-relative)?</strong>
         <p>
-          Tests green = task solved with certainty (same suite the final grader uses).
-          Breaking immediately: (1) locks the pass — later turns cannot accidentally regress a
-          correct solution; (2) stops burning turns; (3) handles "should-not-edit" tasks —
-          if tests start green, loop exits on turn 1.
+          "Solved" = zero <em>new</em> failures vs a baseline captured before the loop starts,
+          AND ≥1 passing test. This handles repos with pre-existing unrelated failures:
+          those failures appear in the baseline set and are excluded from the "solved" check,
+          so the agent is not penalised for failures it did not introduce.
+          On fresh single-file benchmark repos (no pre-existing failures) the baseline set is
+          empty and behaviour is identical to the original whole-suite-green check.
+          Breaking immediately: (1) locks the pass; (2) stops burning turns;
+          (3) handles "should-not-edit" tasks — if no new failures exist on turn 1, loop exits.
         </p>
       </div>
       <div class="decision">

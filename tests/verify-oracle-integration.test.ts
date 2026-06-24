@@ -2,7 +2,7 @@ import { test, expect, afterEach } from "bun:test";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runTieredOracle } from "../src/verify/oracle.ts";
+import { captureTestBaseline, runTieredOracle } from "../src/verify/oracle.ts";
 
 // End-to-end oracle behavior against real `bun test` / `tsc` subprocesses (no
 // Ollama). Verifies the tiering: tests authoritative, typecheck advisory fallback
@@ -28,6 +28,78 @@ const TSCONFIG = JSON.stringify({
   compilerOptions: { strict: true, noEmit: true, module: "esnext", target: "esnext", moduleResolution: "bundler" },
   include: ["src"],
 });
+
+// ===== BASELINE FIX INTEGRATION TESTS =====
+
+test("baseline fix: pre-existing red + add passing test → solved", async () => {
+  // Start with a failing test (pre-existing failure).
+  const dir = await scaffold({
+    "src/m.ts": "export const add = (a: number, b: number) => a - b;\n",
+    "tests/pre-existing.test.ts":
+      'import { test, expect } from "bun:test";\nimport { add } from "../src/m.ts";\ntest("pre-existing fail", () => expect(add(2, 3)).toBe(5));\n',
+    "package.json": '{"name":"t","type":"module"}',
+  });
+
+  // Capture baseline: one failure pre-existing.
+  const baseline = captureTestBaseline(dir);
+  expect(baseline.hadAnyTests).toBe(true);
+  expect(baseline.failingIds.has("pre-existing fail")).toBe(true);
+
+  // Fix the bug AND add a passing test for the new feature.
+  await writeFile(
+    join(dir, "src/m.ts"),
+    "export const add = (a: number, b: number) => a + b;\n",
+    "utf-8",
+  );
+
+  // The pre-existing test now passes too (as a side-effect of the fix), plus ≥1 pass.
+  // Oracle should see 0 new failures → solved.
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("solved");
+  expect(verdict.newFailures).toHaveLength(0);
+}, 30_000);
+
+test("baseline fix: pre-existing red, nothing solved → failing, newFailures empty", async () => {
+  // Start with a failing test; capture baseline; do nothing; re-run oracle.
+  const dir = await scaffold({
+    "src/m.ts": "export const add = (a: number, b: number) => a - b;\n",
+    "tests/red.test.ts":
+      'import { test, expect } from "bun:test";\nimport { add } from "../src/m.ts";\ntest("add should work", () => expect(add(2, 3)).toBe(5));\n',
+    "package.json": '{"name":"t","type":"module"}',
+  });
+
+  const baseline = captureTestBaseline(dir);
+  // Run oracle without changing anything — same failure as baseline.
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("failing");
+  // The failure was pre-existing, not new.
+  expect(verdict.newFailures).toHaveLength(0);
+}, 30_000);
+
+test("baseline fix: pre-existing red + NEW failing test → failing, newFailures has only new id", async () => {
+  const dir = await scaffold({
+    "src/m.ts": "export const add = (a: number, b: number) => a - b;\n",
+    "tests/pre-existing.test.ts":
+      'import { test, expect } from "bun:test";\nimport { add } from "../src/m.ts";\ntest("pre-existing fail", () => expect(add(2, 3)).toBe(5));\n',
+    "package.json": '{"name":"t","type":"module"}',
+  });
+
+  const baseline = captureTestBaseline(dir);
+
+  // Add a NEW failing test on top.
+  await writeFile(
+    join(dir, "tests/new-fail.test.ts"),
+    'import { test, expect } from "bun:test";\ntest("brand new failure", () => expect(1).toBe(999));\n',
+    "utf-8",
+  );
+
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("failing");
+  expect(verdict.newFailures).toContain("brand new failure");
+  expect(verdict.newFailures).not.toContain("pre-existing fail");
+}, 30_000);
+
+// ===== BACK-COMPAT: no-baseline arg behaves as before =====
 
 test("solved: passing test → outcome solved", async () => {
   const dir = await scaffold({
@@ -83,4 +155,20 @@ test("clean (not false-fail): no test + no tsconfig → typecheck skipped, outco
   });
   const v = await runTieredOracle(dir);
   expect(v.outcome).toBe("clean");
+}, 60_000);
+
+test("captureTestBaseline: absent-tests repo → hadAnyTests false, oracle falls through to typecheck clean", async () => {
+  const dir = await scaffold({
+    "src/g.ts": "export const greet = (n: string) => n;\n",
+    "package.json": '{"name":"t","type":"module"}',
+  });
+
+  const baseline = captureTestBaseline(dir);
+  expect(baseline.hadAnyTests).toBe(false);
+  expect(baseline.failingIds.size).toBe(0);
+
+  // Oracle with this baseline should fall through to Tier 2 (typecheck) and
+  // return "clean" since there's no tsconfig to enforce strict checks.
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("clean");
 }, 60_000);

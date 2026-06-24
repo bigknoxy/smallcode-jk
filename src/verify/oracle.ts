@@ -33,6 +33,38 @@ export interface OracleVerdict {
   checks: CheckResult[];
   /** Model-facing summary of what failed (empty when solved/clean). */
   feedback: string;
+  /** Failing test IDs introduced since the baseline (baseline fix). */
+  newFailures?: string[];
+  /** Failing test IDs that were already failing at baseline capture time. */
+  baselineFailures?: string[];
+}
+
+/**
+ * Parse `bun test` output into a set of failing-test identifiers.
+ *
+ * Bun prints each failing test as:
+ *   (fail) <label> [12ms]
+ *
+ * The label is either a bare test name or a "describe > name" path.
+ * We strip the trailing `[…ms]` timing suffix so IDs are stable across runs.
+ *
+ * Exported for unit testing.
+ */
+export function parseFailingTestIds(output: string): Set<string> {
+  const ids = new Set<string>();
+  // Match: (fail) <label> [<digits>ms]  (with optional leading whitespace)
+  // Also handle the ✗ marker variant some Bun versions emit.
+  const re = /^\s*(?:\(fail\)|✗)\s+(.+?)\s+\[\d+(?:\.\d+)?ms\]\s*$/gm;
+  for (const m of output.matchAll(re)) {
+    const label = (m[1] ?? "").trim();
+    if (label) ids.add(label);
+  }
+  return ids;
+}
+
+export interface TestBaseline {
+  failingIds: Set<string>;
+  hadAnyTests: boolean;
 }
 
 export type TestState = "green" | "red" | "absent";
@@ -68,6 +100,14 @@ export function tscHasRealErrors(output: string): boolean {
   return diagnostics.some((code) => !configCodes.has(code));
 }
 
+export function captureTestBaseline(repoRoot: string): TestBaseline {
+  const { state, result } = runBunTest(repoRoot);
+  return {
+    failingIds: parseFailingTestIds(result.output),
+    hadAnyTests: state !== "absent",
+  };
+}
+
 function runBunTest(repoRoot: string): { state: TestState; result: CheckResult } {
   const start = Date.now();
   const proc = Bun.spawnSync(["bun", "test"], { cwd: repoRoot, timeout: 120_000 });
@@ -92,6 +132,12 @@ function runBunTest(repoRoot: string): { state: TestState; result: CheckResult }
 export interface TieredOracleOptions {
   /** Override the typecheck checker (e.g. to disable, or point elsewhere). */
   typecheck?: CheckerConfig | null;
+  /**
+   * Pre-loop baseline snapshot. When provided, "solved" means zero NEW failures
+   * (vs baseline) AND ≥1 pass, rather than zero failures total. This prevents
+   * pre-existing unrelated failing tests from blocking early-stop forever.
+   */
+  baseline?: TestBaseline;
 }
 
 export async function runTieredOracle(
@@ -100,14 +146,34 @@ export async function runTieredOracle(
 ): Promise<OracleVerdict> {
   // Tier 1: tests (authoritative).
   const test = runBunTest(repoRoot);
-  if (test.state === "green") {
-    return { outcome: "solved", checks: [test.result], feedback: "" };
-  }
-  if (test.state === "red") {
+  if (test.state !== "absent") {
+    const baselineFailing: Set<string> = opts.baseline?.failingIds ?? new Set();
+    const currentFailing = parseFailingTestIds(test.result.output);
+    const newFailures = [...currentFailing].filter((id) => !baselineFailing.has(id));
+    const passCount = num(test.result.output.match(/(\d+)\s+pass/i));
+
+    if (newFailures.length === 0 && passCount >= 1) {
+      return {
+        outcome: "solved",
+        checks: [test.result],
+        feedback: "",
+        newFailures: [],
+        baselineFailures: [...baselineFailing],
+      };
+    }
+
+    // Build focused feedback: lead with new failures, fall back to full output.
+    const feedbackBody =
+      newFailures.length > 0
+        ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+        : test.result.output.slice(0, MAX_FEEDBACK);
+
     return {
       outcome: "failing",
       checks: [test.result],
-      feedback: `Tests failing:\n${test.result.output.slice(0, MAX_FEEDBACK)}`,
+      feedback: `Tests failing:\n${feedbackBody}`,
+      newFailures,
+      baselineFailures: [...baselineFailing],
     };
   }
 

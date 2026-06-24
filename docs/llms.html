@@ -264,7 +264,7 @@
         <tr><th>File</th><th>Purpose</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>loop.ts</code></td><td>Core agent turn loop — planning, model calls, edit application, tool execution, test-oracle early-stop. Entry point: <code>runLoop(state, statePath, deps, getContext)</code></td></tr>
+        <tr><td><code>loop.ts</code></td><td>Core agent turn loop — planning, model calls, edit application, tool execution, baseline-relative test-oracle early-stop. Captures a <code>TestBaseline</code> before the loop starts; passes it to every <code>runTieredOracle</code> call. Entry point: <code>runLoop(state, statePath, deps, getContext)</code></td></tr>
         <tr><td><code>planner.ts</code></td><td>Calls the model to decompose a task into ≤8 ordered sub-goals. Falls back to a single goal if the model returns nothing parseable. Optional <code>preSolveReflection</code> (default off): one extra cheap call to restate the problem + key edge case, fed into goal generation (AlphaCodium-lite).</td></tr>
         <tr><td><code>prompt.ts</code></td><td><code>buildSystemPrompt</code> — instructs the model to use full-file edits + tool calls; appends discipline rules (minimal-change, surgical, no speculation) gated by <code>AgentConfig.disciplineRules</code> (default on). <code>buildTurnPrompt</code> — assembles task, goal, turn number, last 2 turns of history, and context chunks.</td></tr>
         <tr><td><code>state.ts</code></td><td>Create, load, save (atomic rename), and mutate <code>AgentState</code>. <code>addTurn</code>, <code>advanceGoal</code>, <code>failGoal</code>, <code>isTerminal</code>, <code>currentGoal</code>.</td></tr>
@@ -385,6 +385,7 @@
         <tr><td><code>src/improve/metrics-store.ts</code></td><td>Append <code>MetricsSnapshot</code> to <code>evals/metrics-history.jsonl</code>. Read baseline snapshot for regression gate.</td></tr>
         <tr><td><code>src/improve/regression-gate.ts</code></td><td>Compare current eval run against baseline snapshot. Fail if pass@1 regressed or any task moved from pass to fail.</td></tr>
         <tr><td><code>src/improve/ab-compare.ts</code></td><td>Run two prompt variants against the same suite and compare pass@1.</td></tr>
+        <tr><td><code>src/verify/oracle.ts</code></td><td>Tiered verification oracle. <code>runTieredOracle(repoRoot, opts)</code> — Tier 1: baseline-relative <code>bun test</code> (solved = zero new failures vs <code>opts.baseline</code> AND ≥1 pass); Tier 2: advisory typecheck fallback when no tests exist. <code>captureTestBaseline(repoRoot)</code> — snapshot failing test IDs before the loop. <code>parseFailingTestIds(output)</code> — parse <code>(fail) label [Xms]</code> lines into a stable id set.</td></tr>
         <tr><td><code>src/verify/runner.ts</code></td><td>Run a configurable checker suite (format, lint, typecheck, test) after edits. Return <code>VerifyResult</code>.</td></tr>
         <tr><td><code>src/verify/corrector.ts</code></td><td>Feed verify failures back to the model as a correction prompt. Up to <code>maxCorrectionIterations</code>.</td></tr>
         <tr><td><code>src/verify/sandbox.ts</code></td><td>Sandbox enforcement for verify-phase commands — allowlist check and path traversal guard.</td></tr>
@@ -464,8 +465,11 @@
       <h3>run_tests</h3>
       <div class="tool-sig">TOOL: run_tests {}</div>
       <p>Run <code>bun test</code> (or <code>bun test &lt;pattern&gt;</code>) in <code>repoRoot</code>. Timeout: 60 seconds.
-      Success requires <code>exitCode === 0</code> AND zero failures — <code>bun test</code> exits non-zero when no test files found, so empty-suite runs are not treated as green (prevents false early-stop).
-      This is the deterministic pass-oracle: when this returns success, the loop breaks immediately.</p>
+      "Solved" means zero <em>new</em> failures relative to a pre-loop baseline AND ≥1 passing test.
+      Pre-existing failures captured in the baseline are excluded, so unrelated failing tests in a
+      real repo never block early-stop. On fresh single-file benchmark repos (empty baseline) the
+      behaviour is identical to the original whole-suite-green check.
+      This is the deterministic pass-oracle: when outcome is <code>"solved"</code>, the loop breaks immediately.</p>
       <ul>
         <li><strong>pattern</strong> (string, optional) — test file glob/path</li>
         <li>Returns: <code>{ success: exitCode===0 &amp;&amp; failCount===0, output, durationMs }</code></li>
@@ -484,8 +488,8 @@
       <div class="tool-sig">TOOL: finish {"summary": "implemented add()"}</div>
       <p>Signal goal completion. The harness calls <code>advanceGoal</code> — marks the current goal done
       and increments <code>currentGoalIndex</code>. If all goals are done, status becomes <code>done</code>.
-      <strong>Note:</strong> if tests go green (run_tests succeeds), the loop early-stops before checking
-      for finish — the early-stop oracle takes precedence.</p>
+      <strong>Note:</strong> if the oracle returns <code>"solved"</code> (zero new failures + ≥1 pass vs baseline),
+      the loop early-stops before checking for finish — the baseline-relative early-stop oracle takes precedence.</p>
       <ul>
         <li><strong>summary</strong> (string, optional) — brief description of what was done</li>
       </ul>
