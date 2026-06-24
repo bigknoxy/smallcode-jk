@@ -74,6 +74,15 @@ curl http://localhost:11434/v1/models
 
 The Ollama OpenAI-compatible endpoint is at `http://localhost:11434/v1`. Use this as `provider.baseUrl` in your config.
 
+**Long sessions (recommended):** For sessions longer than ~1 hour, launch Ollama via the provided script instead of `ollama serve`. It sets `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`, which halve KV-cache VRAM usage and slow the llama.cpp KV-cache fragmentation that causes throughput decay on Apple Silicon:
+
+```bash
+chmod +x scripts/ollama-serve.sh
+scripts/ollama-serve.sh   # drop-in replacement for `ollama serve`
+```
+
+The throughput watchdog (`SMALLCODE_WATCHDOG`, on by default) also detects decay automatically and unloads/reloads the model mid-session, but starting with the optimised flags defers the first decay event considerably.
+
 ### llama.cpp
 
 ```bash
