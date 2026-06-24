@@ -88,4 +88,6 @@ export interface AgentConfig {
   statePath?: string; // where to persist AgentState JSON; default: <repoRoot>/.smallcode/state.json
   allowedCommands?: string[]; // allowlist for run_command sandbox
   requireApproval?: boolean; // gate destructive actions behind user approval
+  disciplineRules?: boolean; // include Karpathy-style discipline rules in system prompt (default: true)
+  preSolveReflection?: boolean; // planner briefly reflects before decomposing goals (default: false)
 }

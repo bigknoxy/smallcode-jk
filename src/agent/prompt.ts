@@ -2,7 +2,18 @@ import type { ContextBundle } from "@/context/types.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { AgentConfig, AgentState } from "./types.ts";
 
-export function buildSystemPrompt(_profile: ModelProfile, _config: AgentConfig): string {
+const DISCIPLINE_RULES = `
+
+## DISCIPLINE
+
+8. Write MINIMUM code that solves the task — no speculative features, no abstractions for single-use code, no error handling for impossible cases.
+9. Change ONLY what the task requires. Do NOT rewrite, reformat, or "improve" unrelated lines; preserve existing code and style exactly.
+10. "Minimal" means the CHANGE is small — still emit the WHOLE file as required above.`;
+
+export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): string {
+  // disciplineRules defaults to true when not explicitly set
+  const includeDiscipline = config.disciplineRules !== false;
+
   return `You are smallcode, a coding assistant. Edit files to complete coding tasks.
 
 ## HOW TO EDIT A FILE
@@ -38,7 +49,7 @@ Finish a goal:    TOOL: finish {"summary": "what was done"}
 4. After editing, call TOOL: run_tests {} to verify.
 5. After tests pass, call TOOL: finish {"summary": "..."}.
 6. If no change is needed, call TOOL: finish {"summary": "no changes needed"} with NO FILE: block.
-7. Do NOT output numbered lists of steps. Output the FILE: block and tool calls only.
+7. Do NOT output numbered lists of steps. Output the FILE: block and tool calls only.${includeDiscipline ? DISCIPLINE_RULES : ""}
 
 ## EXAMPLE: fixing a bug
 
