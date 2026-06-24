@@ -28,7 +28,7 @@ Working branch: `feat/release-automation` (off `main`). `main` is protected (rul
 - [ ] **WT-B `wt/ci-releases`** (worktree `../smallcode-wt-relb`): `.github/workflows/ci.yml`, release-please workflow + `release-please-config.json` + `.release-please-manifest.json`, add `version` to `package.json`, seed `CHANGELOG.md`.
 - [ ] Mechanical: replace `github.com/bigknoxy/smallcode-claude` → `smallcode-jk` and Pages URL refs across `index.html`, `docs/*.html`, README. (owner: main agent)
 - [ ] Wire CI as a **required status check** in the `main` ruleset (after CI has run once so the check name is known).
-- [ ] GEPA-skills research → findings written to `docs/research/gepa-skills.md` (separate research subagent).
+- [x] GEPA-skills research → `docs/research/gepa-skills.md`. TL;DR: gskill GEPA-evolves a repo-scoped additive `SKILL.md` that transfers across models (Jinja 55→82%, Bleve 24→93%). smallcode is ~80% GEPA-shaped already; concrete next PR = add `PromptSet.skill?` slot + `src/improve/skill-distiller.ts` (mine passing transcripts → seed skill), pure-code/unit-verifiable; GEPA-evolving it is compute-gated. Offline caveat: use a LOCAL stronger reflector (qwen2.5-coder-7b), never cloud. (Future track, not part of this release initiative.)
 - [ ] PR `feat/release-automation` → `main`; confirm **CI green on the PR**; admin-merge.
 - [ ] After merge: release-please opens its release PR → merge it → first release (v0.1.0) created. Verify the release + CHANGELOG exist.
 - [ ] **End-to-end VERIFY (no assumptions):** in a clean `HOME`, `curl <raw install.sh> | sh` → `smallcode --version` prints the release version → `smallcode update` works → `smallcode uninstall` removes everything. Record results here.
