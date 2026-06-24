@@ -265,8 +265,8 @@
       </thead>
       <tbody>
         <tr><td><code>loop.ts</code></td><td>Core agent turn loop — planning, model calls, edit application, tool execution, test-oracle early-stop. Entry point: <code>runLoop(state, statePath, deps, getContext)</code></td></tr>
-        <tr><td><code>planner.ts</code></td><td>Calls the model to decompose a task into ≤8 ordered sub-goals. Falls back to a single goal if the model returns nothing parseable.</td></tr>
-        <tr><td><code>prompt.ts</code></td><td><code>buildSystemPrompt</code> — instructs the model to use full-file edits + tool calls. <code>buildTurnPrompt</code> — assembles task, goal, turn number, last 2 turns of history, and context chunks.</td></tr>
+        <tr><td><code>planner.ts</code></td><td>Calls the model to decompose a task into ≤8 ordered sub-goals. Falls back to a single goal if the model returns nothing parseable. Optional <code>preSolveReflection</code> (default off): one extra cheap call to restate the problem + key edge case, fed into goal generation (AlphaCodium-lite).</td></tr>
+        <tr><td><code>prompt.ts</code></td><td><code>buildSystemPrompt</code> — instructs the model to use full-file edits + tool calls; appends discipline rules (minimal-change, surgical, no speculation) gated by <code>AgentConfig.disciplineRules</code> (default on). <code>buildTurnPrompt</code> — assembles task, goal, turn number, last 2 turns of history, and context chunks.</td></tr>
         <tr><td><code>state.ts</code></td><td>Create, load, save (atomic rename), and mutate <code>AgentState</code>. <code>addTurn</code>, <code>advanceGoal</code>, <code>failGoal</code>, <code>isTerminal</code>, <code>currentGoal</code>.</td></tr>
         <tr><td><code>tools.ts</code></td><td>Tool implementations (<code>read_file</code>, <code>write_file</code>, <code>run_command</code>, <code>run_tests</code>, <code>think</code>, <code>finish</code>) and the <code>executeTool</code> dispatcher. All paths guarded by <code>resolveSafe</code>.</td></tr>
         <tr><td><code>bestofn.ts</code></td><td><code>selectBestCandidate</code> — generate N completions in parallel, apply each, run verifier, pick winner by verifierScore, revert losers, apply winner.</td></tr>
@@ -281,10 +281,11 @@
         <tr><th>File</th><th>Purpose</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>parser.ts</code></td><td>Parse model output into <code>EditBlock[]</code>. Tries full-file first, then search-replace, then JSON. Public: <code>parse(raw)</code>.</td></tr>
-        <tr><td><code>applier.ts</code></td><td>Apply <code>EditBlock</code> to disk. Full-file (search='') overwrites whole file. Search-replace does exact-match. Public: <code>applyBatch</code>.</td></tr>
+        <tr><td><code>parser.ts</code></td><td>Parse model output into <code>EditBlock[]</code>. Tries <code>PATCH:</code> (function-level) first, then full-file, then search-replace, then JSON. Public: <code>parse(raw)</code>.</td></tr>
+        <tr><td><code>applier.ts</code></td><td>Apply <code>EditBlock</code> to disk. Full-file (search='') overwrites whole file. Search-replace does exact-match. <code>patch-function</code> blocks dispatch to the patch applier via a sentinel prefix. Public: <code>applyBatch</code>.</td></tr>
+        <tr><td><code>patch-function.ts</code></td><td>Function-level edits for large files: <code>parsePatchBlocks</code>, <code>applyPatchBlock</code> (anchor = first replacement line; brace-depth scan finds the region), <code>chooseEditFormat</code> (&gt;300 lines or &gt;8KB → <code>patch</code> eligible). Fail-safe: ambiguous/not-found anchor → error <code>ApplyResult</code>, no write.</td></tr>
         <tr><td><code>repair.ts</code></td><td>Fuzzy repair for failed search-replace blocks — strategies: exact, fuzzy, whitespace-normalize.</td></tr>
-        <tr><td><code>types.ts</code></td><td><code>EditBlock</code>, <code>EditFormat</code>, <code>ParseResult</code>, <code>ParseError</code>, <code>ApplyResult</code>, <code>ApplyStatus</code>, <code>ApplyBatchResult</code>, <code>RepairResult</code>.</td></tr>
+        <tr><td><code>types.ts</code></td><td><code>EditBlock</code>, <code>EditFormat</code> (incl. <code>patch-function</code>), <code>ParseResult</code>, <code>ParseError</code>, <code>ApplyResult</code>, <code>ApplyStatus</code>, <code>ApplyBatchResult</code>, <code>RepairResult</code>.</td></tr>
         <tr><td><code>index.ts</code></td><td>Re-exports <code>parse</code> and <code>applyBatch</code>.</td></tr>
       </tbody>
     </table>
@@ -398,6 +399,9 @@
       </thead>
       <tbody>
         <tr><td><code>run-humaneval.ts</code></td><td>External benchmark — fetch nuprl/MultiPL-E humaneval-ts, run full agent loop on each problem × k trials, grade with <code>bun test</code>, print pass@1/pass^k/pass@k.</td></tr>
+        <tr><td><code>run-evalplus.ts</code></td><td>EvalPlus-style robustness benchmark. Splits each test body into base/extra tiers (<code>SMALLCODE_EP_BASE_SPLIT</code>, default 0.5); extra graded only if base passes. Reports pass@1/pass^k per tier. Injectable <code>SolutionSource</code> + <code>--dry-run</code> (no Ollama). <em>Harness ready; needs live run.</em></td></tr>
+        <tr><td><code>run-livecodebench.ts</code></td><td>LiveCodeBench-style contamination-guard benchmark. Each problem carries <code>releasedAt</code>; <code>SMALLCODE_LCB_AFTER</code> filters pre-cutoff problems. Per-difficulty breakdown. <em>Runner ready; needs a real <code>/tmp/lcb-ts.json</code> dataset (no TS-translated HF API yet).</em></td></tr>
+        <tr><td><code>run-bakeoff.ts</code></td><td>Multi-model comparison. Takes model IDs (validated via <code>ModelRegistry</code>, never called directly), runs a benchmark per model through an injectable runner, emits a pass@1/pass^k/pass@k comparison table. <em>Harness ready; needs live run.</em></td></tr>
         <tr><td><code>run-baseline.ts</code></td><td>In-house capability suite runner. <code>SMALLCODE_DRY_RUN=1</code>: validate fixtures. Live mode: run k trials per task and append <code>MetricsSnapshot</code> to history.</td></tr>
         <tr><td><code>debug-task.ts</code></td><td>Debug a single capability task end-to-end without cleanup. Dumps turn-by-turn raw model output, final file contents, and grader verdicts. Trial dir preserved for manual inspection.</td></tr>
         <tr><td><code>rerun-timeouts.ts</code></td><td>Parse a HumanEval marathon log for timeout-affected problems, re-run them with fresh Ollama and higher per-trial cap, report clean pass@1.</td></tr>
@@ -511,6 +515,27 @@ TOOL: finish {"summary": "implemented add()"}
       Leading <code>./</code> is normalized. Backslashes are converted to forward slashes.
     </p>
 
+    <h3>Large files: patch-function</h3>
+    <p>
+      For files past <code>chooseEditFormat</code>'s threshold (&gt;300 lines or &gt;8KB), re-emitting the
+      whole file wastes context and risks the small model dropping unchanged lines. The
+      <code>PATCH:</code> format replaces a single function instead. The <em>anchor</em> is the first
+      line of the replacement body (typically the signature); the applier finds the one matching
+      line, brace-depth-scans to the closing <code>}</code>, and swaps only that region. If the anchor
+      is missing or ambiguous it returns an error <code>ApplyResult</code> (no write) so the loop can
+      fall back to full-file — it never silently mis-applies.
+    </p>
+    <div class="code-block">
+<span class="comment"># patch-function format (large files)</span>
+PATCH: src/foo.ts
+FUNCTION: parseConfig
+```ts
+export function parseConfig(raw: string): Config {
+  return JSON.parse(raw);
+}
+```
+    </div>
+
     <h3>Fallback 1: search-replace</h3>
     <p>
       Classic diff-like format. The file path is on the line immediately before the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; SEARCH</code>
@@ -543,18 +568,24 @@ function add(a: number, b: number): number { return a + b; }
       <tbody>
         <tr>
           <td><span class="badge badge-green">1st</span></td>
-          <td>Full-file</td>
-          <td><code>FILE:</code> marker</td>
-          <td>Returns immediately if blocks found and valid. Primary format.</td>
+          <td>patch-function</td>
+          <td><code>PATCH:</code> marker</td>
+          <td>Checked first, but only matches when a <code>PATCH:</code> block is present (large-file opt-in). Anchored, fail-safe.</td>
         </tr>
         <tr>
-          <td><span class="badge badge-yellow">2nd</span></td>
+          <td><span class="badge badge-green">2nd</span></td>
+          <td>Full-file</td>
+          <td><code>FILE:</code> marker</td>
+          <td>Returns immediately if blocks found and valid. Primary/default format.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-yellow">3rd</span></td>
           <td>Search-replace</td>
           <td><code>&lt;&lt;&lt; SEARCH</code> / <code>=====</code> / <code>&gt;&gt;&gt; REPLACE</code></td>
           <td>Fallback. VibeThinker-3B unreliable on this format.</td>
         </tr>
         <tr>
-          <td>3rd</td>
+          <td>4th</td>
           <td>JSON</td>
           <td><code>"type":"edit"</code> anywhere in output</td>
           <td>Last resort. Also parses from markdown fences.</td>
@@ -667,6 +698,24 @@ function add(a: number, b: number): number { return a + b; }
           <td>1200000 (20 min)</td>
           <td><code>rerun-timeouts.ts</code></td>
           <td>Per-trial timeout for timeout re-run (generous to account for fresh Ollama)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_EP_*</code></td>
+          <td>see script</td>
+          <td><code>run-evalplus.ts</code></td>
+          <td><code>_LIMIT/_OFFSET/_K/_MAX_TURNS/_TIMEOUT_MS/_CACHE/_BASE_SPLIT/_DRY_RUN</code> — EvalPlus harness controls</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_LCB_*</code></td>
+          <td>see script</td>
+          <td><code>run-livecodebench.ts</code></td>
+          <td><code>_LIMIT/_OFFSET/_K/_MAX_TURNS/_TIMEOUT_MS/_CACHE/_AFTER/_DRY_RUN</code> — LiveCodeBench harness (<code>_AFTER</code> = contamination cutoff date)</td>
+        </tr>
+        <tr>
+          <td><code>SMALLCODE_BO_*</code></td>
+          <td>see script</td>
+          <td><code>run-bakeoff.ts</code></td>
+          <td><code>_K/_LIMIT/_OFFSET/_TIMEOUT_MS/_CACHE/_MAX_TURNS/_DRY_RUN</code> — multi-model bake-off controls</td>
         </tr>
       </tbody>
     </table>

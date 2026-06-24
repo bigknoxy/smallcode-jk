@@ -259,7 +259,7 @@ graph TD
     OLLAMA["Ollama<br/><small>localhost:11434/v1<br/>VibeThinker-3B (Q8_0)</small>"]
     REASON["Reasoning Handler<br/><small>src/reasoning/ — strips &lt;think&gt; tags</small>"]
     CTX["Context Engine<br/><small>src/context/ — RepoMap + token budget</small>"]
-    EDIT["Edit Protocol<br/><small>src/edit/ — full-file / S/R / JSON</small>"]
+    EDIT["Edit Protocol<br/><small>src/edit/ — patch-function / full-file / S/R / JSON</small>"]
     LOOP["Agent Loop<br/><small>src/agent/loop.ts</small>"]
     EVAL["Eval Harness<br/><small>src/eval/ + scripts/run-humaneval.ts</small>"]
     GRADERS["Graders<br/><small>deterministic_tests / static_analysis / llm_rubric</small>"]
@@ -305,7 +305,7 @@ graph TD
     <div class="diagram-wrap">
       <div class="mermaid">
 flowchart TD
-    START([Task received]) --> PLAN[planTask — model decomposes\ntask into ≤8 Goals]
+    START([Task received]) --> PLAN[planTask — optional pre-solve reflection,\nthen model decomposes task into ≤8 Goals]
     PLAN --> GOAL{Current goal?}
     GOAL -- none --> DONE([status: done])
     GOAL -- pending --> CTX[Build ContextBundle\nwalk repoRoot, token budget 8K]
@@ -313,7 +313,7 @@ flowchart TD
     CTX --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks]
     PROMPT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
     MODEL --> STRIP[ReasoningHandler\nstrip think tags → answer]
-    STRIP --> PARSEEDITS[Edit parser\nFILE: full-file → search-replace → JSON]
+    STRIP --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
     PARSEEDITS --> APPLY[applyBatch\noverwrite file or exact-match replace]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
@@ -629,8 +629,8 @@ flowchart TD
         <tr>
           <td><strong>Edit</strong></td>
           <td><code>src/edit/</code></td>
-          <td>Parse model output as full-file rewrites (primary), SEARCH/REPLACE blocks (fallback), or JSON patch edits (fallback). Apply by overwriting the whole file or exact-match replacement. Fuzzy repair on apply failure.</td>
-          <td><code>EditBlock</code>, <code>ParseResult</code>, <code>ApplyResult</code>, <code>parse</code>, <code>applyBatch</code>, <code>repair</code></td>
+          <td>Parse model output as patch-function blocks (large files), full-file rewrites (primary), SEARCH/REPLACE blocks (fallback), or JSON patch edits (fallback). Apply by overwriting the whole file, anchored function-region swap, or exact-match replacement. Fuzzy repair on apply failure; patch-function fails safe (no write) on ambiguous/missing anchor.</td>
+          <td><code>EditBlock</code>, <code>ParseResult</code>, <code>ApplyResult</code>, <code>parse</code>, <code>applyBatch</code>, <code>repair</code>, <code>chooseEditFormat</code></td>
         </tr>
         <tr>
           <td><strong>Agent</strong></td>
