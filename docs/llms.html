@@ -414,6 +414,7 @@
         <tr><td><code>regression-gate.ts</code></td><td>CI gate script — compare current run to baseline, exit 1 on regression.</td></tr>
         <tr><td><code>smoke-e0.ts</code></td><td>Tiny smoke run of E0 tasks to quickly verify the harness is wired up correctly.</td></tr>
         <tr><td><code>ollama-serve.sh</code></td><td>Drop-in for <code>ollama serve</code> that exports <code>OLLAMA_FLASH_ATTENTION=1</code> + <code>OLLAMA_KV_CACHE_TYPE=q8_0</code> (halve KV-cache VRAM, slow fragmentation decay). Use for long sessions.</td></tr>
+        <tr><td><code>smoke-watchdog.ts</code></td><td>Live smoke for <code>WatchdogProvider</code>: forces the threshold high so the real <code>ollama stop</code>+reload path fires after 2 gens and verifies generations recover. Serial (uses live Ollama).</td></tr>
       </tbody>
     </table>
   </section>
