@@ -17,6 +17,7 @@ export const PLANNER_SYSTEM_PROMPT = `You are a coding assistant that plans task
 Each sub-goal must be a concrete ACTION starting with an action verb (e.g. Add, Fix, Implement, Write, Update, Remove, Refactor, Run).
 Do NOT output file paths or line ranges as goals — those are context, not actions.
 Output ONLY a numbered list of sub-goals. No prose, no explanation.
+Every goal must describe an edit to THIS task's code. NEVER restate, paraphrase, or quote these instructions as a goal.
 Prefer 1–3 sub-goals for a small task; maximum 5.
 
 Format (use the task's OWN nouns — do NOT copy these placeholders literally):
@@ -55,8 +56,7 @@ export function isActionableGoal(desc: string): boolean {
   //     EXCEPT for a trailing " (lines X–Y)" or " (lines X-Y)" annotation.
   // Pattern: <path-like-token> optionally followed by " (lines N–N)" or " (lines N-N)"
   // and nothing else meaningful after that.
-  const pathEchoPattern =
-    /^(?:\.{0,2}\/)?[\w./\\-]+(?: \(lines \d+[–-]\d+\))?$/i;
+  const pathEchoPattern = /^(?:\.{0,2}\/)?[\w./\\-]+(?: \(lines \d+[–-]\d+\))?$/i;
   if (pathEchoPattern.test(t)) return false;
 
   // A goal that mentions a path is fine as long as it also contains a verb /
@@ -69,6 +69,65 @@ export function isActionableGoal(desc: string): boolean {
   if (words.length < 2) return false;
 
   return true;
+}
+
+/**
+ * Phrases that belong to the PLANNER'S OWN instructions, not to any real coding
+ * goal. A small model sometimes copies the planner system prompt's rule
+ * sentences back as a "goal" (e.g. "Each sub-goal must be a concrete ACTION
+ * starting with an action verb (e.g. Add, Fix, ...)"). These markers are
+ * meta-vocabulary that essentially never appears in a genuine task goal, so a
+ * hit is a reliable echo signal. Lower-cased substring match.
+ */
+const INSTRUCTION_ECHO_MARKERS: readonly string[] = [
+  "action verb",
+  "sub-goal",
+  "sub goal",
+  "subgoal",
+  "numbered list",
+  "ordered list of sub",
+  "do not output",
+  "do not copy",
+  "don't copy",
+  "placeholder",
+  "context, not actions",
+  "no prose",
+  "each line must",
+  "must start with an action",
+  "concrete action starting",
+  "followed by description",
+];
+
+/**
+ * Returns true if `desc` is the planner echoing its OWN instruction prose
+ * instead of producing a task goal (failure mode #7). Detects three shapes:
+ *  - meta-vocabulary markers (see INSTRUCTION_ECHO_MARKERS),
+ *  - literal format placeholders the prompt told it NOT to copy
+ *    (`<action verb>`, `<specific thing>`, `<file>`),
+ *  - the example verb list copied verbatim (two+ of the sample verbs joined by
+ *    commas, e.g. "Add, Fix, Implement"), which a real goal never contains.
+ *
+ * Precise by design: it rejects instruction echoes without touching legitimate
+ * goals such as "Run tests to verify" (which overlaps the prompt's format line
+ * but carries none of these markers).
+ */
+export function isInstructionEcho(desc: string): boolean {
+  const t = desc.trim().toLowerCase();
+  if (!t) return false;
+
+  for (const marker of INSTRUCTION_ECHO_MARKERS) {
+    if (t.includes(marker)) return true;
+  }
+
+  // Literal angle-bracket placeholders from the format block.
+  if (/<\s*(?:action verb|specific thing|file)\s*>/i.test(t)) return true;
+
+  // Two or more of the EXAMPLE verbs joined by commas → the copied verb list,
+  // not a real goal ("Add, Fix, Implement, Write, ...").
+  const verb = "(?:add|fix|implement|write|update|remove|refactor|run)";
+  if (new RegExp(`\\b${verb}\\b\\s*,\\s*\\b${verb}\\b`, "i").test(t)) return true;
+
+  return false;
 }
 
 /**
@@ -119,6 +178,8 @@ function parseGoals(text: string, task: string, uniqueFileCount: number): Goal[]
   const filtered: string[] = [];
   for (const desc of raw) {
     if (!isActionableGoal(desc)) continue;
+    // Drop goals that are the planner echoing its own instruction prose (#7).
+    if (isInstructionEcho(desc)) continue;
     if (seen.has(desc)) continue;
     seen.add(desc);
     filtered.push(desc);
@@ -166,10 +227,7 @@ export async function planTask(
 ): Promise<Goal[]> {
   // Sanitize context summary: unique file paths only, no line ranges, capped at 8
   const uniquePaths = [...new Set(context.chunks.map((c) => c.filePath))].slice(0, 8);
-  const contextSummary =
-    uniquePaths.length > 0
-      ? uniquePaths.join(", ")
-      : "No context provided.";
+  const contextSummary = uniquePaths.length > 0 ? uniquePaths.join(", ") : "No context provided.";
 
   // Optional pre-solve reflection step
   let reflectionNote = "";
