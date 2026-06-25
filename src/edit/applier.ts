@@ -1,8 +1,70 @@
-import type { ApplyBatchResult, ApplyResult, EditBlock } from "./types.ts";
 import { applyPatchBlock } from "./patch-function.ts";
+import { repairBlock } from "./repair.ts";
+import type { ApplyBatchResult, ApplyResult, EditBlock } from "./types.ts";
 
 /** Sentinel prefix stored in EditBlock.search for patch-function blocks. */
 const PATCH_SENTINEL = "\x00PATCH\x00";
+
+// ---------------------------------------------------------------------------
+// Whole-file integrity guard
+// ---------------------------------------------------------------------------
+
+/** Count delimiter balance — returns true when (), {}, and [] are all net-zero. */
+function delimitersBalanced(s: string): boolean {
+  const pairs: Array<[string, string]> = [
+    ["(", ")"],
+    ["{", "}"],
+    ["[", "]"],
+  ];
+  for (const [open, close] of pairs) {
+    let depth = 0;
+    for (const ch of s) {
+      if (ch === open) depth++;
+      else if (ch === close) depth--;
+      if (depth < 0) return false; // close before open
+    }
+    if (depth !== 0) return false;
+  }
+  return true;
+}
+
+/**
+ * Returns a human-readable reason when a whole-file replacement looks TRUNCATED
+ * (a small model that was told to re-emit the entire file dropped the tail), or
+ * null when the write looks intact. Conservative by design: it only fires on
+ * strong signals so legitimate refactors pass, because the cost of a false
+ * accept (writing corruption that regresses passing tests) is far worse than a
+ * false reject (one extra re-prompt turn).
+ *
+ * New/empty files are always allowed. Two signals trigger a reject:
+ *  - the replacement's brackets are unbalanced while the original's were
+ *    balanced (the classic "cut off mid-function" shape), or
+ *  - the replacement lost more than half the lines of a non-trivial file.
+ */
+export function truncationReason(original: string, replace: string): string | null {
+  // New file or previously-empty file: nothing to truncate against.
+  if (original.trim() === "") return null;
+
+  if (replace.trim() === "") {
+    return "replacement is empty (refusing to blank an existing file)";
+  }
+
+  // Bracket-balance: only fire when the ORIGINAL was cleanly balanced (so we
+  // don't trip over braces inside strings/regex that exist in both versions).
+  if (delimitersBalanced(original) && !delimitersBalanced(replace)) {
+    return "unbalanced brackets/braces — output looks cut off mid-file";
+  }
+
+  // Drastic shrink on a non-trivial file. >50% line loss from a 3B re-emit is
+  // far more likely a dropped tail than an intentional halving.
+  const origLines = original.split("\n").length;
+  const repLines = replace.split("\n").length;
+  if (origLines >= 12 && repLines < origLines * 0.5) {
+    return `output is ${repLines} lines vs ${origLines} original (>50% shrink — likely truncated)`;
+  }
+
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Diff generation
@@ -182,28 +244,18 @@ export function generateDiff(original: string, modified: string, filePath: strin
 // applyBlock — pure function, no I/O
 // ---------------------------------------------------------------------------
 
-export function applyBlock(block: EditBlock, content: string): ApplyResult {
-  const { filePath, search, replace } = block;
-
-  // Patch-function dispatch: sentinel prefix identifies this as a PATCH block.
-  if (block.format === "patch-function" && search.startsWith(PATCH_SENTINEL)) {
-    const functionName = search.slice(PATCH_SENTINEL.length);
-    return applyPatchBlock({ filePath, functionName, replacement: replace, format: "patch-function" }, content);
-  }
-
-  // Full-file replace (or new file)
-  if (search === "") {
-    const diff = generateDiff(content, replace, filePath);
-    return {
-      filePath,
-      status: "applied",
-      diff,
-      originalContent: content,
-      newContent: replace,
-    };
-  }
-
-  // Count occurrences
+/**
+ * Apply a single search→replace against `content`. Returns applied / not_found
+ * / ambiguous. `repair` is threaded through onto a successful result so callers
+ * can tell when the match only succeeded after fuzzy repair.
+ */
+function applySearchReplace(
+  filePath: string,
+  search: string,
+  replace: string,
+  content: string,
+  repair?: ApplyResult["repair"],
+): ApplyResult {
   let count = 0;
   let pos = content.indexOf(search);
   let firstPos = -1;
@@ -214,14 +266,9 @@ export function applyBlock(block: EditBlock, content: string): ApplyResult {
     pos = content.indexOf(search, pos + 1);
   }
 
-  if (count === 0) {
-    return { filePath, status: "not_found" };
-  }
-  if (count > 1) {
-    return { filePath, status: "ambiguous" };
-  }
+  if (count === 0) return { filePath, status: "not_found" };
+  if (count > 1) return { filePath, status: "ambiguous" };
 
-  // Exactly one match
   const newContent = content.slice(0, firstPos) + replace + content.slice(firstPos + search.length);
   const diff = generateDiff(content, newContent, filePath);
   return {
@@ -230,7 +277,85 @@ export function applyBlock(block: EditBlock, content: string): ApplyResult {
     diff,
     originalContent: content,
     newContent,
+    ...(repair && { repair }),
   };
+}
+
+export function applyBlock(block: EditBlock, content: string): ApplyResult {
+  const { filePath, search, replace } = block;
+
+  // Patch-function dispatch: sentinel prefix identifies this as a PATCH block.
+  if (block.format === "patch-function" && search.startsWith(PATCH_SENTINEL)) {
+    const functionName = search.slice(PATCH_SENTINEL.length);
+    return applyPatchBlock(
+      { filePath, functionName, replacement: replace, format: "patch-function" },
+      content,
+    );
+  }
+
+  // Full-file replace (or new file) — guard against truncated re-emits. A small
+  // model told to copy the WHOLE file back often drops the tail; writing that
+  // overwrites correct code and regresses passing tests. Reject likely
+  // truncations so the failed-edit re-prompt fires instead of corrupting disk.
+  if (search === "") {
+    const reason = truncationReason(content, replace);
+    if (reason !== null) {
+      return {
+        filePath,
+        status: "error",
+        error: `whole-file write rejected: ${reason}. Re-emit the COMPLETE file, every line.`,
+      };
+    }
+    const diff = generateDiff(content, replace, filePath);
+    return {
+      filePath,
+      status: "applied",
+      diff,
+      originalContent: content,
+      newContent: replace,
+    };
+  }
+
+  // Search/replace: try an exact match first.
+  const direct = applySearchReplace(filePath, search, replace, content);
+  if (direct.status !== "not_found") return direct;
+
+  // Exact match failed — a small model's search text frequently drifts from the
+  // source (indentation, collapsed whitespace, a near-miss line). Try the fuzzy
+  // repair pipeline (whitespace-normalise → per-line-trim → char-similarity) and
+  // re-apply against the verbatim text it recovered.
+  const repaired = repairBlock(block, content);
+  if (repaired.repairedBlock !== null && repaired.strategy !== "failed") {
+    const retry = applySearchReplace(filePath, repaired.repairedBlock.search, replace, content, {
+      strategy: repaired.strategy,
+      confidence: repaired.confidence,
+    });
+    if (retry.status === "applied") return retry;
+  }
+
+  return direct; // still not found
+}
+
+// ---------------------------------------------------------------------------
+// Path-typo rescue
+// ---------------------------------------------------------------------------
+
+/**
+ * A small model sometimes flattens the directory separators in a FILE: path,
+ * emitting e.g. `src.stats.ts` for `src/stats.ts`. Left alone, the write
+ * silently creates a stray new file and the real target is never edited.
+ * Returns the dots-as-slashes reconstruction (every `.` before the extension →
+ * `/`) so the caller can check whether that path actually exists, or null when
+ * there is nothing to reconstruct. Pure — no I/O.
+ */
+export function flattenedPathCandidate(filePath: string): string | null {
+  const dot = filePath.lastIndexOf(".");
+  if (dot <= 0) return null; // no extension, or leading dot
+  const stem = filePath.slice(0, dot);
+  const ext = filePath.slice(dot);
+  if (!stem.includes(".")) return null; // no flattened separators to restore
+  const candidate = `${stem.replaceAll(".", "/")}${ext}`;
+  return candidate === filePath ? null : candidate;
 }
 
 // ---------------------------------------------------------------------------
@@ -246,21 +371,36 @@ export async function applyBatch(
   const results: ApplyResult[] = [];
 
   for (const block of blocks) {
+    // Resolve the effective target path. If the emitted path is missing on disk
+    // but its un-flattened variant (dots→slashes) exists, the model typo'd the
+    // separators — redirect to the real file instead of creating a stray one.
+    let path = block.filePath;
+    if (!inMemory.has(path)) {
+      const disk = await readFile(path);
+      if (disk === null) {
+        const alt = flattenedPathCandidate(path);
+        if (alt !== null && (inMemory.has(alt) || (await readFile(alt)) !== null)) {
+          path = alt;
+        }
+      }
+    }
+
     // Prefer in-memory version if already modified in this batch
     let content: string;
-    if (inMemory.has(block.filePath)) {
-      content = inMemory.get(block.filePath)!;
+    if (inMemory.has(path)) {
+      content = inMemory.get(path)!;
     } else {
-      const disk = await readFile(block.filePath);
+      const disk = await readFile(path);
       content = disk ?? "";
     }
 
-    const result = applyBlock(block, content);
+    const effectiveBlock = path === block.filePath ? block : { ...block, filePath: path };
+    const result = applyBlock(effectiveBlock, content);
     results.push(result);
 
     if (result.status === "applied" && result.newContent !== undefined) {
-      inMemory.set(block.filePath, result.newContent);
-      await writeFile(block.filePath, result.newContent);
+      inMemory.set(path, result.newContent);
+      await writeFile(path, result.newContent);
     }
   }
 
