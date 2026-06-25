@@ -411,7 +411,7 @@ flowchart TD
     GOAL -- pending --> CTX[Build ContextBundle\nwalk repoRoot, budget = num_ctx − max_tokens\nPIN target file: highest-scored non-test,\nnon-barrel source → whole-file, never windowed\nset targetFile = path,lineCount,format,functionName]
 
     CTX --> SYSPROMPT[buildSystemPrompt\nbase system + optional ## SKILL block\nfrom PromptSet.skill]
-    SYSPROMPT --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks\n+ ## Edit Target directive\nsize-gate: ≤140 lines → emit FULL file FILE:\n>140 lines → PATCH:/FUNCTION: one function\n+ Failure diagnostic if last turn failed]
+    SYSPROMPT --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks\n+ ## Edit Target directive\nsize-gate: ≤80 lines → emit FULL file FILE:\n>80 lines → PATCH:/FUNCTION: one function\n+ Failure diagnostic if last turn failed]
     PROMPT --> FIT[fitTurnPromptToWindow\ndrop largest NON-pinned chunk until\nsystem+prompt ≤ num_ctx − max_tokens\npinned target never shed; prevents HTTP 400]
     FIT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
     MODEL --> STRIP[ReasoningHandler\nstrip think tags → answer]
@@ -463,8 +463,8 @@ flowchart TD
         the <em>harness</em> — not the model — chooses the format from the pinned target file's size.
         <code>buildContext</code> sets <code>bundle.targetFile = { path, lineCount, format, functionName }</code>
         and <code>buildTurnPrompt</code> emits an explicit <code>## Edit Target</code> directive:
-        a small file (≤ <code>PATCH_LINE_THRESHOLD = 140</code> lines) ⇒ emit the COMPLETE file via
-        <code>FILE:</code>; a large file (&gt; 140 lines, with a known function) ⇒ replace ONLY that one
+        a small file (≤ <code>PATCH_LINE_THRESHOLD = 80</code> lines) ⇒ emit the COMPLETE file via
+        <code>FILE:</code>; a large file (&gt; 80 lines, with a known function) ⇒ replace ONLY that one
         function via <code>PATCH:</code>/<code>FUNCTION:</code>. The model no longer self-assesses
         "is this file large?" (the old advisory "&gt;300 lines" prose had no effect).
       </p>
@@ -741,7 +741,7 @@ flowchart TD
             A small model told to "emit the whole file" cannot do so if it only sees a window or the file
             got dropped to fit the budget. Barrel/re-export files (<code>export *</code>) are skipped as
             targets — they define no implementation. The harness then size-gates the edit format
-            deterministically (≤140 lines → <code>FILE:</code> whole-file; &gt;140 → <code>PATCH:</code>
+            deterministically (≤80 lines → <code>FILE:</code> whole-file; &gt;80 → <code>PATCH:</code>
             one function) instead of leaving the model to self-assess file size. Set
             <code>SMALLCODE_TARGET_PIN=0</code> to disable pinning + size-gating and measure the clean
             pre-A baseline on the identical retrieval path.
@@ -959,7 +959,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-24</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-25</span>
   </div>
 </footer>
 

@@ -27,14 +27,16 @@ import { generateDiff } from "./applier.ts";
 
 /**
  * Lines threshold above which the harness switches the target file to PATCH
- * (single-function) editing. Lowered from 300 → 140: small local models
- * reliably reproduce a whole file only up to ~120–150 lines; above that, the
- * tail gets truncated or hallucinated, so we localize the edit to one function
- * deterministically rather than hoping the model opts in. Calibrated against the
- * edit-reliability suite (29-line file solved whole; 124/164-line files failed
- * whole-file emission).
+ * (single-function) editing. Calibrated against the edit-reliability suite on a
+ * 3B: a 30-line file is solved whole-file in 1 turn (1.00); 124/164-line files
+ * fail whole-file emission (0.00–0.40) because the tail gets truncated. A k=1
+ * smoke at threshold 140 confirmed the directly-PATCHed 164-line file jumped
+ * 0.00→1.00 while the 125-line files left on whole-file emission did NOT
+ * improve — so the gate must sit below 125. 80 keeps small files (the control)
+ * whole while localizing anything substantial to one function the model can
+ * reliably emit. Lowered 300 → 140 → 80.
  */
-export const PATCH_LINE_THRESHOLD = 140;
+export const PATCH_LINE_THRESHOLD = 80;
 
 /** Byte threshold above which PATCH format is recommended. */
 export const PATCH_BYTE_THRESHOLD = 8192;
