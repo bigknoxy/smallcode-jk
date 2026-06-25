@@ -975,6 +975,9 @@
 <span class="comment"># Run the full in-house capability suite (or pick another: SMALLCODE_SUITE=edit-reliability)</span>
 <span class="cmd">bun scripts/run-baseline.ts</span>
 
+<span class="comment"># Trustworthy measurement: n samples/task, pass@k with 95% bootstrap CIs</span>
+<span class="cmd">SMALLCODE_SUITE=edit-reliability SMALLCODE_EVAL_N=15 SMALLCODE_REPORT_KS=1,2,3,5 bun scripts/run-baseline.ts</span>
+
 <span class="comment"># Code a task in any repo</span>
 <span class="cmd">bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo .</span>
         </div>
@@ -1100,7 +1103,7 @@
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Updated 2026-06-24</span>
+    <span class="sc-footer__meta">Updated 2026-06-25</span>
   </div>
 </footer>
 

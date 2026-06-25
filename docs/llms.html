@@ -415,13 +415,14 @@
           <tbody>
             <tr><td><code>harness.ts</code></td><td>Top-level eval harness — load suite, run all tasks, aggregate metrics.</td></tr>
             <tr><td><code>runner.ts</code></td><td><code>runSuite(suite, opts)</code> — iterate tasks, call <code>runTask</code>, collect <code>EvalRunResult</code>.</td></tr>
-            <tr><td><code>task-runner.ts</code></td><td><code>runTask(task, opts)</code> — create trial env, run agent loop k times, grade each trial, compute pass@1/pass@k. Context now comes from the production <code>walkRepo → buildContext</code> path (replacing the old ad-hoc <code>buildTrialContext</code> dir-walk that diverged from production), so evals exercise the same target-pinning + size-gate as live runs. Reads <code>SMALLCODE_TARGET_PIN</code> (default on; <code>0</code> disables target pin + size-gate for a clean pre-A baseline A/B).</td></tr>
+            <tr><td><code>task-runner.ts</code></td><td><code>runTask(task, opts)</code> — create trial env, run agent loop <strong>n</strong> times (<code>opts.trialsPerTask</code> = sample count), grade each trial, then report pass@k for a SET of k (<code>opts.reportKs</code>, default <code>[1,2,3,5]</code> ∪ <code>{n}</code>) — <strong>n is decoupled from the reported k</strong>, the core variance fix (the old code only computed pass@k at k=n, collapsing it to a binary). Each pass@k gets a 95% bootstrap CI (<code>passAtKCI</code>) via <code>stats.ts</code>; new opts <code>bootstrapIters</code>, <code>ciSeed</code>. Returns <code>TaskEvalResult</code> with added optional <code>n</code> + <code>passAtKCI</code>. Context comes from the production <code>walkRepo → buildContext</code> path. Reads <code>SMALLCODE_TARGET_PIN</code> (default on; <code>0</code> disables target pin + size-gate for a clean pre-A baseline A/B).</td></tr>
+            <tr><td><code>stats.ts</code></td><td>Measuring-stick statistics. <code>makeRng(seed)</code> (mulberry32, deterministic) · <code>bootstrapCI(passedFlags, k, opts)</code> — 95% CI for pass@k by resampling the n binary trial outcomes n-with-replacement <code>iters</code>× and recomputing pass@k via <code>computePassAtK</code> (reused, not reimplemented); collapses to a point at c∈{0,n}, flags <code>degenerate</code> at n&lt;2 · <code>passAtKFromFlags</code> · <code>aggregateSuite(taskResults, ks)</code> pooled suite-level pass@k + CI. Pure, seeded → reproducible intervals.</td></tr>
             <tr><td><code>task-loader.ts</code></td><td><code>loadSuite(dir)</code> — read and validate all task JSON files from a suite directory.</td></tr>
             <tr><td><code>trial-env.ts</code></td><td><code>createTrialEnv(task, fixturesRoot)</code> — copy fixture into a temp dir, return dir path and cleanup fn.</td></tr>
-            <tr><td><code>graders/deterministic.ts</code></td><td>Run <code>bun test</code> in the trial dir and map exit code + failure count to pass/fail verdict.</td></tr>
+            <tr><td><code>graders/deterministic.ts</code></td><td>Run <code>bun test</code> in the trial dir and map exit code + per-file ✓/✗ to pass/fail verdict. <strong>Infra-error retry</strong>: a transient subprocess failure (<code>InvalidLockfileVersion</code>/<code>EAGAIN</code>/…) that produced ZERO test verdicts is retried up to <code>SMALLCODE_GRADER_RETRIES</code> (default 1) — guarded so a real failing test (a parsed <code>✗</code>) is NEVER retried. On exhaustion: <code>verdict:"error"</code> with <code>details.infraError=true</code>, so the run excludes that trial from the rate denominator instead of counting it as a model failure.</td></tr>
             <tr><td><code>graders/static.ts</code></td><td>Run a configurable static analysis command (e.g. <code>tsc --noEmit</code>) and grade by exit code.</td></tr>
             <tr><td><code>graders/llm.ts</code></td><td>Call the model with an evaluation rubric; parse pass/fail from the response.</td></tr>
-            <tr><td><code>metrics.ts</code></td><td>Compute <code>pass@1</code>, <code>pass@k</code>, <code>pass^k</code>, partial scores from trial results.</td></tr>
+            <tr><td><code>metrics.ts</code></td><td>Compute <code>pass@1</code>, <code>pass@k</code> (unbiased estimator <code>1−∏(n−c−i)/(n−i)</code>), <code>pass^k</code>, partial scores from trial results. The estimator is correct and unchanged — <code>stats.ts</code> + <code>task-runner.ts</code> now feed it more samples and query it at multiple k.</td></tr>
             <tr><td><code>transcript-store.ts</code></td><td>Persist and load <code>Transcript</code> objects to <code>evals/transcripts/</code>.</td></tr>
             <tr><td><code>types.ts</code></td><td><code>EvalTask</code>, <code>EvalSuite</code>, <code>EvalRunResult</code>, <code>TaskEvalResult</code>, <code>TrialResult</code>, <code>GraderConfig</code>, <code>GraderResult</code>, <code>Transcript</code>.</td></tr>
           </tbody>
@@ -439,7 +440,7 @@
             <tr><td><code>src/improve/skill-distiller.ts</code></td><td>Offline template-based skill distillation. <code>distillSkill(sessions, { transcriptStore, maxSessions? }): Promise&lt;string&gt;</code> — reads passing transcripts (cap: <code>maxSessions</code>, default 20), tallies tool sequences, edit formats, common <code>run_command</code> cmds, and stall-recovery events, then emits a concise <code>## SKILL</code>-style markdown checklist. Deterministic, no model calls. Returns a stub string when there are no passing sessions.</td></tr>
             <tr><td><code>src/improve/task-extractor.ts</code></td><td>Extract <code>CandidateTask</code>s from failed session transcripts for promotion to eval suite.</td></tr>
             <tr><td><code>src/improve/promoter.ts</code></td><td>Write candidate tasks as JSON to the eval suite directory.</td></tr>
-            <tr><td><code>src/improve/metrics-store.ts</code></td><td>Append <code>MetricsSnapshot</code> to <code>evals/metrics-history.jsonl</code>. Read baseline snapshot for regression gate.</td></tr>
+            <tr><td><code>src/improve/metrics-store.ts</code></td><td>Append <code>MetricsSnapshot</code> to <code>evals/metrics-history.jsonl</code>. Read baseline snapshot for regression gate. <code>MetricsSnapshot</code> (in <code>src/improve/types.ts</code>) gained optional self-describing fields: <code>n</code>, <code>reportKs</code>, <code>perTaskPassAtK</code>, <code>perTaskCI</code>, <code>overallPassAtK</code>, <code>overallCI</code>, <code>thinkOnlyTotal</code>, <code>sampling:{temp,maxTokens}</code> — all optional, so existing readers (regression-gate, show-metrics) are unaffected.</td></tr>
             <tr><td><code>src/improve/regression-gate.ts</code></td><td>Compare current eval run against baseline snapshot. Fail if pass@1 regressed or any task moved from pass to fail.</td></tr>
             <tr><td><code>src/improve/ab-compare.ts</code></td><td>Run two prompt variants against the same suite and compare pass@1.</td></tr>
             <tr><td><code>src/verify/failure-extract.ts</code></td><td>Pure-string failure extraction from <code>bun test</code> output (no I/O). <code>extractFirstFailure(output): FailureDiagnostic | null</code> — parses the first <code>(fail)</code>/<code>✗</code> line, captures Expected/Received values, errorType (via <code>/\b(\w*Error)\b/</code>), and detects module-load crashes (<code>assertionId="&lt;module-load&gt;"</code>). <code>failureSignature(d): string</code> — stable hash; normalises away <code>[Nms]</code> timings, absolute paths, hex addresses, UUIDs, line:col numbers. <code>renderDiagnostic(d): string</code> — compact ≤400-char block for model prompts with Expected/Received.</td></tr>
@@ -472,7 +473,7 @@
             <tr><td><code>run-evalplus.ts</code></td><td>EvalPlus-style robustness benchmark. Splits each test body into base/extra tiers (<code>SMALLCODE_EP_BASE_SPLIT</code>, default 0.5); extra graded only if base passes. Reports pass@1/pass^k per tier. Injectable <code>SolutionSource</code> + <code>--dry-run</code> (no Ollama). <em>Harness ready; needs live run.</em></td></tr>
             <tr><td><code>run-livecodebench.ts</code></td><td>LiveCodeBench-style contamination-guard benchmark. Each problem carries <code>releasedAt</code>; <code>SMALLCODE_LCB_AFTER</code> filters pre-cutoff problems. Per-difficulty breakdown. <em>Runner ready; needs a real <code>/tmp/lcb-ts.json</code> dataset (no TS-translated HF API yet).</em></td></tr>
             <tr><td><code>run-bakeoff.ts</code></td><td>Multi-model comparison. Takes model IDs (validated via <code>ModelRegistry</code>, never called directly), runs a benchmark per model through an injectable runner, emits a pass@1/pass^k/pass@k comparison table. <em>Harness ready; needs live run.</em></td></tr>
-            <tr><td><code>run-baseline.ts</code></td><td>In-house suite runner. <code>SMALLCODE_SUITE</code> picks the suite (bare name under <code>evals/suites/</code> or a path; default <code>capability</code>). <code>SMALLCODE_DRY_RUN=1</code>: validate fixtures (dry-run overlays <code>referenceSolution</code> on <code>repoFixture</code> to mirror the live harness). Live mode: run k trials per task in an OS-tmp trial dir and append <code>MetricsSnapshot</code> to history.</td></tr>
+            <tr><td><code>run-baseline.ts</code></td><td>In-house suite runner. <code>SMALLCODE_SUITE</code> picks the suite (bare name under <code>evals/suites/</code> or a path; default <code>capability</code>). <code>SMALLCODE_DRY_RUN=1</code>: validate fixtures (dry-run overlays <code>referenceSolution</code> on <code>repoFixture</code> to mirror the live harness). Live mode: run <strong>n</strong> trials (<code>SMALLCODE_EVAL_N</code>, default 10) per task in an OS-tmp trial dir, report pass@k (<code>SMALLCODE_REPORT_KS</code>, default <code>1,2,3,5</code>) each with a 95% bootstrap CI + a pooled OVERALL row, and append a richer <code>MetricsSnapshot</code> (per-k rates, CIs, think-only totals, sampling overrides) to history. Excludes grader infra-error trials from the rate. A/B knobs: <code>SMALLCODE_MAX_TOKENS</code>, <code>SMALLCODE_TEMP</code>, <code>SMALLCODE_CI_SEED</code>. Reads truncation incidence per task (<code>think-only=&lt;turns&gt;(&lt;trials&gt;t)</code>).</td></tr>
             <tr><td><code>debug-task.ts</code></td><td>Debug a single capability task end-to-end without cleanup. Dumps turn-by-turn raw model output, final file contents, and grader verdicts. Trial dir preserved for manual inspection.</td></tr>
             <tr><td><code>rerun-timeouts.ts</code></td><td>Parse a HumanEval marathon log for timeout-affected problems, re-run them with fresh Ollama and higher per-trial cap, report clean pass@1.</td></tr>
             <tr><td><code>show-transcript.ts</code></td><td>Pretty-print a saved eval transcript from <code>evals/transcripts/</code>.</td></tr>
@@ -807,7 +808,37 @@ function add(a: number, b: number): number { return a + b; }
               <td><code>SMALLCODE_EVAL_K</code></td>
               <td>3</td>
               <td><code>run-baseline.ts</code></td>
-              <td>Trials per task in live capability suite run</td>
+              <td>Legacy trials-per-task; fallback for <code>SMALLCODE_EVAL_N</code> when unset</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_EVAL_N</code></td>
+              <td>10</td>
+              <td><code>run-baseline.ts</code></td>
+              <td>Sample count <strong>n</strong> (trials/task), decoupled from reported k. Larger n → tighter CIs (~1/√n)</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_REPORT_KS</code></td>
+              <td><code>1,2,3,5</code></td>
+              <td><code>run-baseline.ts</code></td>
+              <td>Comma list of k to report pass@k for, each with a 95% bootstrap CI (n auto-added)</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_CI_SEED</code></td>
+              <td><code>0xC0FFEE</code></td>
+              <td><code>run-baseline.ts</code></td>
+              <td>Seed for the bootstrap-CI RNG → reproducible intervals</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_MAX_TOKENS</code> / <code>SMALLCODE_TEMP</code></td>
+              <td>registry</td>
+              <td><code>run-baseline.ts</code></td>
+              <td>Override model <code>max_tokens</code> / <code>temperature</code> for a run (A/B sampling experiments)</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_GRADER_RETRIES</code></td>
+              <td>1</td>
+              <td><code>graders/deterministic.ts</code></td>
+              <td>Retries for a transient infra error (no test verdicts); never retries a real <code>✗</code></td>
             </tr>
             <tr>
               <td><code>SMALLCODE_SUITE</code></td>
@@ -965,7 +996,7 @@ PARAMETER num_ctx 8192
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-24</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-25</span>
   </div>
 </footer>
 

@@ -551,7 +551,7 @@ flowchart TD
     PASSES["passes[trial] = bool"]
     CLEANUP["rm -rf trial dir"]
     AGGREGATE["aggregate per problem\nnp = passes.filter(Boolean).length"]
-    METRICS["print metrics\npass@1 = totalPasses / (nProblems × K)\npass^K = allKPass / nProblems\npass@K = anyPass / nProblems"]
+    METRICS["print metrics\npass@1 = c/n per problem\npass@k = unbiased 1−∏(n−c−i)/(n−i)\neach reported with 95% bootstrap CI"]
 
     FETCH --> ITER --> TMPDIR --> CONTEXT --> LOOP
     LOOP --> GRADE --> PASSES --> CLEANUP --> AGGREGATE --> METRICS
@@ -573,6 +573,23 @@ flowchart TD
         The eval task runner (<code>src/eval/task-runner.ts</code>) now calls the production
         <code>walkRepo → buildContext</code> retrieval path instead of an ad-hoc dir-walk, so evals
         measure what ships and exercise the same target-pinning + size-gate as live runs.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Measuring stick (trustworthy results)</strong>:
+        a stochastic 3B at temp≈1.0 makes pass@1 over 5 samples swing wildly (a trivial control task
+        observed swinging 1.00→0.40 between runs), so small effects are invisible. The runner now
+        <strong>decouples the sample count <code>n</code> (<code>SMALLCODE_EVAL_N</code>) from the
+        reported <code>k</code></strong> (<code>SMALLCODE_REPORT_KS</code>): it runs <code>n</code>
+        trials and reports pass@k for several k via the unbiased estimator (<code>src/eval/metrics.ts</code>),
+        each with a <strong>95% bootstrap confidence interval</strong> (<code>src/eval/stats.ts</code>,
+        seeded → reproducible). Two variants differ significantly only when their CIs don't overlap;
+        overlap means raise <code>n</code> (CI width ~1/√n) rather than trust the point estimate. A
+        grader-side <strong>infra-error retry</strong> (<code>SMALLCODE_GRADER_RETRIES</code>) keeps
+        transient <code>bun test</code> lockfile/EAGAIN failures from being mis-counted as model
+        failures — those trials are excluded from the denominator, never invented as passes. Each
+        live snapshot in <code>evals/metrics-history.jsonl</code> records <code>n</code>, per-k rates,
+        CIs, think-only-truncation totals, and the sampling overrides in effect, so history rows are
+        self-describing.
       </p>
     </section>
 

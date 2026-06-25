@@ -101,6 +101,14 @@ export interface TrialResult {
 // Eval run results + metrics
 // ---------------------------------------------------------------------------
 
+/** 95% confidence interval for a pass@k estimate (bootstrap; see eval/stats.ts). */
+export interface PassAtKCI {
+  lo: number;
+  hi: number;
+  /** True when n was too small (<2) to bootstrap a meaningful interval. */
+  degenerate?: boolean;
+}
+
 export interface TaskEvalResult {
   task: EvalTask;
   trials: TrialResult[];
@@ -109,6 +117,11 @@ export interface TaskEvalResult {
   passAllK: number; // pass^k = P(all k trials pass)
   avgPartialScore: number;
   avgMetrics: TrialMetrics;
+  // --- Additive (measuring-stick rebuild); optional for backward compat. ---
+  /** Sample count = trials.length (decoupled from the reported k set). */
+  n?: number;
+  /** 95% bootstrap CI per reported k, parallel to passAtK. */
+  passAtKCI?: Record<number, PassAtKCI>;
 }
 
 export interface EvalRunResult {

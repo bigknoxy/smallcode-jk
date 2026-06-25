@@ -34,6 +34,12 @@ export interface CandidateTask {
 // Metrics history
 // ---------------------------------------------------------------------------
 
+/** 95% CI bounds persisted in a snapshot (mirrors eval/stats.ts CI). */
+export interface SnapshotCI {
+  lo: number;
+  hi: number;
+}
+
 export interface MetricsSnapshot {
   timestamp: number;
   runId: string;
@@ -43,6 +49,26 @@ export interface MetricsSnapshot {
   totalTasksPassed: number;
   totalTasks: number;
   perTaskPassAt1: Record<string, number>; // taskId → pass@1
+  // --- Additive (measuring-stick rebuild); all optional for backward compat
+  // with existing metrics-history.jsonl rows and readers. ---
+  /** Sample count n per task this run. */
+  n?: number;
+  /** k values reported, e.g. [1,2,3,5]. */
+  reportKs?: number[];
+  /** taskId → k → pass@k point estimate. */
+  perTaskPassAtK?: Record<string, Record<number, number>>;
+  /** taskId → k → 95% bootstrap CI. */
+  perTaskCI?: Record<string, Record<number, SnapshotCI>>;
+  /** Suite-level pooled pass@k point estimate per k. */
+  overallPassAtK?: Record<number, number>;
+  /** Suite-level pooled 95% CI per k. */
+  overallCI?: Record<number, SnapshotCI>;
+  /** Total think-only (truncated mid-reasoning) turns across the run. */
+  thinkOnlyTotal?: number;
+  /** Total trials that hit ≥1 think-only truncation. */
+  trialsWithTruncationTotal?: number;
+  /** Sampling overrides in effect, so history rows are self-describing. */
+  sampling?: { temp?: number; maxTokens?: number };
 }
 
 export interface MetricsHistory {
