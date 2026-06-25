@@ -2,10 +2,11 @@ import { resolve } from "node:path";
 import { runLoop } from "../../agent/loop.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
-import type { AgentState, AgentConfig } from "../../agent/types.ts";
+import type { AgentConfig, AgentState } from "../../agent/types.ts";
 import { loadConfig } from "../../config/loader.ts";
-import type { ContextBundle } from "../../context/types.ts";
 import { buildContext, walkRepo } from "../../context/index.ts";
+import type { ContextBundle } from "../../context/types.ts";
+import { contextBudgetFor } from "../../models/context-budget.ts";
 import { ModelRegistry } from "../../models/registry.ts";
 import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
@@ -158,10 +159,12 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
 
   // 6b. Index the repository so the agent can SEE the codebase (symbol map +
   // query-relevant file chunks). Without this the model runs blind and can only
-  // guess file names. Half the context window is reserved for repo context; the
-  // rest is left for the conversation and the model's reasoning.
+  // guess file names. The budget is derived from the model's OPERATIVE window
+  // (num_ctx, not the nominal contextWindow) minus the generation reserve —
+  // otherwise repo context overflows the real window and Ollama returns HTTP
+  // 400 after a few turns. See models/context-budget.ts.
   process.stderr.write("[smallcode] Scanning repository...\n");
-  const ctxBudget = Math.max(2048, Math.floor(profile.contextWindow * 0.5));
+  const ctxBudget = contextBudgetFor(profile);
   let repoMap: Awaited<ReturnType<typeof walkRepo>>;
   try {
     repoMap = await walkRepo({ root: repoRoot }, Date.now());

@@ -1,3 +1,4 @@
+import { estimateTokens } from "@/context/tokens.ts";
 import type { ContextBundle } from "@/context/types.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import { renderDiagnostic } from "@/verify/failure-extract.ts";
@@ -122,4 +123,61 @@ export function buildTurnPrompt(
   }
 
   return parts.join("\n");
+}
+
+export interface FittedTurnPrompt {
+  /** The assembled user-message prompt, guaranteed to fit (best-effort) under hardCap. */
+  turnPrompt: string;
+  /** Estimated tokens of system + turnPrompt for the returned prompt. */
+  estimatedTokens: number;
+  /** Number of repo-context chunks dropped to make it fit. */
+  droppedChunks: number;
+}
+
+/**
+ * Build a turn prompt that fits the model's window. Even with a correct repo
+ * context budget, a single turn can overflow: the failed-edit path re-dumps a
+ * full file into Recent History on top of ## Relevant Context, and token
+ * estimation is approximate. This guard re-builds the prompt while dropping the
+ * largest repo-context chunk each pass until `estimateTokens(system) +
+ * estimateTokens(turnPrompt) <= hardCap`, or no chunks remain.
+ *
+ * History (the failing-test output and the failed-edit file the model needs to
+ * self-correct) is never trimmed — only surplus ## Relevant Context chunks are
+ * dropped, since the most task-relevant chunk is preserved longest (largest are
+ * shed first). Pure: no I/O, deterministic for a given input.
+ */
+export function fitTurnPromptToWindow(
+  state: AgentState,
+  context: ContextBundle,
+  systemPrompt: string,
+  hardCap: number,
+  opts?: BuildTurnPromptOpts,
+): FittedTurnPrompt {
+  const systemTokens = estimateTokens(systemPrompt);
+  const chunks = [...context.chunks];
+  let droppedChunks = 0;
+
+  while (true) {
+    const turnPrompt = buildTurnPrompt(state, { ...context, chunks }, opts);
+    const estimatedTokens = systemTokens + estimateTokens(turnPrompt);
+
+    if (estimatedTokens <= hardCap || chunks.length === 0) {
+      return { turnPrompt, estimatedTokens, droppedChunks };
+    }
+
+    // Drop the largest remaining chunk and retry. Largest-first sheds the most
+    // tokens per pass and tends to keep tightly-scoped, high-relevance windows.
+    let largestIdx = 0;
+    let largestTokens = chunks[0]?.estimatedTokens ?? 0;
+    for (let i = 1; i < chunks.length; i++) {
+      const t = chunks[i]?.estimatedTokens ?? 0;
+      if (t > largestTokens) {
+        largestTokens = t;
+        largestIdx = i;
+      }
+    }
+    chunks.splice(largestIdx, 1);
+    droppedChunks++;
+  }
 }

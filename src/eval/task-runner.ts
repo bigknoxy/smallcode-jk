@@ -7,6 +7,7 @@ import { createState, getStatePath } from "../agent/state.ts";
 import type { AgentConfig } from "../agent/types.ts";
 import { estimateTokens } from "../context/tokens.ts";
 import type { ContextBundle, ContextChunk } from "../context/types.ts";
+import { contextBudgetFor } from "../models/context-budget.ts";
 import type { LLMJudgeOptions } from "./graders/index.ts";
 import { runGrader } from "./graders/index.ts";
 import { averageMetrics, collectMetrics, computePassAllK, computePassAtK } from "./metrics.ts";
@@ -25,13 +26,20 @@ export interface TaskRunnerOptions {
 
 // Walk trial dir and return source files as context chunks.
 // Includes .ts/.js/.py source files but not node_modules or lock files.
-async function buildTrialContext(trialDir: string, query: string): Promise<ContextBundle> {
+// tokenBudget is derived from the model's operative window (num_ctx) minus the
+// generation reserve — matching the real CLI path — so eval trials see the same
+// context pressure production runs do, instead of a hardcoded 8000.
+async function buildTrialContext(
+  trialDir: string,
+  query: string,
+  tokenBudget: number,
+): Promise<ContextBundle> {
   const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"]);
   const SKIP_DIRS = new Set(["node_modules", ".git", ".smallcode"]);
 
   const chunks: ContextChunk[] = [];
   let totalTokens = 0;
-  const TOKEN_BUDGET = 8_000;
+  const TOKEN_BUDGET = tokenBudget;
 
   async function walk(dir: string): Promise<void> {
     let entries: string[];
@@ -122,7 +130,8 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
           state,
           statePath,
           trialDeps,
-          async (goal: string): Promise<ContextBundle> => buildTrialContext(trialEnv.dir, goal),
+          async (goal: string): Promise<ContextBundle> =>
+            buildTrialContext(trialEnv.dir, goal, contextBudgetFor(loopDeps.profile)),
         ),
         new Promise<never>((_, reject) => setTimeout(() => reject(timeoutError), trialTimeoutMs)),
       ]);

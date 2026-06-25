@@ -2,16 +2,17 @@ import { readFile, writeFile } from "node:fs/promises";
 import path, { sep } from "node:path";
 import type { ContextBundle } from "@/context/types.ts";
 import { applyBatch, parse } from "@/edit/index.ts";
+import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
-import { planTask } from "./planner.ts";
-import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
-import { rotateStrategy } from "./strategy.ts";
-import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
-import { type ToolContext, executeTool } from "./tools.ts";
-import { captureTestBaseline, runTieredOracle } from "@/verify/oracle.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
+import { captureTestBaseline, runTieredOracle } from "@/verify/oracle.ts";
+import { planTask } from "./planner.ts";
+import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
+import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
+import { rotateStrategy } from "./strategy.ts";
+import { executeTool, type ToolContext } from "./tools.ts";
 import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./types.ts";
 
 const STALL_LIMIT = 2;
@@ -145,6 +146,9 @@ export async function runLoop(
   const sampleTemp = deps.samplingOverride?.temperature ?? profile.samplingDefaults.temperature;
   const sampleTopP = deps.samplingOverride?.top_p ?? profile.samplingDefaults.top_p;
   const systemPrompt = buildSystemPrompt(profile, config);
+  // Ceiling for system + user prompt; repo context is trimmed to fit so the
+  // request never overflows the model window (HTTP 400) or starves generation.
+  const hardCap = promptHardCap(profile);
 
   const readFileFn = buildReadFile(state.repoRoot);
   const writeFileFn = buildWriteFile(state.repoRoot);
@@ -222,7 +226,13 @@ export async function runLoop(
     const turnPromptOpts = redraftNext
       ? { redraft: true, strategyHint: redraftStrategyHint }
       : undefined;
-    const turnPrompt = buildTurnPrompt(state, context, turnPromptOpts);
+    const fitted = fitTurnPromptToWindow(state, context, systemPrompt, hardCap, turnPromptOpts);
+    const turnPrompt = fitted.turnPrompt;
+    if (fitted.droppedChunks > 0) {
+      process.stderr.write(
+        `[smallcode] trimmed ${fitted.droppedChunks} context chunk(s) to fit window (~${fitted.estimatedTokens}/${hardCap} tokens)\n`,
+      );
+    }
     // Consume the redraft flag (it applies to this turn only).
     redraftNext = false;
     redraftStrategyHint = undefined;
