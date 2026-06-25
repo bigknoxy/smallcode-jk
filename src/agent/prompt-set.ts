@@ -61,7 +61,7 @@ Run tests:        TOOL: run_tests {}
 Run a command:    TOOL: run_command {"cmd": "bun test"}
 Finish a goal:    TOOL: finish {"summary": "what was done"}
 
-For large files (>300 lines), the system may recommend using PATCH: format — see PATCH: below.
+When a file is large, the turn prompt's "## Edit Target" section will tell you to use PATCH: format for a single function — follow it exactly. See PATCH: below.
 
 ## HOW TO PATCH A LARGE FILE (optional, only when recommended)
 
@@ -71,7 +71,7 @@ FUNCTION: functionName
 <complete replacement of just that function, including its signature line>
 \`\`\`
 
-Use PATCH: only when explicitly told the file is large. Default to FILE: for all other edits.
+Use PATCH: only when the ## Edit Target section explicitly tells you to. Default to FILE: for all other edits.
 
 ## RULES
 

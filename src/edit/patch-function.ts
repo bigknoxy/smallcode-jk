@@ -25,8 +25,16 @@ import { generateDiff } from "./applier.ts";
 // Thresholds
 // ---------------------------------------------------------------------------
 
-/** Lines threshold above which PATCH format is recommended. */
-export const PATCH_LINE_THRESHOLD = 300;
+/**
+ * Lines threshold above which the harness switches the target file to PATCH
+ * (single-function) editing. Lowered from 300 → 140: small local models
+ * reliably reproduce a whole file only up to ~120–150 lines; above that, the
+ * tail gets truncated or hallucinated, so we localize the edit to one function
+ * deterministically rather than hoping the model opts in. Calibrated against the
+ * edit-reliability suite (29-line file solved whole; 124/164-line files failed
+ * whole-file emission).
+ */
+export const PATCH_LINE_THRESHOLD = 140;
 
 /** Byte threshold above which PATCH format is recommended. */
 export const PATCH_BYTE_THRESHOLD = 8192;

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { lstat, readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import type { LoopDependencies } from "../agent/loop.ts";
 import { runLoop } from "../agent/loop.ts";
 import { createState, getStatePath } from "../agent/state.ts";
 import type { AgentConfig } from "../agent/types.ts";
-import { estimateTokens } from "../context/tokens.ts";
-import type { ContextBundle, ContextChunk } from "../context/types.ts";
+import { buildContext } from "../context/builder.ts";
+import { walkRepo } from "../context/walker.ts";
+import type { ContextBundle } from "../context/types.ts";
 import { contextBudgetFor } from "../models/context-budget.ts";
 import type { LLMJudgeOptions } from "./graders/index.ts";
 import { runGrader } from "./graders/index.ts";
@@ -24,75 +24,31 @@ export interface TaskRunnerOptions {
   trialTimeoutMs?: number;
 }
 
-// Walk trial dir and return source files as context chunks.
-// Includes .ts/.js/.py source files but not node_modules or lock files.
-// tokenBudget is derived from the model's operative window (num_ctx) minus the
-// generation reserve — matching the real CLI path — so eval trials see the same
-// context pressure production runs do, instead of a hardcoded 8000.
+// Option A toggle: pin the edit target + size-gate the format. Default on; set
+// SMALLCODE_TARGET_PIN=0 to measure the pre-A baseline on the identical path.
+const TARGET_PIN_ENABLED = process.env["SMALLCODE_TARGET_PIN"] !== "0";
+
+// Build trial context via the SAME production retrieval the CLI uses: walkRepo
+// (symbol-indexed repo map) → buildContext (query scoring, target pinning,
+// size-gated edit format). Previously this reimplemented an ad-hoc dir-walk that
+// diverged from production — so evals measured a retrieval path that never
+// shipped. tokenBudget is the model's operative window minus the generation
+// reserve, so trials feel the same context pressure as production.
 async function buildTrialContext(
   trialDir: string,
   query: string,
   tokenBudget: number,
 ): Promise<ContextBundle> {
-  const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"]);
-  const SKIP_DIRS = new Set(["node_modules", ".git", ".smallcode"]);
-
-  const chunks: ContextChunk[] = [];
-  let totalTokens = 0;
-  const TOKEN_BUDGET = tokenBudget;
-
-  async function walk(dir: string): Promise<void> {
-    let entries: string[];
-    try {
-      entries = await readdir(dir, { encoding: "utf-8" });
-    } catch {
-      return;
-    }
-    for (const name of entries) {
-      const absPath = join(dir, name);
-      // Check if directory
-      let isDir = false;
-      try {
-        const s = await lstat(absPath);
-        isDir = s.isDirectory();
-      } catch {
-        continue;
-      }
-      if (isDir) {
-        if (!SKIP_DIRS.has(name)) await walk(absPath);
-        continue;
-      }
-      const ext = name.slice(name.lastIndexOf("."));
-      if (!SOURCE_EXTS.has(ext)) continue;
-      const relPath = relative(trialDir, absPath);
-      try {
-        const content = await readFile(absPath, { encoding: "utf-8" });
-        const lines = content.split("\n");
-        const tokens = estimateTokens(content);
-        if (totalTokens + tokens > TOKEN_BUDGET) continue;
-        totalTokens += tokens;
-        chunks.push({
-          filePath: relPath,
-          content,
-          startLine: 1,
-          endLine: lines.length,
-          estimatedTokens: tokens,
-        });
-      } catch {
-        // Skip unreadable files
-      }
-    }
+  try {
+    const repoMap = await walkRepo({ root: trialDir }, Date.now());
+    return await buildContext(repoMap, query, {
+      repoRoot: trialDir,
+      tokenBudget,
+      pinTarget: TARGET_PIN_ENABLED,
+    });
+  } catch {
+    return { chunks: [], totalTokens: 0, tokenBudget, truncated: false, query };
   }
-
-  await walk(trialDir);
-
-  return {
-    chunks,
-    totalTokens,
-    tokenBudget: TOKEN_BUDGET,
-    truncated: false,
-    query,
-  };
 }
 
 export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<TaskEvalResult> {
