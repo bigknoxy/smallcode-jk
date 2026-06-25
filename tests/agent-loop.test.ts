@@ -339,7 +339,8 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt(profile, config);
 
     expect(prompt).toContain("FILE:");
-    expect(prompt).toContain("WHOLE file");
+    expect(prompt).toContain("PATCH:");
+    expect(prompt).toContain("ENTIRE file");
     expect(prompt).toContain("TOOL: finish");
     expect(prompt).toContain("smallcode");
   });

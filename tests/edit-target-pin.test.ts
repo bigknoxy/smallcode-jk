@@ -204,7 +204,7 @@ describe("buildTurnPrompt edit-format directive", () => {
     expect(prompt).toContain("## Edit Target — src/table.ts (164 lines)");
     expect(prompt).toContain("PATCH: src/table.ts");
     expect(prompt).toContain("FUNCTION: padCell");
-    expect(prompt).toContain("Do NOT re-emit the whole file");
+    expect(prompt).toContain("Do NOT emit the whole file");
   });
 
   it("emits a whole-file FILE directive for a small target", () => {

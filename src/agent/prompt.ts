@@ -60,13 +60,13 @@ export function buildTurnPrompt(
     parts.push(`\n## Edit Target — ${target.path} (${target.lineCount} lines)`);
     if (usePatch) {
       parts.push(
-        `This file is large. Do NOT re-emit the whole file. Edit ONLY the \`${target.functionName}\` function using PATCH: format — output the complete replacement of just that one function:`,
+        `This file is large — use PATCH: mode. Do NOT emit the whole file (it will be rejected). Edit ONLY the \`${target.functionName}\` function. Output the PATCH block as the FIRST thing in your reply — do not think out loud, do not restate the task, just emit it in exactly this shape (replace the placeholder with the corrected function body):`,
       );
       parts.push("```");
       parts.push(`PATCH: ${target.path}`);
       parts.push(`FUNCTION: ${target.functionName}`);
       parts.push("```ts");
-      parts.push(`<complete ${target.functionName} function, including its signature line>`);
+      parts.push(`export function ${target.functionName}(...) { /* corrected body, signature line included */ }`);
       parts.push("```");
     } else {
       parts.push(

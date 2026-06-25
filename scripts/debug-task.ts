@@ -34,7 +34,10 @@ import type { Transcript } from "../src/eval/types.ts";
 // ---------------------------------------------------------------------------
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
-const SUITE_DIR = join(PROJECT_ROOT, "evals", "suites", "capability");
+const SUITE_NAME = process.env["SMALLCODE_SUITE"] ?? "capability";
+const SUITE_DIR = SUITE_NAME.includes("/")
+  ? resolve(PROJECT_ROOT, SUITE_NAME)
+  : join(PROJECT_ROOT, "evals", "suites", SUITE_NAME);
 const FIXTURES_DIR = join(PROJECT_ROOT, "evals", "fixtures");
 const EVAL_MAX_TURNS = Number(process.env.SMALLCODE_EVAL_MAX_TURNS ?? "5");
 
