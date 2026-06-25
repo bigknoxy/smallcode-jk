@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.1.1...v1.2.0) (2026-06-25)
+
+
+### Features
+
+* **loop:** redraft-on-think-only recovery (answer-now prompt) ([#17](https://github.com/bigknoxy/smallcode-jk/issues/17)) ([60b8002](https://github.com/bigknoxy/smallcode-jk/commit/60b8002c8f46d8f808e26479e2c65940ad772821))
+
 ## [1.1.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.1.0...v1.1.1) (2026-06-25)
 
 
