@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-mediumfile-breakword_1",
+  "desc": "Fix the off-by-one chunk-sizing bug in `breakLongWord` inside the medium file src/wrap.ts. The slice end is computed as `start + safeWidth - 1`, so an over-long word is split into chunks one character too short, producing the wrong fragments. Edit only the faulty function so tests/wrap.test.ts passes. The other modules already pass.",
+  "setup": { "repoFixture": "edit-rel-mediumfile-breakword_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/wrap.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "mediumfile", "off-by-one"],
+  "reference_solution": "edit-rel-mediumfile-breakword_1-solution/"
+}

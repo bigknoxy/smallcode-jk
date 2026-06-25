@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-bigfile-sepline_1",
+  "desc": "Fix the off-by-one bug in `separatorLine` inside the large file src/table.ts. Each column's dash run is built with `(widths[c] ?? 0) + 1` instead of `+ 2`, so every column's separator is one dash short and the separator line no longer matches the column width plus its two padding spaces. Edit only the faulty function so tests/table.test.ts passes. The other modules already pass.",
+  "setup": { "repoFixture": "edit-rel-bigfile-sepline_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/table.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "bigfile", "off-by-one"],
+  "reference_solution": "edit-rel-bigfile-sepline_1-solution/"
+}
