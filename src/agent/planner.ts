@@ -13,15 +13,16 @@ export interface PlannerOptions {
   reflectionPrompt?: string; // override the reflection system prompt (GEPA seam)
 }
 
-const PLANNER_SYSTEM_PROMPT = `You are a coding assistant that plans tasks as ordered sub-goals.
+export const PLANNER_SYSTEM_PROMPT = `You are a coding assistant that plans tasks as ordered sub-goals.
 Each sub-goal must be a concrete ACTION starting with an action verb (e.g. Add, Fix, Implement, Write, Update, Remove, Refactor, Run).
 Do NOT output file paths or line ranges as goals — those are context, not actions.
 Output ONLY a numbered list of sub-goals. No prose, no explanation.
 Prefer 1–3 sub-goals for a small task; maximum 5.
-Example:
-1. Add the missing null check in parseConfig
-2. Write a unit test for the new branch
-3. Run tests to verify the fix`;
+
+Format (use the task's OWN nouns — do NOT copy these placeholders literally):
+1. <action verb> <specific thing> in <file>
+2. <action verb> <specific thing>
+3. Run tests to verify`;
 
 const REFLECTION_SYSTEM_PROMPT = `You are a coding assistant. Briefly reflect on a task before planning.
 In 2-3 sentences: restate the core problem, note the key constraint or edge case to watch for.

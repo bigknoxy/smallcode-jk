@@ -284,6 +284,7 @@ export async function runLoop(
       // Check maxTurns after adding the failed turn
       if (state.turns.length >= state.maxTurns) {
         state.status = "max_turns";
+        await saveState(state, statePath); // FIX #5: persist max_turns so state.json never shows "running"
       }
       continue;
     }
@@ -443,6 +444,7 @@ export async function runLoop(
     if (verdict?.outcome === "solved") {
       for (const g of state.goals) g.status = "done";
       state.status = "done";
+      state.verified = true;
       await saveState(state, statePath);
       break;
     }
@@ -454,7 +456,7 @@ export async function runLoop(
     // Check maxTurns
     if (state.turns.length >= state.maxTurns) {
       state.status = "max_turns";
-      await saveState(state, statePath);
+      await saveState(state, statePath); // FIX #5: persist max_turns so state.json never shows "running"
       break;
     }
   }

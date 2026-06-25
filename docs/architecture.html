@@ -354,6 +354,19 @@ graph TD
         baseline AND ≥1 pass — pre-existing unrelated failures never block early-stop.
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Honest completion reporting</strong>:
+        <code>status = "done"</code> alone does NOT mean the run succeeded — the model may have called
+        <code>TOOL: finish</code> while tests were still failing.
+        <code>AgentState.verified</code> is set to <code>true</code> only when the tiered oracle
+        confirmed <code>outcome === "solved"</code> before the loop exited.
+        The CLI's <code>classifyCompletion(finalState, statePath)</code> helper maps the combination to
+        an honest outcome: success (exit 0) only when <code>status === "done" &amp;&amp; verified === true</code>;
+        a <code>⚠ Finished, but tests are NOT verified passing</code> warning (exit 1) for unverified done;
+        and <code>✗ Hit max turns without solving</code> / generic error (exit 1) for all other statuses.
+        <code>max_turns</code> status is now also persisted to <code>state.json</code> immediately on
+        turn exhaustion (both the main path and the error-turn path).
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">Structured failure feedback</strong>: on every "failing" oracle verdict,
         <code>extractFirstFailure</code> parses the first failing assertion (Expected/Received),
         errorType, and test label into a <code>FailureDiagnostic</code>.
