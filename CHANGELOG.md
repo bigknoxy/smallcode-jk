@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/bigknoxy/smallcode-jk/compare/v1.2.1...v1.2.2) (2026-06-25)
+
+
+### Bug Fixes
+
+* **edit,verify:** edit-apply reliability + oracle honesty (wire repair, guard truncation, path-typo rescue, fully-green solved) ([#21](https://github.com/bigknoxy/smallcode-jk/issues/21)) ([6de9d1f](https://github.com/bigknoxy/smallcode-jk/commit/6de9d1f07e326faddbf299ddd13056f4f09a49fb))
+
 ## [1.2.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.2.0...v1.2.1) (2026-06-25)
 
 
