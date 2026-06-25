@@ -198,6 +198,53 @@ describe("applyPatchBlock — happy path", () => {
     expect(newContent).toContain(originalAddFn);
   });
 
+  test("anchors by FUNCTION name even when the model's signature drifts from source", () => {
+    // The 3B rarely reproduces the source signature byte-for-byte: here it uses
+    // different param names AND drops the return type. The old first-line-match
+    // anchor failed with not_found; name lookup must still locate `subtract`.
+    const patch: PatchBlock = {
+      filePath: "src/math.ts",
+      functionName: "subtract",
+      replacement: `export function subtract(x: number, y: number) {\n  return x - y - 1;\n}\n`,
+      format: "patch-function",
+    };
+    const result = applyPatchBlock(patch, SIMPLE_FILE);
+    expect(result.status).toBe("applied");
+    expect(result.newContent).toContain("return x - y - 1;");
+    // add() untouched
+    expect(result.newContent).toContain("return a + b;");
+  });
+
+  test("restores a dropped export keyword the model omitted", () => {
+    // Logic-correct fix but the model paraphrased the signature and lost
+    // `export`, which would un-export padCell and break its importers.
+    const patch: PatchBlock = {
+      filePath: "src/math.ts",
+      functionName: "subtract",
+      replacement: `function subtract(a: number, b: number): number {\n  return a - b - 1;\n}\n`,
+      format: "patch-function",
+    };
+    const result = applyPatchBlock(patch, SIMPLE_FILE);
+    expect(result.status).toBe("applied");
+    expect(result.newContent).toContain("export function subtract");
+    expect(result.newContent).not.toContain("\nfunction subtract"); // not the un-exported form
+    expect(result.newContent).toContain("return a - b - 1;");
+  });
+
+  test("anchors a const-arrow function by name", () => {
+    const file = `export const toKebab = (s: string): string => {\n  return s.replace(/ /g, "_");\n};\n`;
+    const patch: PatchBlock = {
+      filePath: "src/casing.ts",
+      functionName: "toKebab",
+      // model re-emits as arrow with drifted param + hyphen fix
+      replacement: `export const toKebab = (str: string) => {\n  return str.replace(/ /g, "-");\n};\n`,
+      format: "patch-function",
+    };
+    const result = applyPatchBlock(patch, file);
+    expect(result.status).toBe("applied");
+    expect(result.newContent).toContain('replace(/ /g, "-")');
+  });
+
   test("replaces middle function in a three-function file", () => {
     const patch: PatchBlock = {
       filePath: "src/utils.ts",

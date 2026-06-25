@@ -37,6 +37,29 @@ export interface ContextChunk {
   endLine: number; // 1-based, inclusive
   content: string;
   estimatedTokens: number;
+  /**
+   * The target file the model is being asked to edit. Pinned chunks are NEVER
+   * windowed (always the whole file) and NEVER shed by fitTurnPromptToWindow —
+   * the model cannot reproduce a file it cannot see in full. At most one chunk
+   * per bundle is pinned (the target source file).
+   */
+  pinned?: boolean;
+}
+
+/**
+ * The file the agent is expected to edit this turn, plus the deterministic edit
+ * format the harness has chosen for it based on size. Lets the prompt issue an
+ * explicit FILE:/PATCH: directive instead of leaving a small model to guess
+ * whether a file is "large", and lets the executor verify the model edited the
+ * file it was pointed at.
+ */
+export interface TargetFile {
+  path: string; // relative to repo root
+  lineCount: number;
+  /** "full" ⇒ emit whole file (FILE:); "patch" ⇒ edit one function (PATCH:). */
+  format: "full" | "patch";
+  /** Best-scoring matched symbol — the function to PATCH when format==="patch". */
+  functionName?: string;
 }
 
 export interface ContextBundle {
@@ -45,4 +68,6 @@ export interface ContextBundle {
   tokenBudget: number;
   truncated: boolean;
   query: string;
+  /** Set when a confident edit target was identified (score-ranked source file). */
+  targetFile?: TargetFile;
 }

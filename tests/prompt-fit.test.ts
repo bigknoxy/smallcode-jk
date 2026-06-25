@@ -100,4 +100,22 @@ describe("fitTurnPromptToWindow", () => {
     fitTurnPromptToWindow(makeState(), ctx, SYSTEM, 1);
     expect(ctx.chunks).toHaveLength(2); // original untouched
   });
+
+  it("NEVER drops a pinned chunk — the target file survives even over cap", () => {
+    const target: ContextChunk = { ...chunk("target.ts", 6000), pinned: true };
+    const peripheral = chunk("other.ts", 6000);
+    const ctx = makeContext([target, peripheral]);
+    const r = fitTurnPromptToWindow(makeState(), ctx, SYSTEM, 1);
+    // peripheral shed; pinned target retained even though prompt exceeds cap.
+    expect(r.turnPrompt).toContain("target.ts");
+    expect(r.turnPrompt).not.toContain("other.ts");
+  });
+
+  it("sheds non-pinned chunks before giving up, keeping the pinned target", () => {
+    const target: ContextChunk = { ...chunk("target.ts", 3000), pinned: true };
+    const ctx = makeContext([chunk("a.ts", 4000), target, chunk("b.ts", 4000)]);
+    const r = fitTurnPromptToWindow(makeState(), ctx, SYSTEM, 1200);
+    expect(r.turnPrompt).toContain("target.ts");
+    expect(r.droppedChunks).toBe(2); // both non-pinned dropped
+  });
 });

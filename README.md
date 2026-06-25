@@ -326,4 +326,5 @@ MIT
 - `SMALLCODE_DISCIPLINE`: _(add description)_
 - `SMALLCODE_PRESOLVE`: _(add description)_
 - `SMALLCODE_SUITE`: eval suite for `run-baseline.ts` — bare name under `evals/suites/` or an explicit path (default `capability`).
+- `SMALLCODE_TARGET_PIN`: pin the edit-target file as an undroppable whole chunk + size-gate the edit format (default on; set `0` to disable, e.g. for the pre-A baseline).
 <!-- agent-skills:doc-keeper:end -->

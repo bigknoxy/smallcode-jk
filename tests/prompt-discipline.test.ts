@@ -56,10 +56,12 @@ describe("buildSystemPrompt — discipline rules toggle", () => {
     }
   });
 
-  it("discipline rules still require emitting the whole file (no contradictions)", () => {
+  it("discipline rule 10 is format-aware (whole file in FILE: mode, whole function in PATCH: mode)", () => {
     const prompt = buildSystemPrompt(makeProfile(), makeConfig({ disciplineRules: true }));
-    // Rule 2 and discipline rule 10 must coexist
-    expect(prompt).toContain("WHOLE file");
-    expect(prompt).toContain("emit the WHOLE file");
+    // Rule 10 must agree with the FILE:/PATCH: split, not demand the whole file
+    // unconditionally (which contradicted the ## Edit Target PATCH directive and
+    // sent small models into a format-deadlock think-spiral).
+    expect(prompt).toContain("whole file in FILE: mode");
+    expect(prompt).toContain("whole single function in PATCH: mode");
   });
 });

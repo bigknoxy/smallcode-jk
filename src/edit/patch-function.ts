@@ -25,8 +25,18 @@ import { generateDiff } from "./applier.ts";
 // Thresholds
 // ---------------------------------------------------------------------------
 
-/** Lines threshold above which PATCH format is recommended. */
-export const PATCH_LINE_THRESHOLD = 300;
+/**
+ * Lines threshold above which the harness switches the target file to PATCH
+ * (single-function) editing. Calibrated against the edit-reliability suite on a
+ * 3B: a 30-line file is solved whole-file in 1 turn (1.00); 124/164-line files
+ * fail whole-file emission (0.00–0.40) because the tail gets truncated. A k=1
+ * smoke at threshold 140 confirmed the directly-PATCHed 164-line file jumped
+ * 0.00→1.00 while the 125-line files left on whole-file emission did NOT
+ * improve — so the gate must sit below 125. 80 keeps small files (the control)
+ * whole while localizing anything substantial to one function the model can
+ * reliably emit. Lowered 300 → 140 → 80.
+ */
+export const PATCH_LINE_THRESHOLD = 80;
 
 /** Byte threshold above which PATCH format is recommended. */
 export const PATCH_BYTE_THRESHOLD = 8192;
@@ -193,35 +203,66 @@ export function parsePatchBlocks(raw: string): PatchParseResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Locate the target function region in `content` by scanning for a line whose
- * trimmed content matches the trimmed first non-empty line of `replacement`.
+ * Find lines that DEFINE `name` (not call it). Returns matching line indices.
+ * Strong patterns first (`function name`, `const/let/var name =`); only if none
+ * match do we accept a class-method-style `name(...) {` line (gated on a trailing
+ * `{` to avoid call sites). Exported for testing.
+ */
+export function findDefinitionLines(contentLines: string[], name: string): number[] {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const strong = [
+    new RegExp(`^(?:export\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*${esc}\\b`),
+    new RegExp(`^(?:export\\s+)?(?:const|let|var)\\s+${esc}\\s*[:=]`),
+  ];
+  const strongHits: number[] = [];
+  for (let i = 0; i < contentLines.length; i++) {
+    const t = (contentLines[i] ?? "").trim();
+    if (strong.some((p) => p.test(t))) strongHits.push(i);
+  }
+  if (strongHits.length > 0) return strongHits;
+
+  // Fallback: class method `name(args) {` — require trailing `{` so we don't
+  // anchor on a call site like `padCell(x, y)`.
+  const method = new RegExp(
+    `^(?:public\\s+|private\\s+|protected\\s+|static\\s+|readonly\\s+|async\\s+|get\\s+|set\\s+|\\*\\s*)*${esc}\\s*\\(`,
+  );
+  const methodHits: number[] = [];
+  for (let i = 0; i < contentLines.length; i++) {
+    const t = (contentLines[i] ?? "").trim();
+    if (method.test(t) && /\{\s*$/.test(t)) methodHits.push(i);
+  }
+  return methodHits;
+}
+
+/**
+ * Locate the target function region in `content`. The anchor is the function's
+ * DEFINITION located by NAME (`functionName`) — robust to a small model emitting
+ * a signature that doesn't byte-match the source (different param names, types,
+ * spacing). Falls back to matching the trimmed first non-empty line of
+ * `replacement` only when name lookup finds nothing.
  *
- * Returns the start and end indices (character positions) of the function
- * region in `content`, or null if not found / ambiguous.
- *
- * The region ends at the closing brace that brings the brace depth back to
- * the level it was BEFORE the opening line was seen (handles top-level and
- * class-method functions). For arrow functions assigned to `const` / `let`
- * / `export const` we detect the closing `};` or `}` at the correct depth.
- *
- * IMPORTANT: If the anchor line appears more than once → ambiguous → null.
+ * Returns start/end character positions of the region, `{ambiguous:true}` if the
+ * anchor is non-unique, or null if not found. The region ends at the closing
+ * brace returning brace depth to 0 (handles top-level fns, class methods, and
+ * `const x = () => {…}` arrows).
  */
 function locateFunctionRegion(
   content: string,
+  functionName: string,
   replacement: string,
 ): { start: number; end: number } | { ambiguous: true } | null {
-  // First non-empty line of the replacement is the anchor signature
-  const replacementLines = replacement.split("\n");
-  const anchorLine = replacementLines.find((l) => l.trim() !== "")?.trim();
-  if (!anchorLine) return null;
-
   const contentLines = content.split("\n");
 
-  // Find all lines that match the anchor (trimmed equality)
-  const matchIndices: number[] = [];
-  for (let i = 0; i < contentLines.length; i++) {
-    if ((contentLines[i] ?? "").trim() === anchorLine) {
-      matchIndices.push(i);
+  // Primary anchor: the function's definition line, found by name.
+  let matchIndices = functionName ? findDefinitionLines(contentLines, functionName) : [];
+
+  // Fallback: the model's emitted first line (legacy behaviour) when the name
+  // lookup yields nothing (e.g. unusual declaration style).
+  if (matchIndices.length === 0) {
+    const anchorLine = replacement.split("\n").find((l) => l.trim() !== "")?.trim();
+    if (!anchorLine) return null;
+    for (let i = 0; i < contentLines.length; i++) {
+      if ((contentLines[i] ?? "").trim() === anchorLine) matchIndices.push(i);
     }
   }
 
@@ -276,19 +317,43 @@ function locateFunctionRegion(
 }
 
 /**
+ * Re-add a leading `export` (or `export default`) that the original function
+ * had but the model's replacement dropped. Small models routinely paraphrase a
+ * signature and silently lose the `export` keyword, turning the function private
+ * and breaking every importer — a logically-correct fix that still fails the
+ * tests. We know the original was exported (we just located it), so restore it.
+ * Exported for testing.
+ */
+export function preserveExport(original: string, replacement: string): string {
+  const origFirst = original.split("\n").find((l) => l.trim() !== "") ?? "";
+  const origExport = /^\s*export\s+(default\s+)?/.exec(origFirst);
+  if (!origExport) return replacement;
+
+  const lines = replacement.split("\n");
+  const idx = lines.findIndex((l) => l.trim() !== "");
+  if (idx < 0) return replacement;
+  if (/^\s*export\b/.test(lines[idx]!)) return replacement; // already exported
+
+  const indent = /^(\s*)/.exec(lines[idx]!)?.[1] ?? "";
+  const keyword = origExport[1] ? "export default " : "export ";
+  lines[idx] = `${indent}${keyword}${lines[idx]!.trimStart()}`;
+  return lines.join("\n");
+}
+
+/**
  * Apply a PatchBlock to in-memory `content`. Returns ApplyResult.
  * NEVER performs I/O; fail-safe — any ambiguity or not-found → error result.
  */
 export function applyPatchBlock(block: PatchBlock, content: string): ApplyResult {
-  const { filePath, replacement } = block;
+  const { filePath, functionName, replacement } = block;
 
-  const region = locateFunctionRegion(content, replacement);
+  const region = locateFunctionRegion(content, functionName, replacement);
 
   if (region === null) {
     return {
       filePath,
       status: "not_found",
-      error: `PATCH anchor not found in ${filePath}: no line matching the first line of the replacement block`,
+      error: `PATCH target not found in ${filePath}: no definition of function "${functionName}" (and no line matching the replacement's first line)`,
     };
   }
 
@@ -301,7 +366,8 @@ export function applyPatchBlock(block: PatchBlock, content: string): ApplyResult
   }
 
   const { start, end } = region;
-  const newContent = content.slice(0, start) + replacement + content.slice(end);
+  const finalReplacement = preserveExport(content.slice(start, end), replacement);
+  const newContent = content.slice(0, start) + finalReplacement + content.slice(end);
   const diff = generateDiff(content, newContent, filePath);
 
   return {

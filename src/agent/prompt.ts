@@ -49,6 +49,32 @@ export function buildTurnPrompt(
   parts.push(goal !== undefined ? goal.description : "No active goal.");
   parts.push("\nExecute this action NOW with a FILE: block or tool calls. Do not describe — act.");
 
+  // Deterministic edit-format directive. The harness — not the model — decides
+  // whole-file vs single-function editing based on the target file's size, and
+  // states it explicitly so a small model never has to self-assess "is this file
+  // large?" (it reliably gets that wrong). PATCH localizes the edit to one
+  // function so the model emits ~15 lines instead of 160 it would truncate.
+  const target = context.targetFile;
+  if (target) {
+    const usePatch = target.format === "patch" && target.functionName !== undefined;
+    parts.push(`\n## Edit Target — ${target.path} (${target.lineCount} lines)`);
+    if (usePatch) {
+      parts.push(
+        `This file is large — use PATCH: mode. Do NOT emit the whole file (it will be rejected). Edit ONLY the \`${target.functionName}\` function. Output the PATCH block as the FIRST thing in your reply — do not think out loud, do not restate the task, just emit it in exactly this shape (replace the placeholder with the corrected function body):`,
+      );
+      parts.push("```");
+      parts.push(`PATCH: ${target.path}`);
+      parts.push(`FUNCTION: ${target.functionName}`);
+      parts.push("```ts");
+      parts.push(`export function ${target.functionName}(...) { /* corrected body, signature line included */ }`);
+      parts.push("```");
+    } else {
+      parts.push(
+        `Emit the COMPLETE file \`${target.path}\` in a FILE: block — every line, including unchanged ones. The full current contents are in Relevant Context below; copy the unchanged parts exactly.`,
+      );
+    }
+  }
+
   parts.push(`\n## Turn ${turnNumber}`);
 
   // Answer-now recovery: the previous turn ran out of generation budget while
@@ -180,16 +206,25 @@ export function fitTurnPromptToWindow(
       return { turnPrompt, estimatedTokens, droppedChunks };
     }
 
-    // Drop the largest remaining chunk and retry. Largest-first sheds the most
-    // tokens per pass and tends to keep tightly-scoped, high-relevance windows.
-    let largestIdx = 0;
-    let largestTokens = chunks[0]?.estimatedTokens ?? 0;
-    for (let i = 1; i < chunks.length; i++) {
+    // Drop the largest remaining NON-pinned chunk and retry. Largest-first sheds
+    // the most tokens per pass. Pinned chunks (the target file the model is being
+    // asked to edit) are never shed — dropping them would leave the model editing
+    // a file it cannot see, the exact failure this guard otherwise causes.
+    let largestIdx = -1;
+    let largestTokens = -1;
+    for (let i = 0; i < chunks.length; i++) {
+      if (chunks[i]?.pinned) continue;
       const t = chunks[i]?.estimatedTokens ?? 0;
       if (t > largestTokens) {
         largestTokens = t;
         largestIdx = i;
       }
+    }
+    // Only pinned chunks remain — nothing left to shed. Return as-is (the pinned
+    // target may exceed hardCap; the provider call surfaces that honestly rather
+    // than us silently dropping the one file that matters).
+    if (largestIdx === -1) {
+      return { turnPrompt, estimatedTokens, droppedChunks };
     }
     chunks.splice(largestIdx, 1);
     droppedChunks++;
