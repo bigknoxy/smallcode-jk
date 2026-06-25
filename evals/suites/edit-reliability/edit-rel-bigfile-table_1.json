@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-bigfile-table_1",
+  "desc": "Fix the cell-alignment bug in `padCell` inside the large file src/table.ts. Left-aligned cells are being padded on the left (right-aligned) instead of the right, so the rendered ASCII table columns are misaligned. Edit only the faulty function so tests/table.test.ts passes. Do not rewrite the whole file; src/casing.ts and src/wrap.ts already pass.",
+  "setup": { "repoFixture": "edit-rel-bigfile-table_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/table.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "bigfile"],
+  "reference_solution": "edit-rel-bigfile-table_1-solution/"
+}

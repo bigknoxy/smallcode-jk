@@ -325,4 +325,5 @@ MIT
 - `SMALLCODE_SMOKE_MAX_TURNS`: _(add description)_
 - `SMALLCODE_DISCIPLINE`: _(add description)_
 - `SMALLCODE_PRESOLVE`: _(add description)_
+- `SMALLCODE_SUITE`: eval suite for `run-baseline.ts` — bare name under `evals/suites/` or an explicit path (default `capability`).
 <!-- agent-skills:doc-keeper:end -->

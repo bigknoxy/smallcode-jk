@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-deepline-wrap_1",
+  "desc": "Fix the one-line bug deep in the `padRight` helper inside the large file src/wrap.ts. Its while-loop condition uses `<=` instead of `<`, so it appends one space too many and over-pads strings by a single character. Edit only that line/function so tests/wrap.test.ts passes. Do not rewrite the whole file; src/casing.ts and src/table.ts already pass.",
+  "setup": { "repoFixture": "edit-rel-deepline-wrap_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/wrap.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "deepline"],
+  "reference_solution": "edit-rel-deepline-wrap_1-solution/"
+}

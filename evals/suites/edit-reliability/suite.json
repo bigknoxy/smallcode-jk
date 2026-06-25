@@ -1,0 +1,6 @@
+{
+  "id": "edit-reliability-v1",
+  "kind": "mixed",
+  "description": "Edit-reliability suite: multi-file textkit repos with exactly one seeded fail->pass bug each, measuring edit-format reliability by file size (large files where a single function must be fixed without rewriting the whole file)",
+  "defaultTrials": 5
+}

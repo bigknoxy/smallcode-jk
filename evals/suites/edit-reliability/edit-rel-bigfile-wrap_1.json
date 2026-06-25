@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-bigfile-wrap_1",
+  "desc": "Fix the greedy word-wrap bug in `wrapText` inside the large file src/wrap.ts. The width comparison is off by one, so words that should fit on the current line are pushed to the next line and exact-width lines wrap prematurely. Edit only the faulty function so tests/wrap.test.ts passes. Do not rewrite the whole file; src/casing.ts and src/table.ts already pass.",
+  "setup": { "repoFixture": "edit-rel-bigfile-wrap_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/wrap.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "bigfile"],
+  "reference_solution": "edit-rel-bigfile-wrap_1-solution/"
+}
