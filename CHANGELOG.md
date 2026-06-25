@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.2.0...v1.2.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* **planner:** drop goals that parrot the planner's own instructions ([#7](https://github.com/bigknoxy/smallcode-jk/issues/7)) ([#19](https://github.com/bigknoxy/smallcode-jk/issues/19)) ([071dadd](https://github.com/bigknoxy/smallcode-jk/commit/071dadd7b53e5ef1818697a00cc2a8598d4902c8))
+
 ## [1.2.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.1.1...v1.2.0) (2026-06-25)
 
 
