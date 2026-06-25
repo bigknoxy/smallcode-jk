@@ -327,4 +327,10 @@ MIT
 - `SMALLCODE_PRESOLVE`: _(add description)_
 - `SMALLCODE_SUITE`: eval suite for `run-baseline.ts` — bare name under `evals/suites/` or an explicit path (default `capability`).
 - `SMALLCODE_TARGET_PIN`: pin the edit-target file as an undroppable whole chunk + size-gate the edit format (default on; set `0` to disable, e.g. for the pre-A baseline).
+- `SMALLCODE_MAX_TOKENS`: override the model's `max_tokens` for a `run-baseline.ts` run (default = registry value, 4096). Cause-attack A/B for think-only truncation; larger = more generation room but a smaller prompt budget (`num_ctx − max_tokens`).
+- `SMALLCODE_TEMP`: override the model's sampling temperature for a `run-baseline.ts` run (default = registry value). Used to A/B whether lower temperature reduces reasoning spirals / variance.
+- `SMALLCODE_EVAL_N`: sample count **n** — trials per task in a live `run-baseline.ts` run (default 10, falls back to `SMALLCODE_EVAL_K`). Decoupled from the reported k; larger n → tighter confidence intervals (~1/√n).
+- `SMALLCODE_REPORT_KS`: comma list of k values to report pass@k for (default `1,2,3,5`). Each pass@k is reported with a 95% bootstrap CI; `n` is always added so `passAtK[n]` survives.
+- `SMALLCODE_CI_SEED`: seed for the bootstrap-CI RNG (default fixed) so confidence intervals are reproducible across reruns of the same trial outcomes.
+- `SMALLCODE_GRADER_RETRIES`: how many times the deterministic grader retries a transient **infra** error (lockfile/EAGAIN) that produced no test verdicts (default 1). Never retries a real test failure (a parsed `✗` blocks the retry).
 <!-- agent-skills:doc-keeper:end -->

@@ -8,6 +8,22 @@ import type { DeterministicTestsGrader, GraderResult } from "../types.ts";
  * Parse bun test output to count passes and failures per file.
  * Returns { passed: string[], failed: string[] } of test file names found.
  */
+// Infra-error signatures: transient subprocess/toolchain failures (NOT test
+// failures). When `bun test` dies on one of these it never ran the tests, so
+// recording the trial as a model failure is wrong — we retry instead.
+const INFRA_SIGNATURES = [
+  "InvalidLockfileVersion",
+  "failed to parse lockfile",
+  "error: bun.lock",
+  "EAGAIN",
+  "ETXTBSY",
+  "Resource temporarily unavailable",
+];
+
+function hasInfraSignature(output: string): boolean {
+  return INFRA_SIGNATURES.some((s) => output.includes(s));
+}
+
 function parseTestOutput(output: string): { passedFiles: Set<string>; failedFiles: Set<string> } {
   const passedFiles = new Set<string>();
   const failedFiles = new Set<string>();
@@ -72,20 +88,60 @@ export async function runDeterministicGrader(
       };
     }
 
-    const proc = Bun.spawnSync([cmd, ...argv.slice(1)], {
-      cwd: trialDir,
-      timeout: 60_000,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    // Bounded retry on transient INFRA errors only. Default 1 retry (2 attempts);
+    // override with SMALLCODE_GRADER_RETRIES.
+    const maxRetries = Number(process.env["SMALLCODE_GRADER_RETRIES"] ?? "1");
+    let proc!: ReturnType<typeof Bun.spawnSync>;
+    let combined = "";
+    let passedFiles = new Set<string>();
+    let failedFiles = new Set<string>();
+    let attempts = 0;
 
-    const stdout = proc.stdout ? new TextDecoder().decode(proc.stdout) : "";
-    const stderr = proc.stderr ? new TextDecoder().decode(proc.stderr) : "";
-    const combined = `${stdout}\n${stderr}`.trim();
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      attempts = attempt + 1;
+      proc = Bun.spawnSync([cmd, ...argv.slice(1)], {
+        cwd: trialDir,
+        timeout: 60_000,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const stdout = proc.stdout ? new TextDecoder().decode(proc.stdout) : "";
+      const stderr = proc.stderr ? new TextDecoder().decode(proc.stderr) : "";
+      combined = `${stdout}\n${stderr}`.trim();
+      ({ passedFiles, failedFiles } = parseTestOutput(combined));
+
+      // Two-guard retry rule (prevents masking a real failure):
+      //  (1) output carries a known INFRA signature, AND
+      //  (2) the subprocess produced ZERO test verdicts (no ✓/✗ parsed) — a
+      //      genuine failing test always emits a ✗, so failedFiles is non-empty
+      //      and we never retry it.
+      const isInfra =
+        hasInfraSignature(combined) && passedFiles.size === 0 && failedFiles.size === 0;
+      if (!isInfra || attempt === maxRetries) break;
+      // Small jitter to let the transient (lockfile contention, EAGAIN) clear.
+      Bun.sleepSync(100 + Math.floor(Math.random() * 200));
+    }
+
+    // Exhausted retries while still infra-erroring → report as an infra error so
+    // the run can EXCLUDE this trial from the denominator rather than count it as
+    // a model failure.
+    if (
+      hasInfraSignature(combined) &&
+      passedFiles.size === 0 &&
+      failedFiles.size === 0
+    ) {
+      return {
+        type: "deterministic_tests",
+        verdict: "error",
+        score: 0,
+        output: combined.length > 2000 ? `${combined.slice(0, 2000)}\n...[truncated]` : combined,
+        durationMs: Date.now() - startMs,
+        details: { infraError: true, attempts, exitCode: proc.exitCode },
+      };
+    }
+
     const truncated =
       combined.length > 2000 ? `${combined.slice(0, 2000)}\n...[truncated]` : combined;
-
-    const { passedFiles, failedFiles } = parseTestOutput(combined);
 
     // If no required files specified, use exit code
     if (grader.required.length === 0) {

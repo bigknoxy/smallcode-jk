@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 import { runTask } from "../src/eval/task-runner.ts";
+import { bootstrapCI, passAtKFromFlags } from "../src/eval/stats.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
 import { runDeterministicGrader } from "../src/eval/graders/deterministic.ts";
 import { runStaticGrader } from "../src/eval/graders/static.ts";
@@ -59,6 +60,33 @@ const EVAL_K = Number(process.env.SMALLCODE_EVAL_K ?? "3");
 // the planner pre-solve reflection step. Used to measure each against baseline.
 const DISCIPLINE = process.env.SMALLCODE_DISCIPLINE !== "0";
 const PRESOLVE = process.env.SMALLCODE_PRESOLVE === "1";
+// max_tokens A/B: attack think-only truncation at the CAUSE (generation budget)
+// rather than the symptom (recovery). Overrides the model profile's
+// samplingDefaults.max_tokens for the run. Larger = more room to think AND
+// answer (fewer truncations) but a smaller prompt budget (num_ctx − max_tokens).
+// Unset = registry default (4096). e.g. SMALLCODE_MAX_TOKENS=6144.
+const MAX_TOKENS_OVERRIDE = process.env.SMALLCODE_MAX_TOKENS
+  ? Number(process.env.SMALLCODE_MAX_TOKENS)
+  : undefined;
+// Temperature A/B: temp=1.0 (registry default for VibeThinker-3B) is suspected
+// to drive BOTH the think-only reasoning spirals and the huge run-to-run pass@1
+// variance. Lowering it should reduce both. Unset = registry default.
+// e.g. SMALLCODE_TEMP=0.6.
+const TEMP_OVERRIDE = process.env.SMALLCODE_TEMP
+  ? Number(process.env.SMALLCODE_TEMP)
+  : undefined;
+// Measuring-stick controls. SMALLCODE_EVAL_N is the SAMPLE COUNT n (trials per
+// task) — decoupled from the reported k. SMALLCODE_REPORT_KS is the comma list
+// of k values to report pass@k for. Larger n → tighter confidence intervals
+// (CI width shrinks ~1/√n). EVAL_N falls back to the legacy EVAL_K when unset so
+// existing invocations keep working.
+const EVAL_N = Number(process.env.SMALLCODE_EVAL_N ?? process.env.SMALLCODE_EVAL_K ?? "10");
+const REPORT_KS = (process.env.SMALLCODE_REPORT_KS ?? "1,2,3,5")
+  .split(",")
+  .map((s) => Number(s.trim()))
+  .filter((k) => Number.isFinite(k) && k >= 1);
+// Fixed seed → reproducible bootstrap CIs across reruns of the same outcomes.
+const CI_SEED = process.env.SMALLCODE_CI_SEED ? Number(process.env.SMALLCODE_CI_SEED) : 0xc0ffee;
 
 // ---------------------------------------------------------------------------
 // Grader dispatch (same as validate-e1)
@@ -186,17 +214,55 @@ function printDryRunTable(results: DryRunResult[]): void {
 
 interface LiveTaskMetrics {
   taskId: string;
+  /** Effective sample count after excluding infra-error trials. */
+  n: number;
   passAt1: number;
-  passAtK: number;
+  /** pass@k point estimate per reported k. */
+  passAtK: Record<number, number>;
+  /** 95% bootstrap CI per reported k. */
+  passAtKCI: Record<number, { lo: number; hi: number }>;
+  /** Pass/fail flags (infra-error trials excluded) — for suite pooling. */
+  passedFlags: boolean[];
   avgTurns: number;
   avgTokens: number;
+  /** Total think-only (truncated mid-reasoning) turns across all trials. */
+  thinkOnlyTurns: number;
+  /** Number of trials that hit ≥1 think-only truncation. */
+  trialsWithTruncation: number;
+  /** Trials dropped from the rate because the grader hit a transient infra error. */
+  infraDropped: number;
 }
 
-async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> {
+/** Count turns whose tool results carry the think-only truncation error. */
+function countThinkOnlyTurns(turns: import("@/agent/types.ts").TurnRecord[]): number {
+  return turns.filter((t) => t.toolResults.some((r) => r.error?.includes("think-only"))).length;
+}
+
+/** A trial whose deterministic grader hit a transient infra error (lockfile,
+ * EAGAIN, …) never actually ran the tests — exclude it from the rate rather
+ * than count it as a model failure. */
+function trialHitInfraError(trial: TaskEvalResult["trials"][number]): boolean {
+  return trial.graderResults.some((r) => r.details?.["infraError"] === true);
+}
+
+async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
   const { config, extraModels } = loadConfig();
   for (const m of extraModels) defaultRegistry.register(m);
 
-  const profile = defaultRegistry.get(config.activeModel);
+  const baseProfile = defaultRegistry.get(config.activeModel);
+  // Apply sampling overrides (cause-attack A/B: max_tokens and/or temperature) by
+  // cloning the profile so the registry default is untouched for other consumers.
+  const profile =
+    MAX_TOKENS_OVERRIDE !== undefined || TEMP_OVERRIDE !== undefined
+      ? {
+          ...baseProfile,
+          samplingDefaults: {
+            ...baseProfile.samplingDefaults,
+            ...(MAX_TOKENS_OVERRIDE !== undefined && { max_tokens: MAX_TOKENS_OVERRIDE }),
+            ...(TEMP_OVERRIDE !== undefined && { temperature: TEMP_OVERRIDE }),
+          },
+        }
+      : baseProfile;
   const provider = createProvider(config.provider, defaultRegistry);
   const reasoningHandler = new ReasoningHandler(
     profile.reasoningTags ?? { open: "<think>", close: "</think>" },
@@ -221,49 +287,107 @@ async function liveRunTask(task: EvalTask, k: number): Promise<LiveTaskMetrics> 
   };
 
   const result: TaskEvalResult = await runTask(task, {
-    trialsPerTask: k,
+    trialsPerTask: EVAL_N,
+    reportKs: REPORT_KS,
+    ciSeed: CI_SEED,
     fixturesRoot: FIXTURES_DIR,
     agentConfig,
     loopDeps,
     trialTimeoutMs: 20 * 60 * 1000, // 20 min per trial (VibeThinker-3B ~100-300s/call)
   });
 
-  const avgTurns =
-    result.trials.length === 0
-      ? 0
-      : result.trials.reduce((sum, t) => sum + t.metrics.nTurns, 0) / result.trials.length;
+  // Exclude infra-error trials from the pass-rate denominator (the grader marks
+  // them after exhausting retries). They never ran the tests; counting them as
+  // model failures would inject harness noise into the rate.
+  const cleanTrials = result.trials.filter((t) => !trialHitInfraError(t));
+  const infraDropped = result.trials.length - cleanTrials.length;
+  const passedFlags = cleanTrials.map((t) => t.passed);
+  const n = passedFlags.length;
 
-  const avgTokens =
+  // Recompute pass@k + CI from the infra-cleaned flags so the rate and its
+  // interval reflect only real model outcomes. ks ∪ {n}, capped at n.
+  const ks = [...new Set([...REPORT_KS, n])].filter((kk) => kk >= 1 && kk <= n).sort((a, b) => a - b);
+  const passAtK: Record<number, number> = {};
+  const passAtKCI: Record<number, { lo: number; hi: number }> = {};
+  for (const kk of ks) {
+    passAtK[kk] = passAtKFromFlags(passedFlags, kk);
+    const ci = bootstrapCI(passedFlags, kk, { seed: CI_SEED });
+    passAtKCI[kk] = { lo: ci.lo, hi: ci.hi };
+  }
+
+  const avgOf = (sel: (t: (typeof result.trials)[number]) => number): number =>
     result.trials.length === 0
       ? 0
-      : result.trials.reduce((sum, t) => sum + t.metrics.nTotalTokens, 0) / result.trials.length;
+      : result.trials.reduce((sum, t) => sum + sel(t), 0) / result.trials.length;
+  const avgTurns = avgOf((t) => t.metrics.nTurns);
+  const avgTokens = avgOf((t) => t.metrics.nTotalTokens);
+
+  // Think-only truncation incidence — the premise check. How often does the
+  // model burn its budget mid-reasoning and emit nothing? Per-trial counts from
+  // the transcript turn records (loop tags these with a think-only error).
+  const perTrialThinkOnly = result.trials.map((t) => countThinkOnlyTurns(t.transcript.turns));
+  const thinkOnlyTurns = perTrialThinkOnly.reduce((sum, x) => sum + x, 0);
+  const trialsWithTruncation = perTrialThinkOnly.filter((x) => x > 0).length;
 
   return {
     taskId: task.id,
-    passAt1: result.passAt1,
-    passAtK: result.passAtK[k] ?? result.passAt1,
+    n,
+    passAt1: passAtK[1] ?? (n > 0 ? passedFlags.filter(Boolean).length / n : 0),
+    passAtK,
+    passAtKCI,
+    passedFlags,
     avgTurns,
     avgTokens,
+    thinkOnlyTurns,
+    trialsWithTruncation,
+    infraDropped,
   };
 }
 
+/** Render a pass@k point estimate with its CI, e.g. "0.70[.47-.90]". */
+function fmtPK(point: number | undefined, ci: { lo: number; hi: number } | undefined): string {
+  if (point === undefined) return "—";
+  const b = (x: number) => x.toFixed(2).replace(/^0(?=\.)/, "");
+  return ci ? `${point.toFixed(2)}[${b(ci.lo)}-${b(ci.hi)}]` : point.toFixed(2);
+}
+
 function printLiveTable(metrics: LiveTaskMetrics[]): void {
-  const COL1 = 32;
-  const COL2 = 8;
-  const COL3 = 8;
-  const COL4 = 10;
-  const COL5 = 12;
-  const sep = `${"-".repeat(COL1)}-+-${"-".repeat(COL2)}-+-${"-".repeat(COL3)}-+-${"-".repeat(COL4)}-+-${"-".repeat(COL5)}`;
+  const COL1 = 30;
+  const COL2 = 15; // pass@1 [lo-hi]
+  const COL3 = 15; // pass@K [lo-hi]
+  const COL4 = 7; // n
+  const COL5 = 9; // avg_turns
+  const COL6 = 11; // think-only
+  // The headline retry metric: largest reported k present across tasks.
+  const bigK = Math.max(...metrics.flatMap((m) => Object.keys(m.passAtK).map(Number)), 1);
+  const sep = `${"-".repeat(COL1)}-+-${"-".repeat(COL2)}-+-${"-".repeat(COL3)}-+-${"-".repeat(COL4)}-+-${"-".repeat(COL5)}-+-${"-".repeat(COL6)}`;
   console.log(
-    `\n${padEnd("task-id", COL1)} | ${padEnd("pass@1", COL2)} | ${padEnd("pass^k", COL3)} | ${padEnd("avg_turns", COL4)} | ${"avg_tokens"}`,
+    `\n${padEnd("task-id", COL1)} | ${padEnd("pass@1 [95% CI]", COL2)} | ${padEnd(`pass@${bigK} [95% CI]`, COL3)} | ${padEnd("n", COL4)} | ${padEnd("avg_turns", COL5)} | ${"think-only"}`,
   );
   console.log(sep);
   for (const m of metrics) {
+    const truncCol = `${m.thinkOnlyTurns} (${m.trialsWithTruncation}t)${m.infraDropped > 0 ? ` !${m.infraDropped}infra` : ""}`;
+    const p1 = fmtPK(m.passAtK[1], m.passAtKCI[1]);
+    const pK = fmtPK(m.passAtK[bigK], m.passAtKCI[bigK]);
     console.log(
-      `${padEnd(m.taskId, COL1)} | ${padEnd(m.passAt1.toFixed(2), COL2)} | ${padEnd(m.passAtK.toFixed(2), COL3)} | ${padEnd(m.avgTurns.toFixed(1), COL4)} | ${m.avgTokens.toFixed(0)}`,
+      `${padEnd(m.taskId, COL1)} | ${padEnd(p1, COL2)} | ${padEnd(pK, COL3)} | ${padEnd(String(m.n), COL4)} | ${padEnd(m.avgTurns.toFixed(1), COL5)} | ${truncCol}`,
     );
   }
   console.log(sep);
+
+  // Suite-level pooled row: concat every task's clean flags, pass@k ± CI.
+  const pooled = metrics.flatMap((m) => m.passedFlags);
+  const overall1 = { p: passAtKFromFlags(pooled, 1), ci: bootstrapCI(pooled, 1, { seed: CI_SEED }) };
+  const overallK = {
+    p: passAtKFromFlags(pooled, bigK),
+    ci: bootstrapCI(pooled, bigK, { seed: CI_SEED }),
+  };
+  console.log(
+    `${padEnd("OVERALL (pooled)", COL1)} | ${padEnd(fmtPK(overall1.p, overall1.ci), COL2)} | ${padEnd(fmtPK(overallK.p, overallK.ci), COL3)} | ${padEnd(String(pooled.length), COL4)} | ${padEnd("", COL5)} |`,
+  );
+  console.log(
+    "\nCI = 95% bootstrap over n trials. Two results differ significantly only when their CIs do NOT overlap. n<8 → treat CI as indicative only; raise SMALLCODE_EVAL_N to tighten.",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,9 +464,10 @@ async function main(): Promise<void> {
     console.log("[run-baseline] All reference solutions pass.");
   } else {
     // -----------------------------------------------------------------------
-    // Live run: EVAL_K trials per task (default 3; override with SMALLCODE_EVAL_K)
+    // Live run: n = SMALLCODE_EVAL_N samples/task; report pass@k (k in
+    // SMALLCODE_REPORT_KS) with 95% bootstrap CIs.
     // -----------------------------------------------------------------------
-    const K = EVAL_K;
+    console.log(`[run-baseline] n=${EVAL_N} samples/task, reporting pass@{${REPORT_KS.join(",")}} with 95% CI`);
     const allMetrics: LiveTaskMetrics[] = [];
     let passCount = 0;
 
@@ -353,11 +478,15 @@ async function main(): Promise<void> {
       console.log(`  [${i + 1}/${total}] ${task.id}...`);
       try {
         const t0 = Date.now();
-        const m = await liveRunTask(task, K);
+        const m = await liveRunTask(task);
         const elapsed = Math.round((Date.now() - t0) / 1000);
         allMetrics.push(m);
         if (m.passAt1 > 0) passCount++;
-        console.log(`        pass@1=${m.passAt1.toFixed(2)} turns=${m.avgTurns.toFixed(1)} (${elapsed}s)`);
+        const ci1 = m.passAtKCI[1];
+        const ciStr = ci1 ? ` [${ci1.lo.toFixed(2)}-${ci1.hi.toFixed(2)}]` : "";
+        console.log(
+          `        pass@1=${m.passAt1.toFixed(2)}${ciStr} n=${m.n} turns=${m.avgTurns.toFixed(1)} think-only=${m.thinkOnlyTurns}(${m.trialsWithTruncation}t)${m.infraDropped ? ` infra-dropped=${m.infraDropped}` : ""} (${elapsed}s)`,
+        );
       } catch (err) {
         console.error(`  ERROR: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
@@ -366,15 +495,38 @@ async function main(): Promise<void> {
 
     printLiveTable(allMetrics);
 
+    // Suite-level pooled aggregate for the snapshot.
+    const pooledFlags = allMetrics.flatMap((m) => m.passedFlags);
+    const snapKs = [...new Set([...REPORT_KS, pooledFlags.length])]
+      .filter((kk) => kk >= 1 && kk <= pooledFlags.length)
+      .sort((a, b) => a - b);
+    const overallPassAtK: Record<number, number> = {};
+    const overallCI: Record<number, { lo: number; hi: number }> = {};
+    for (const kk of snapKs) {
+      overallPassAtK[kk] = passAtKFromFlags(pooledFlags, kk);
+      const ci = bootstrapCI(pooledFlags, kk, { seed: CI_SEED });
+      overallCI[kk] = { lo: ci.lo, hi: ci.hi };
+    }
+
     const snapshot: MetricsSnapshot = {
       timestamp: Date.now(),
       runId: `live-${Date.now()}`,
       suiteId: suite.id,
       modelId: loadConfig().config.activeModel,
-      overallPassAt1: allMetrics.reduce((sum, m) => sum + m.passAt1, 0) / allMetrics.length,
+      overallPassAt1: overallPassAtK[1] ?? (pooledFlags.length ? pooledFlags.filter(Boolean).length / pooledFlags.length : 0),
       totalTasksPassed: passCount,
       totalTasks: suite.tasks.length,
       perTaskPassAt1: Object.fromEntries(allMetrics.map((m) => [m.taskId, m.passAt1])),
+      // --- richer measuring-stick fields ---
+      n: EVAL_N,
+      reportKs: REPORT_KS,
+      perTaskPassAtK: Object.fromEntries(allMetrics.map((m) => [m.taskId, m.passAtK])),
+      perTaskCI: Object.fromEntries(allMetrics.map((m) => [m.taskId, m.passAtKCI])),
+      overallPassAtK,
+      overallCI,
+      thinkOnlyTotal: allMetrics.reduce((s, m) => s + m.thinkOnlyTurns, 0),
+      trialsWithTruncationTotal: allMetrics.reduce((s, m) => s + m.trialsWithTruncation, 0),
+      sampling: { temp: TEMP_OVERRIDE, maxTokens: MAX_TOKENS_OVERRIDE },
     };
     await appendMetricsSnapshot(snapshot);
 

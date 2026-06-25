@@ -11,10 +11,20 @@ import { contextBudgetFor } from "../models/context-budget.ts";
 import type { LLMJudgeOptions } from "./graders/index.ts";
 import { runGrader } from "./graders/index.ts";
 import { averageMetrics, collectMetrics, computePassAllK, computePassAtK } from "./metrics.ts";
+import { bootstrapCI } from "./stats.ts";
 import { createTrialEnv } from "./trial-env.ts";
-import type { EvalTask, GraderResult, TaskEvalResult, Transcript, TrialResult } from "./types.ts";
+import type {
+  EvalTask,
+  GraderResult,
+  PassAtKCI,
+  TaskEvalResult,
+  Transcript,
+  TrialResult,
+} from "./types.ts";
 
 export interface TaskRunnerOptions {
+  /** Sample count n — how many independent trials to run. Decoupled from the
+   * reported k set below: report pass@k for k ≤ n, sampled from these n trials. */
   trialsPerTask: number;
   fixturesRoot: string;
   agentConfig: AgentConfig; // template; repoRoot overridden per trial
@@ -22,6 +32,13 @@ export interface TaskRunnerOptions {
   graderOpts?: LLMJudgeOptions;
   /** Hard wall-clock deadline per trial in ms. Prevents hung test runners from blocking forever. Default: 10 min. */
   trialTimeoutMs?: number;
+  /** Which k values to report pass@k for. Default [1,2,3,5]; n is always added
+   * so the historical passAtK[n] key survives. Values > n are dropped. */
+  reportKs?: number[];
+  /** Bootstrap resamples for each CI. Default 2000. */
+  bootstrapIters?: number;
+  /** Seed for the CI bootstrap RNG (reproducible intervals). Default fixed. */
+  ciSeed?: number;
 }
 
 // Option A toggle: pin the edit target + size-gate the format. Default on; set
@@ -189,14 +206,32 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
     }
   }
 
-  // Compute aggregate metrics
-  const passAt1 = trials.filter((t) => t.passed).length / Math.max(trials.length, 1);
+  // Compute aggregate metrics. The key fix: report pass@k for a SET of k from n
+  // samples (n = trials.length) instead of only k=n, which collapsed the
+  // unbiased estimator to a coarse binary. Each pass@k carries a bootstrap CI so
+  // a point estimate can be told from noise.
+  const n = trials.length;
+  const passedFlags = trials.map((t) => t.passed);
+  const passAt1 = trials.filter((t) => t.passed).length / Math.max(n, 1);
+
+  // Report ks: requested set ∪ {n} (preserve the historical passAtK[n] key),
+  // deduped, dropping any k > n.
+  const requestedKs = opts.reportKs ?? [1, 2, 3, 5];
+  const reportKs = [...new Set([...requestedKs, n])].filter((k) => k >= 1 && k <= n).sort((a, b) => a - b);
+
   const passAtK: Record<number, number> = {};
-  passAtK[trialsPerTask] = computePassAtK(trials, trialsPerTask);
+  const passAtKCI: Record<number, PassAtKCI> = {};
+  for (const k of reportKs) {
+    passAtK[k] = computePassAtK(trials, k);
+    passAtKCI[k] = bootstrapCI(passedFlags, k, {
+      iters: opts.bootstrapIters,
+      seed: opts.ciSeed,
+    });
+  }
 
   const passAllK = computePassAllK(trials);
   const avgPartialScore =
-    trials.reduce((sum, t) => sum + t.partialScore, 0) / Math.max(trials.length, 1);
+    trials.reduce((sum, t) => sum + t.partialScore, 0) / Math.max(n, 1);
   const avgMetrics = averageMetrics(trials.map((t) => t.metrics));
 
   return {
@@ -207,5 +242,7 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
     passAllK,
     avgPartialScore,
     avgMetrics,
+    n,
+    passAtKCI,
   };
 }
