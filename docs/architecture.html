@@ -398,11 +398,12 @@ flowchart TD
     PLAN --> BASELINE[captureTestBaseline\nrecord pre-existing failing IDs + red count]
     BASELINE --> GOAL{Current goal?}
     GOAL -- none --> DONE([status: done])
-    GOAL -- pending --> CTX[Build ContextBundle\nwalk repoRoot, token budget 8K]
+    GOAL -- pending --> CTX[Build ContextBundle\nwalk repoRoot, budget = num_ctx − max_tokens\noperative window, NOT nominal 64K]
 
     CTX --> SYSPROMPT[buildSystemPrompt\nbase system + optional ## SKILL block\nfrom PromptSet.skill]
     SYSPROMPT --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks\n+ Failure diagnostic if last turn failed]
-    PROMPT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
+    PROMPT --> FIT[fitTurnPromptToWindow\ndrop largest chunks until\nsystem+prompt ≤ num_ctx − max_tokens\nprevents HTTP 400 overflow]
+    FIT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
     MODEL --> STRIP[ReasoningHandler\nstrip think tags → answer]
     STRIP --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
     PARSEEDITS --> APPLY[applyBatch\noverwrite file or exact-match replace]
@@ -683,6 +684,20 @@ flowchart TD
             Ollama defaults to num_ctx=2048, which is too small. 32K caused memory
             pressure and swap on the eval machine, dropping generation speed from ~44 tok/s to
             ~3 tok/s. 8K is sufficient for task prompt + chain-of-thought + answer and keeps speed high.
+          </p>
+        </div>
+        <div class="decision">
+          <strong>Context budget is derived from num_ctx, not contextWindow</strong>
+          <p>
+            The repo-context budget (<code>src/models/context-budget.ts</code>) is
+            <code>effectiveContextWindow − max_tokens</code>, where
+            <code>effectiveContextWindow = ollamaOptions.num_ctx ?? contextWindow</code>.
+            A prior bug budgeted off the <em>nominal</em> <code>contextWindow</code> (65_536) while
+            Ollama actually ran the model at <code>num_ctx=8192</code> — a 4× overshoot that
+            overflowed the window and returned <strong>HTTP 400</strong> after a few turns.
+            Belt-and-suspenders: <code>fitTurnPromptToWindow</code> re-checks every turn and sheds
+            the largest context chunks until <code>system + prompt ≤ num_ctx − max_tokens</code>,
+            so even a ballooning failed-edit turn (full-file re-injection into history) cannot overflow.
           </p>
         </div>
       </div>
