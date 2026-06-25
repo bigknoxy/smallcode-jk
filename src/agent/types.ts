@@ -1,6 +1,6 @@
 import type { ApplyResult, EditBlock } from "../edit/types.ts";
-import type { PromptSet } from "./prompt-set.ts";
 import type { FailureDiagnostic } from "../verify/failure-extract.ts";
+import type { PromptSet } from "./prompt-set.ts";
 
 export type GoalStatus = "pending" | "in_progress" | "done" | "failed" | "skipped";
 export type SessionStatus = "running" | "done" | "failed" | "max_turns" | "abandoned";
@@ -51,6 +51,12 @@ export interface TurnRecord {
   failureSignature?: string;
   /** True when this turn triggered a redraft (cleared history, rotated strategy). */
   redrafted?: boolean;
+  /**
+   * True when this turn was drafted under the ANSWER-NOW recovery prompt — the
+   * previous turn truncated mid-reasoning (think-only) and emitted no answer, so
+   * this turn was told to skip thinking and act immediately.
+   */
+  answerNow?: boolean;
   /** Structured diagnostic for this turn's failure, if any. */
   diagnostic?: FailureDiagnostic;
 }

@@ -192,6 +192,11 @@ export async function runLoop(
   // Stall/redraft carry-forward: tracks whether the NEXT turn should be a redraft.
   let redraftNext = false;
   let redraftStrategyHint: string | undefined;
+  // Think-only recovery carry-forward: set when a turn truncates mid-reasoning
+  // (emits reasoning but no answer). The NEXT turn is drafted under the
+  // ANSWER-NOW prompt so the model stops thinking and acts. Without this, the
+  // identical prompt was retried and the model truncated the same way again.
+  let answerNowNext = false;
 
   while (!isTerminal(state) && state.turns.length < state.maxTurns) {
     const goal = currentGoal(state);
@@ -208,6 +213,8 @@ export async function runLoop(
     let answer = "";
     let promptTokens = 0;
     let completionTokens = 0;
+    // Set when this turn truncates mid-reasoning; drives the answer-now recovery.
+    let thinkOnly = false;
 
     let context: ContextBundle;
     try {
@@ -222,10 +229,15 @@ export async function runLoop(
       };
     }
 
-    // Build turn prompt — pass redraft opts if a stall was detected last turn.
-    const turnPromptOpts = redraftNext
-      ? { redraft: true, strategyHint: redraftStrategyHint }
-      : undefined;
+    // Build turn prompt. Answer-now recovery (think-only truncation last turn)
+    // takes precedence over a stall redraft — getting ANY answer out beats trying
+    // a different approach when the model never finished speaking.
+    const turnAnswerNow = answerNowNext;
+    const turnPromptOpts = turnAnswerNow
+      ? { answerNow: true }
+      : redraftNext
+        ? { redraft: true, strategyHint: redraftStrategyHint }
+        : undefined;
     const fitted = fitTurnPromptToWindow(state, context, systemPrompt, hardCap, turnPromptOpts);
     const turnPrompt = fitted.turnPrompt;
     if (fitted.droppedChunks > 0) {
@@ -233,9 +245,10 @@ export async function runLoop(
         `[smallcode] trimmed ${fitted.droppedChunks} context chunk(s) to fit window (~${fitted.estimatedTokens}/${hardCap} tokens)\n`,
       );
     }
-    // Consume the redraft flag (it applies to this turn only).
+    // Consume the carry-forward flags (they apply to this turn only).
     redraftNext = false;
     redraftStrategyHint = undefined;
+    answerNowNext = false;
 
     try {
       const response = await provider.complete({
@@ -259,8 +272,10 @@ export async function runLoop(
       answer = parsed.answer;
 
       // Think-only truncation: reasoning present but answer empty → completion was cut short.
-      // Treat as an error turn rather than silently scoring a non-answer.
+      // Treat as an error turn rather than silently scoring a non-answer, and flag
+      // the next turn for answer-now recovery so we don't re-run the same prompt.
       if (parsed.hasReasoning && answer === "" && response.truncated !== false) {
+        thinkOnly = true;
         throw new Error(
           "think-only completion: model emitted reasoning but no answer (likely truncated)",
         );
@@ -286,9 +301,17 @@ export async function runLoop(
         promptTokens,
         completionTokens,
         timestamp: Date.now(),
+        ...(turnAnswerNow && { answerNow: true }),
       };
 
       addTurn(state, failedTurn);
+
+      // Think-only truncation → draft the NEXT turn under the answer-now prompt
+      // (skip thinking, act immediately) instead of re-running the identical
+      // prompt that just truncated. No-op if this was already the last turn.
+      if (thinkOnly && state.turns.length < state.maxTurns) {
+        answerNowNext = true;
+      }
       await saveState(state, statePath);
 
       // Check maxTurns after adding the failed turn
@@ -438,6 +461,7 @@ export async function runLoop(
       timestamp: Date.now(),
       ...(turnFailureSig !== undefined && { failureSignature: turnFailureSig }),
       ...(turnRedrafted && { redrafted: true }),
+      ...(turnAnswerNow && { answerNow: true }),
       ...(verdict?.diagnostic && { diagnostic: verdict.diagnostic }),
     };
 

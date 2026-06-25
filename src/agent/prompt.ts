@@ -10,6 +10,13 @@ export interface BuildTurnPromptOpts {
   redraft?: boolean;
   /** Strategy hint appended to the REDRAFT section. */
   strategyHint?: string;
+  /**
+   * When true, emit an ANSWER-NOW section and suppress Recent History. Set on the
+   * turn AFTER a think-only truncation: the model burned its whole generation
+   * budget on reasoning and produced no answer. This prompt tells it to skip the
+   * thinking and emit the FILE: block / TOOL: call immediately.
+   */
+  answerNow?: boolean;
 }
 
 export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): string {
@@ -44,8 +51,15 @@ export function buildTurnPrompt(
 
   parts.push(`\n## Turn ${turnNumber}`);
 
-  // Redraft section: suppress recent history, emit strategy hint.
-  if (opts?.redraft) {
+  // Answer-now recovery: the previous turn ran out of generation budget while
+  // thinking and emitted no answer. Suppress history (less to read = less to
+  // re-think) and demand an immediate action with no reasoning.
+  if (opts?.answerNow) {
+    parts.push(
+      "\n## ANSWER NOW — your previous turn ran out of space while thinking and produced NO answer. Do NOT think this time. Output the FILE: block or TOOL: call as the FIRST line of your response — no <think>, no preamble, no explanation. Keep any reasoning to a single short sentence at most.",
+    );
+  } else if (opts?.redraft) {
+    // Redraft section: suppress recent history, emit strategy hint.
     parts.push(
       "\n## REDRAFT — previous approach is stuck. Ignore prior attempts; re-read the spec and try a DIFFERENT approach.",
     );

@@ -383,6 +383,16 @@ graph TD
         mechanism is disarmed so the loop doesn't cycle forever.
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Think-only recovery</strong>: a small local
+        model frequently burns its entire generation budget inside <code>&lt;think&gt;</code> and
+        emits no answer — <code>finish_reason=length</code> with an empty answer after the reasoning
+        is stripped. The loop records that turn as failed and sets <code>answerNowNext</code> so the
+        <em>next</em> turn is drafted under an <strong>ANSWER NOW</strong> prompt: Recent History is
+        suppressed and the model is told to skip thinking and emit the <code>FILE:</code> block /
+        <code>TOOL:</code> call as the first line. Without this, the identical prompt was re-sent and
+        truncated the same way — the dominant failure mode on real repos before the fix.
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">SKILL injection (GEPA-skills ①)</strong>:
         <code>buildSystemPrompt</code> accepts an optional <code>PromptSet.skill</code> string.
         When non-empty it appends a <code>## SKILL</code> block after the base system text —
@@ -405,7 +415,10 @@ flowchart TD
     PROMPT --> FIT[fitTurnPromptToWindow\ndrop largest chunks until\nsystem+prompt ≤ num_ctx − max_tokens\nprevents HTTP 400 overflow]
     FIT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
     MODEL --> STRIP[ReasoningHandler\nstrip think tags → answer]
-    STRIP --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
+    STRIP --> THINKONLY{reasoning present\nbut answer empty\n+ truncated?}
+    THINKONLY -- yes --> ANSWERNOW[record failed turn\nset answerNowNext=true\nNEXT turn: ANSWER NOW prompt\nno think, act immediately]
+    ANSWERNOW --> GOAL
+    THINKONLY -- no --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
     PARSEEDITS --> APPLY[applyBatch\noverwrite file or exact-match replace]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
@@ -430,6 +443,8 @@ flowchart TD
     style MAXED fill:#450a0a,stroke:#dc2626,color:#fca5a5
     style ORACLE fill:#451a03,stroke:#d97706,color:#fcd34d
     style REDRAFT fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
+    style ANSWERNOW fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
+    style THINKONLY fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
     style STALL fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
         </div>
       </div>
