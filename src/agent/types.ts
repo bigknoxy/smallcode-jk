@@ -74,6 +74,12 @@ export interface AgentState {
   stallCount?: number;
   /** How many redraft resets have been triggered in this session. */
   redraftCount?: number;
+  /**
+   * True ONLY when the loop exited because the tiered oracle confirmed tests
+   * are green (outcome === "solved"). A `status === "done"` run without this
+   * flag means the model called finish() but tests were NOT oracle-verified.
+   */
+  verified?: boolean;
 }
 
 export interface Candidate {

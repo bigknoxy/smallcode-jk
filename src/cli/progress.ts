@@ -63,6 +63,10 @@ export class ProgressDisplay {
     );
   }
 
+  showWarn(msg: string): void {
+    this.write(`${PREFIX} ⚠ ${msg}`);
+  }
+
   showError(msg: string): void {
     this.write(`${PREFIX} ✗ Error: ${msg}`);
   }

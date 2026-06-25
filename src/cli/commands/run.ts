@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { runLoop } from "../../agent/loop.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
-import type { AgentConfig } from "../../agent/types.ts";
+import type { AgentState, AgentConfig } from "../../agent/types.ts";
 import { loadConfig } from "../../config/loader.ts";
 import type { ContextBundle } from "../../context/types.ts";
 import { buildContext, walkRepo } from "../../context/index.ts";
@@ -11,6 +11,74 @@ import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
 import type { ParsedArgs } from "../args.ts";
 import { ProgressDisplay } from "../progress.ts";
+
+// ---------------------------------------------------------------------------
+// classifyCompletion — pure helper; no I/O; exported for unit tests.
+// ---------------------------------------------------------------------------
+
+export interface CompletionClassification {
+  /** True only when the run genuinely succeeded: tests oracle-verified green. */
+  ok: boolean;
+  tone: "success" | "warn" | "error";
+  message: string;
+}
+
+/**
+ * Classify a finished agent run into a user-facing outcome.
+ *
+ * Rules:
+ * - status "done" + verified true  → success (oracle confirmed tests green)
+ * - status "done" + verified falsy → warn (model called finish() without verified tests)
+ * - status "max_turns"             → error (hit turn cap without solving)
+ * - status "failed"                → error (loop explicitly failed)
+ * - status "abandoned" / "running" / anything else → error (unexpected)
+ */
+export function classifyCompletion(
+  finalState: Pick<AgentState, "status" | "verified">,
+  statePath: string,
+): CompletionClassification {
+  const { status, verified } = finalState;
+
+  if (status === "done" && verified === true) {
+    return {
+      ok: true,
+      tone: "success",
+      message: "Done — tests verified passing",
+    };
+  }
+
+  if (status === "done") {
+    // Model called finish() but oracle never confirmed green.
+    return {
+      ok: false,
+      tone: "warn",
+      message: `Finished, but tests are NOT verified passing — review ${statePath}`,
+    };
+  }
+
+  if (status === "max_turns") {
+    return {
+      ok: false,
+      tone: "error",
+      message: `Hit max turns without solving — check ${statePath}`,
+    };
+  }
+
+  if (status === "failed") {
+    return {
+      ok: false,
+      tone: "error",
+      message: `Agent failed — check state at ${statePath}`,
+    };
+  }
+
+  // "abandoned", "running", or any future status not handled above.
+  return {
+    ok: false,
+    tone: "error",
+    message: `Run ended with unexpected status "${status}" — check ${statePath}`,
+  };
+}
 
 function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
   const val = flags[key];
@@ -164,11 +232,15 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     process.exit(1);
   }
 
-  // 12. Show completion or error
-  if (finalState.status === "failed") {
-    progress.showError(`agent failed — check state at ${statePath}`);
+  // 12. Show completion or error — honest verdict only
+  const classification = classifyCompletion(finalState, statePath);
+  if (classification.ok) {
+    progress.showComplete(finalState);
+  } else if (classification.tone === "warn") {
+    progress.showWarn(classification.message);
     process.exit(1);
   } else {
-    progress.showComplete(finalState);
+    progress.showError(classification.message);
+    process.exit(1);
   }
 }
