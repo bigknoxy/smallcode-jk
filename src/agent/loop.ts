@@ -197,13 +197,6 @@ export async function runLoop(
   // ANSWER-NOW prompt so the model stops thinking and acts. Without this, the
   // identical prompt was retried and the model truncated the same way again.
   let answerNowNext = false;
-  // Once the model has think-only-truncated even once, it tends to relapse into
-  // the same spiral whenever a normal (thinking-allowed) prompt returns. Latch
-  // answer-now ON for the rest of the loop after the first think-only, so every
-  // subsequent turn demands an immediate action. The failure diagnostic + edit
-  // target are still shown (only the verbose turn history is suppressed), so the
-  // model keeps the feedback it needs to self-correct.
-  let answerNowLatched = false;
 
   while (!isTerminal(state) && state.turns.length < state.maxTurns) {
     const goal = currentGoal(state);
@@ -239,7 +232,7 @@ export async function runLoop(
     // Build turn prompt. Answer-now recovery (think-only truncation last turn)
     // takes precedence over a stall redraft — getting ANY answer out beats trying
     // a different approach when the model never finished speaking.
-    const turnAnswerNow = answerNowNext || answerNowLatched;
+    const turnAnswerNow = answerNowNext;
     const turnPromptOpts = turnAnswerNow
       ? { answerNow: true }
       : redraftNext
@@ -318,7 +311,6 @@ export async function runLoop(
       // prompt that just truncated. No-op if this was already the last turn.
       if (thinkOnly && state.turns.length < state.maxTurns) {
         answerNowNext = true;
-        answerNowLatched = true; // stay in act-now mode; the spiral tends to recur
       }
       await saveState(state, statePath);
 
