@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.1.0...v1.1.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* derive context budget from num_ctx + per-turn prompt-fit guard ([afb83df](https://github.com/bigknoxy/smallcode-jk/commit/afb83df21243ec5712946d9adc614cae8e2daf8c))
+* derive context budget from num_ctx + per-turn prompt-fit guard ([f71ecb5](https://github.com/bigknoxy/smallcode-jk/commit/f71ecb522839b935fc5f56852f9b7852a8feb402))
+
 ## [1.1.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.0.2...v1.1.0) (2026-06-25)
 
 
