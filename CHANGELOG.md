@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.0.2...v1.1.0) (2026-06-25)
+
+
+### Features
+
+* **gepa:** add PromptSet.skill slot + offline transcript skill distiller ([#12](https://github.com/bigknoxy/smallcode-jk/issues/12)) ([84318c3](https://github.com/bigknoxy/smallcode-jk/commit/84318c31f2af56b925521d6154dbbe59f8f755f8))
+
+
+### Bug Fixes
+
+* **cli:** report honest completion verdict; stop parroting planner example ([#13](https://github.com/bigknoxy/smallcode-jk/issues/13)) ([244a4e0](https://github.com/bigknoxy/smallcode-jk/commit/244a4e0847ad6ac84c1a6b9da6321fee19801d0d))
+
 ## [1.0.2](https://github.com/bigknoxy/smallcode-jk/compare/v1.0.1...v1.0.2) (2026-06-24)
 
 
