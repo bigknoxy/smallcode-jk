@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-smallfile-snake_1",
+  "desc": "Fix the `toSnake` bug in the small file src/casing.ts. It joins tokens with a hyphen instead of an underscore, so snake_case output is wrong (it produces kebab-case). Edit only the faulty function so tests/casing.test.ts passes. The other modules already pass.",
+  "setup": { "repoFixture": "edit-rel-smallfile-snake_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/casing.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "smallfile", "wrong-separator"],
+  "reference_solution": "edit-rel-smallfile-snake_1-solution/"
+}
