@@ -1,0 +1,15 @@
+{
+  "id": "edit-rel-smallfile-casing_1",
+  "desc": "Fix the `toKebab` bug in the small file src/casing.ts. It joins tokens with an underscore instead of a hyphen, so kebab-case output is wrong (it produces snake_case). Edit only the faulty function so tests/casing.test.ts passes. src/wrap.ts and src/table.ts already pass.",
+  "setup": { "repoFixture": "edit-rel-smallfile-casing_1" },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": ["tests/casing.test.ts"],
+      "command": "bun test"
+    }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "smallfile"],
+  "reference_solution": "edit-rel-smallfile-casing_1-solution/"
+}

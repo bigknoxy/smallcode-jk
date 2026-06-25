@@ -472,7 +472,7 @@
             <tr><td><code>run-evalplus.ts</code></td><td>EvalPlus-style robustness benchmark. Splits each test body into base/extra tiers (<code>SMALLCODE_EP_BASE_SPLIT</code>, default 0.5); extra graded only if base passes. Reports pass@1/pass^k per tier. Injectable <code>SolutionSource</code> + <code>--dry-run</code> (no Ollama). <em>Harness ready; needs live run.</em></td></tr>
             <tr><td><code>run-livecodebench.ts</code></td><td>LiveCodeBench-style contamination-guard benchmark. Each problem carries <code>releasedAt</code>; <code>SMALLCODE_LCB_AFTER</code> filters pre-cutoff problems. Per-difficulty breakdown. <em>Runner ready; needs a real <code>/tmp/lcb-ts.json</code> dataset (no TS-translated HF API yet).</em></td></tr>
             <tr><td><code>run-bakeoff.ts</code></td><td>Multi-model comparison. Takes model IDs (validated via <code>ModelRegistry</code>, never called directly), runs a benchmark per model through an injectable runner, emits a pass@1/pass^k/pass@k comparison table. <em>Harness ready; needs live run.</em></td></tr>
-            <tr><td><code>run-baseline.ts</code></td><td>In-house capability suite runner. <code>SMALLCODE_DRY_RUN=1</code>: validate fixtures. Live mode: run k trials per task and append <code>MetricsSnapshot</code> to history.</td></tr>
+            <tr><td><code>run-baseline.ts</code></td><td>In-house suite runner. <code>SMALLCODE_SUITE</code> picks the suite (bare name under <code>evals/suites/</code> or a path; default <code>capability</code>). <code>SMALLCODE_DRY_RUN=1</code>: validate fixtures (dry-run overlays <code>referenceSolution</code> on <code>repoFixture</code> to mirror the live harness). Live mode: run k trials per task in an OS-tmp trial dir and append <code>MetricsSnapshot</code> to history.</td></tr>
             <tr><td><code>debug-task.ts</code></td><td>Debug a single capability task end-to-end without cleanup. Dumps turn-by-turn raw model output, final file contents, and grader verdicts. Trial dir preserved for manual inspection.</td></tr>
             <tr><td><code>rerun-timeouts.ts</code></td><td>Parse a HumanEval marathon log for timeout-affected problems, re-run them with fresh Ollama and higher per-trial cap, report clean pass@1.</td></tr>
             <tr><td><code>show-transcript.ts</code></td><td>Pretty-print a saved eval transcript from <code>evals/transcripts/</code>.</td></tr>
@@ -801,6 +801,12 @@ function add(a: number, b: number): number { return a + b; }
               <td>Trials per task in live capability suite run</td>
             </tr>
             <tr>
+              <td><code>SMALLCODE_SUITE</code></td>
+              <td><code>capability</code></td>
+              <td><code>run-baseline.ts</code></td>
+              <td>Suite to run — bare name resolved under <code>evals/suites/</code> (e.g. <code>edit-reliability</code>) or an explicit path</td>
+            </tr>
+            <tr>
               <td><code>SMALLCODE_RERUN_TIMEOUT_MS</code></td>
               <td>1200000 (20 min)</td>
               <td><code>rerun-timeouts.ts</code></td>
@@ -856,6 +862,11 @@ function add(a: number, b: number): number { return a + b; }
 
 <span class="comment"># Faster: k=1, max 3 turns per task</span>
 <span class="cmd">SMALLCODE_EVAL_K=1 SMALLCODE_EVAL_MAX_TURNS=3 bun scripts/run-baseline.ts</span>
+
+<span class="comment"># Select a different suite under evals/suites/ (default: capability)</span>
+<span class="comment"># edit-reliability = real multi-file textkit repo (26 tests, files spanning the size</span>
+<span class="comment"># spectrum) measuring edit-localization reliability, distinct from synthetic suites</span>
+<span class="cmd">SMALLCODE_SUITE=edit-reliability bun scripts/run-baseline.ts</span>
       </div>
 
       <h3 class="doc-section__subheading">Debug a single task</h3>
@@ -895,6 +906,10 @@ function add(a: number, b: number): number { return a + b; }
 <span class="cmd">bun scripts/validate-e1.ts</span>
 
 <span class="comment"># Run bun test suite for the harness itself</span>
+<span class="comment"># bunfig.toml ([test] root = "tests") scopes this to tests/ so the intentionally-RED</span>
+<span class="comment"># seeded-bug fixtures under evals/fixtures/*/tests/ are not discovered (685 pass / 0 fail).</span>
+<span class="comment"># Eval fixtures still grade correctly — the harness runs them in OS-tmp trial dirs</span>
+<span class="comment"># outside the repo tree, which do not inherit this bunfig.</span>
 <span class="cmd">bun test</span>
       </div>
 

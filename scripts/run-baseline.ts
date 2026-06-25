@@ -16,6 +16,7 @@
  */
 
 import { mkdir, cp, rm, appendFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 import { runTask } from "../src/eval/task-runner.ts";
@@ -33,10 +34,20 @@ import type { MetricsSnapshot } from "../src/improve/types.ts";
 // ---------------------------------------------------------------------------
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
-const SUITE_DIR = join(PROJECT_ROOT, "evals", "suites", "capability");
+// Suite is overridable via SMALLCODE_SUITE (bare name resolved under
+// evals/suites/, or an explicit path). Defaults to the capability suite so the
+// historical baseline command is unchanged.
+const SUITE_NAME = process.env.SMALLCODE_SUITE ?? "capability";
+const SUITE_DIR = SUITE_NAME.includes("/")
+  ? resolve(PROJECT_ROOT, SUITE_NAME)
+  : join(PROJECT_ROOT, "evals", "suites", SUITE_NAME);
 const FIXTURES_DIR = join(PROJECT_ROOT, "evals", "fixtures");
 const METRICS_HISTORY_PATH = join(PROJECT_ROOT, "evals", "metrics-history.jsonl");
-const TMP_BASE = join(PROJECT_ROOT, ".tmp-baseline");
+// Trial dirs MUST live outside the project tree: a project-local tmp dir would
+// inherit the repo bunfig.toml (`[test] root = "tests"`), scoping `bun test`
+// inside each trial to a non-existent `<trial>/tests` and finding 0 test files.
+// The live harness (trial-env.ts) already uses the OS tmpdir for this reason.
+const TMP_BASE = join(tmpdir(), "smallcode-baseline");
 
 const DRY_RUN = process.env.SMALLCODE_DRY_RUN === "1";
 // Eval-specific overrides: fewer turns + trials to keep total wall-clock under ~30 min.
@@ -89,13 +100,27 @@ async function dryRunTask(task: EvalTask): Promise<DryRunResult> {
     return { taskId, passed: false, reason: "no referenceSolution field", durationMs: 0 };
   }
 
-  const fixtureDir = join(FIXTURES_DIR, referenceSolution);
   const trialDir = join(TMP_BASE, taskId);
 
   try {
     await rm(trialDir, { recursive: true, force: true });
     await mkdir(trialDir, { recursive: true });
-    await cp(fixtureDir, trialDir, { recursive: true });
+
+    // Mirror the live harness (trial-env.ts): lay down the full repoFixture (or
+    // inline files), THEN overlay the referenceSolution. For repoFixture-style
+    // tasks the solution dir is a sparse overlay (just the corrected file), so
+    // copying it alone would omit the tests and grade against an empty repo.
+    if (task.setup.repoFixture !== undefined) {
+      await cp(join(FIXTURES_DIR, task.setup.repoFixture), trialDir, { recursive: true });
+    }
+    if (task.setup.files !== undefined) {
+      for (const [relPath, content] of Object.entries(task.setup.files)) {
+        const abs = join(trialDir, relPath);
+        await mkdir(join(abs, ".."), { recursive: true });
+        await Bun.write(abs, content);
+      }
+    }
+    await cp(join(FIXTURES_DIR, referenceSolution), trialDir, { recursive: true });
 
     const graderResults = await Promise.all(
       task.graders.map((grader) => runGrader(grader, trialDir)),
@@ -257,7 +282,7 @@ async function appendMetricsSnapshot(snapshot: MetricsSnapshot): Promise<void> {
 async function main(): Promise<void> {
   const mode = DRY_RUN ? "DRY RUN" : "LIVE";
   console.log(`[run-baseline] Mode: ${mode}`);
-  console.log(`[run-baseline] Loading capability suite from ${SUITE_DIR}...`);
+  console.log(`[run-baseline] Loading suite "${SUITE_NAME}" from ${SUITE_DIR}...`);
 
   const suite = await loadSuite(SUITE_DIR);
   console.log(`[run-baseline] Found ${suite.tasks.length} tasks in suite "${suite.id}"\n`);
