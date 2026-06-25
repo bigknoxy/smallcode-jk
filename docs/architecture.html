@@ -419,14 +419,14 @@ flowchart TD
     THINKONLY -- yes --> ANSWERNOW[record failed turn\nset answerNowNext=true\nNEXT turn: ANSWER NOW prompt\nno think, act immediately]
     ANSWERNOW --> GOAL
     THINKONLY -- no --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
-    PARSEEDITS --> APPLY[applyBatch\noverwrite file or exact-match replace]
+    PARSEEDITS --> APPLY[applyBatch\npath-typo rescue dots→slashes\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
     EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
     ORACLE --> ADDTURN[addTurn + saveState\nstore turn.failureSignature + diagnostic]
 
-    ADDTURN --> GREEN{newFailures=0\npassCount≥1?}
-    GREEN -- yes --> ALLDONE[mark all goals done\nstatus = done]
+    ADDTURN --> GREEN{suite FULLY green?\ncurrentRed=0 ∧ passCount≥1}
+    GREEN -- yes --> ALLDONE[mark all goals done\nstatus = done, verified = true]
     ALLDONE --> DONE
     GREEN -- no --> STALL{outcome=failing\n+ same signature?}
     STALL -- "stallCount >= STALL_LIMIT\nAND redraftCount < MAX_REDRAFTS" --> REDRAFT[Set redraftNext=true\nrotateStrategy hint\nreset stallCount\nredraftCount++]

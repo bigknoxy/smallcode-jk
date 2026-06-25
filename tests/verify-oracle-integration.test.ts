@@ -1,5 +1,5 @@
-import { test, expect, afterEach } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { afterEach, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { captureTestBaseline, runTieredOracle } from "../src/verify/oracle.ts";
@@ -25,7 +25,13 @@ async function scaffold(files: Record<string, string>): Promise<string> {
 }
 
 const TSCONFIG = JSON.stringify({
-  compilerOptions: { strict: true, noEmit: true, module: "esnext", target: "esnext", moduleResolution: "bundler" },
+  compilerOptions: {
+    strict: true,
+    noEmit: true,
+    module: "esnext",
+    target: "esnext",
+    moduleResolution: "bundler",
+  },
   include: ["src"],
 });
 
@@ -199,8 +205,10 @@ test("count guard: agent introduces a module-error failure (no (fail) line) → 
   expect(verdict.outcome).toBe("failing");
 }, 60_000);
 
-test("count guard: pre-existing module error + task solved → still solved (red count unchanged)", async () => {
+test("honesty: pre-existing crash still red → failing even if a new test passes", async () => {
   // A pre-existing crashing test (unparseable error) plus a normal passing test.
+  // Honest semantics: the suite is NOT green, so the run is NOT "solved" — the
+  // success tick must never show while a test is red, even an unrelated one.
   const dir = await scaffold({
     "src/m.ts": "export const add = (a: number, b: number) => a + b;\n",
     "tests/crash.test.ts":
@@ -210,7 +218,7 @@ test("count guard: pre-existing module error + task solved → still solved (red
   const baseline = captureTestBaseline(dir);
   expect(baseline.redCount).toBeGreaterThanOrEqual(1);
 
-  // Agent solves its task: adds a passing test. Pre-existing crash unchanged.
+  // Agent adds a passing test. Pre-existing crash unchanged → suite still red.
   await writeFile(
     join(dir, "tests", "feature.test.ts"),
     'import { test, expect } from "bun:test";\nimport { add } from "../src/m.ts";\ntest("feature", () => expect(add(1, 1)).toBe(2));\n',
@@ -218,5 +226,5 @@ test("count guard: pre-existing module error + task solved → still solved (red
   );
 
   const verdict = await runTieredOracle(dir, { baseline });
-  expect(verdict.outcome).toBe("solved");
+  expect(verdict.outcome).toBe("failing");
 }, 60_000);

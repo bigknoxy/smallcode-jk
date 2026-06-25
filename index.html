@@ -746,6 +746,7 @@
         </p>
         <ul class="thesis-points">
           <li>Full-file edit format — no diff markers a small model mangles</li>
+          <li>Edit-apply safety net — fuzzy-repairs drifted search text, rejects truncated file re-emits, and redirects a flattened path (<code>src.stats.ts</code>→<code>src/stats.ts</code>) onto the real file</li>
           <li>Deterministic test-oracle early-stop — lock the pass, stop burning budget; CLI reports success only when oracle confirms green</li>
           <li>Repo-context indexing budgeted off the model's real window (num_ctx − generation reserve), with a per-turn trim guard — the prompt never overflows into an HTTP 400</li>
           <li>Think-only recovery — when a small model burns its budget reasoning and emits no answer, the next turn is re-prompted to skip thinking and act immediately</li>

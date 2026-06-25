@@ -1,6 +1,6 @@
+import { extractFirstFailure, type FailureDiagnostic } from "./failure-extract.ts";
 import { runChecker } from "./runner.ts";
-import type { CheckResult, CheckerConfig } from "./types.ts";
-import { type FailureDiagnostic, extractFirstFailure } from "./failure-extract.ts";
+import type { CheckerConfig, CheckResult } from "./types.ts";
 
 /**
  * Tiered verification oracle.
@@ -153,9 +153,11 @@ export interface TieredOracleOptions {
   /** Override the typecheck checker (e.g. to disable, or point elsewhere). */
   typecheck?: CheckerConfig | null;
   /**
-   * Pre-loop baseline snapshot. When provided, "solved" means zero NEW failures
-   * (vs baseline) AND ≥1 pass, rather than zero failures total. This prevents
-   * pre-existing unrelated failing tests from blocking early-stop forever.
+   * Pre-loop baseline snapshot. "solved" always requires a fully green suite;
+   * the baseline does NOT relax that bar. It is used only to shape feedback —
+   * separating failures the agent newly introduced (`newFailures`, the count
+   * guard) from tests that were already red at baseline — so the model gets a
+   * focused next-turn message instead of the whole suite output.
    */
   baseline?: TestBaseline;
 }
@@ -172,15 +174,21 @@ export async function runTieredOracle(
     const newFailures = [...currentFailing].filter((id) => !baselineFailing.has(id));
     const passCount = num(test.result.output.match(/(\d+)\s+pass/i));
 
-    // Count guard: not every failure prints a parseable `(fail)` line (module
-    // errors, unhandled throws appear only in the summary counts). If the total
-    // red count grew vs baseline, the agent introduced a failure we can't name —
-    // never call that "solved", even when no new (fail) id was parsed.
     const baselineRed = opts.baseline?.redCount ?? 0;
     const currentRed = parseRedCount(test.result.output);
     const countRegression = currentRed > baselineRed;
 
-    if (newFailures.length === 0 && passCount >= 1 && !countRegression) {
+    // Honesty rule: "solved" requires a FULLY GREEN suite (zero failures, ≥1
+    // pass). The earlier baseline-relative rule ("no NEW failures + something
+    // passes") falsely reported solved whenever the task targeted a test that
+    // was already failing at baseline and the edit never landed — the target
+    // stayed red while unrelated tests passed. The success tick must never show
+    // while ANY test is red, so anything short of green is reported as failing
+    // and the loop keeps working. The baseline below only shapes FEEDBACK (new
+    // breakage vs pre-existing reds); it no longer relaxes the done bar. A repo
+    // with genuinely unrelated, unfixable reds therefore ends in max_turns —
+    // the honest outcome, not a false "verified passing".
+    if (currentRed === 0 && passCount >= 1) {
       return {
         outcome: "solved",
         checks: [test.result],
@@ -190,13 +198,16 @@ export async function runTieredOracle(
       };
     }
 
-    // Build focused feedback: lead with new failures, fall back to full output.
+    // Build focused feedback: lead with new failures, then pre-existing reds.
+    const stalledOnBaseline = newFailures.length === 0 && !countRegression;
     const feedbackBody =
       newFailures.length > 0
         ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
         : countRegression
           ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}`
-          : test.result.output.slice(0, MAX_FEEDBACK);
+          : stalledOnBaseline
+            ? `The pre-existing failing test(s) are STILL failing — your change did not fix the target. Check it edited the right file.\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+            : test.result.output.slice(0, MAX_FEEDBACK);
 
     return {
       outcome: "failing",

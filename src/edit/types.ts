@@ -28,6 +28,12 @@ export interface ApplyResult {
   error?: string;
   originalContent?: string;
   newContent?: string;
+  /**
+   * Set when a search/replace block only matched after fuzzy repair (the model's
+   * search text drifted from the source — whitespace/indent/near-miss). Records
+   * which repair strategy salvaged it and the confidence, for telemetry.
+   */
+  repair?: { strategy: RepairResult["strategy"]; confidence: number };
 }
 
 export interface ApplyBatchResult {
