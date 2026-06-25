@@ -369,6 +369,15 @@ graph TD
         a rotating strategy hint nudges a fresh approach. After <code>MAX_REDRAFTS=2</code> the
         mechanism is disarmed so the loop doesn't cycle forever.
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">SKILL injection (GEPA-skills ①)</strong>:
+        <code>buildSystemPrompt</code> accepts an optional <code>PromptSet.skill</code> string.
+        When non-empty it appends a <code>## SKILL</code> block after the base system text —
+        a concise repo-agnostic playbook distilled from passing sessions by
+        <code>src/improve/skill-distiller.ts</code>.
+        The injection is additive: absent skill → output is byte-identical to the pre-GEPA baseline.
+        The distiller is offline (no model calls); run via <code>bun scripts/distill-skill.ts</code>.
+      </p>
       <div class="diagram-wrap">
         <div class="mermaid">
 flowchart TD
@@ -378,7 +387,8 @@ flowchart TD
     GOAL -- none --> DONE([status: done])
     GOAL -- pending --> CTX[Build ContextBundle\nwalk repoRoot, token budget 8K]
 
-    CTX --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks\n+ Failure diagnostic if last turn failed]
+    CTX --> SYSPROMPT[buildSystemPrompt\nbase system + optional ## SKILL block\nfrom PromptSet.skill]
+    SYSPROMPT --> PROMPT[buildTurnPrompt\ntask + goal + history + context chunks\n+ Failure diagnostic if last turn failed]
     PROMPT --> MODEL[provider.complete\ntemp=1.0 top_p=0.95 max_tokens=4096]
     MODEL --> STRIP[ReasoningHandler\nstrip think tags → answer]
     STRIP --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]

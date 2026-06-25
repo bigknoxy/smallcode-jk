@@ -15,6 +15,12 @@ export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): 
   // Delegate to promptSet if supplied; otherwise assemble the default set
   // (which preserves the disciplineRules toggle behaviour exactly).
   const ps = config.promptSet ?? defaultPromptSet({ disciplineRules: config.disciplineRules });
+
+  // Append the ## SKILL block when the promptSet carries a non-empty skill string.
+  // When skill is absent or empty, the output is byte-identical to the old behaviour.
+  if (ps.skill && ps.skill.trim().length > 0) {
+    return `${ps.system}\n\n## SKILL\n${ps.skill}`;
+  }
   return ps.system;
 }
 

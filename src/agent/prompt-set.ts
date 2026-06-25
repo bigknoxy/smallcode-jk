@@ -13,6 +13,14 @@ export interface PromptSet {
   planner: string;
   /** System prompt used by the pre-solve reflection step (optional). */
   reflection: string;
+  /**
+   * Optional repo-scoped guidance block injected alongside the system prompt.
+   * Mirrors gskill's SKILL.md concept: a concise playbook of patterns distilled
+   * from passing sessions. When non-empty, `buildSystemPrompt` appends a
+   * `## SKILL` section after the base system text.
+   * Additive — absent/undefined means no SKILL block is appended.
+   */
+  skill?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +122,7 @@ Output ONLY the reflection — no list, no headings, no code.`;
 // defaultPromptSet — assembles the canonical PromptSet.
 // ---------------------------------------------------------------------------
 
-export function defaultPromptSet(opts?: { disciplineRules?: boolean }): PromptSet {
+export function defaultPromptSet(opts?: { disciplineRules?: boolean; skill?: string }): PromptSet {
   const includeDiscipline = opts?.disciplineRules !== false;
   const system =
     SYSTEM_PROMPT_BASE +
@@ -125,5 +133,6 @@ export function defaultPromptSet(opts?: { disciplineRules?: boolean }): PromptSe
     system,
     planner: DEFAULT_PLANNER_SYSTEM_PROMPT,
     reflection: DEFAULT_REFLECTION_SYSTEM_PROMPT,
+    skill: opts?.skill,
   };
 }

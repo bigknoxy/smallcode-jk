@@ -83,4 +83,13 @@ export class SessionLogger {
     }
     return failed;
   }
+
+  async getPassedSessions(limit?: number): Promise<SessionLogEntry[]> {
+    const all = await this.readLog();
+    const passed = all.filter((e) => e.outcome === "done");
+    if (limit !== undefined) {
+      return passed.slice(0, limit);
+    }
+    return passed;
+  }
 }

@@ -163,6 +163,59 @@ describe("SessionLogger", () => {
     expect(failed.every((e) => e.outcome === "failed" || e.outcome === "max_turns")).toBe(true);
   });
 
+  it("getPassedSessions filters by outcome === 'done'", async () => {
+    const logger = new SessionLogger(logPath, store);
+
+    await logger.logSession(
+      makeAgentState({ sessionId: "done-0000", status: "done" }),
+      "/tmp/1.json",
+    );
+    await logger.logSession(
+      makeAgentState({ sessionId: "fail-1111", status: "failed" }),
+      "/tmp/2.json",
+    );
+    await logger.logSession(
+      makeAgentState({ sessionId: "done-2222", status: "done" }),
+      "/tmp/3.json",
+    );
+    await logger.logSession(
+      makeAgentState({ sessionId: "maxt-3333", status: "max_turns" }),
+      "/tmp/4.json",
+    );
+
+    const passed = await logger.getPassedSessions();
+    expect(passed.length).toBe(2);
+    expect(passed.every((e) => e.outcome === "done")).toBe(true);
+    // Confirm no failed/max_turns sessions leaked in.
+    expect(passed.some((e) => e.outcome === "failed" || e.outcome === "max_turns")).toBe(false);
+  });
+
+  it("getPassedSessions respects limit", async () => {
+    const logger = new SessionLogger(logPath, store);
+
+    for (let i = 0; i < 5; i++) {
+      await logger.logSession(
+        makeAgentState({ sessionId: `done-${String(i).padStart(4, "0")}`, status: "done" }),
+        `/tmp/${i}.json`,
+      );
+    }
+
+    const passed = await logger.getPassedSessions(3);
+    expect(passed.length).toBe(3);
+  });
+
+  it("getPassedSessions returns empty array when no passing sessions exist", async () => {
+    const logger = new SessionLogger(logPath, store);
+
+    await logger.logSession(
+      makeAgentState({ sessionId: "fail-0000", status: "failed" }),
+      "/tmp/1.json",
+    );
+
+    const passed = await logger.getPassedSessions();
+    expect(passed.length).toBe(0);
+  });
+
   it("readLog skips corrupt lines gracefully", async () => {
     const logger = new SessionLogger(logPath, store);
 
