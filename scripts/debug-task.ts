@@ -20,6 +20,8 @@ import { loadConfig } from "../src/config/loader.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
 import { runGrader } from "../src/eval/graders/index.ts";
 import { createTrialEnv } from "../src/eval/trial-env.ts";
+import { buildTrialContext } from "../src/eval/task-runner.ts";
+import { contextBudgetFor } from "../src/models/context-budget.ts";
 import { defaultRegistry } from "../src/models/registry.ts";
 import { createProvider } from "../src/provider/factory.ts";
 import { ReasoningHandler } from "../src/reasoning/handler.ts";
@@ -41,63 +43,10 @@ const SUITE_DIR = SUITE_NAME.includes("/")
 const FIXTURES_DIR = join(PROJECT_ROOT, "evals", "fixtures");
 const EVAL_MAX_TURNS = Number(process.env.SMALLCODE_EVAL_MAX_TURNS ?? "5");
 
-// ---------------------------------------------------------------------------
-// buildTrialContext — copy from task-runner (not exported)
-// ---------------------------------------------------------------------------
-
-async function buildTrialContext(trialDir: string, query: string): Promise<ContextBundle> {
-  const SOURCE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs"]);
-  const SKIP_DIRS = new Set(["node_modules", ".git", ".smallcode"]);
-
-  const chunks: ContextChunk[] = [];
-  let totalTokens = 0;
-  const TOKEN_BUDGET = 8_000;
-
-  async function walk(dir: string): Promise<void> {
-    let entries: string[];
-    try {
-      entries = await readdir(dir, { encoding: "utf-8" });
-    } catch {
-      return;
-    }
-    for (const name of entries) {
-      const absPath = join(dir, name);
-      let isDir = false;
-      try {
-        const s = await lstat(absPath);
-        isDir = s.isDirectory();
-      } catch {
-        continue;
-      }
-      if (isDir) {
-        if (!SKIP_DIRS.has(name)) await walk(absPath);
-        continue;
-      }
-      const ext = name.slice(name.lastIndexOf("."));
-      if (!SOURCE_EXTS.has(ext)) continue;
-      const relPath = relative(trialDir, absPath);
-      try {
-        const content = await readFile(absPath, { encoding: "utf-8" });
-        const lines = content.split("\n");
-        const tokens = estimateTokens(content);
-        if (totalTokens + tokens > TOKEN_BUDGET) continue;
-        totalTokens += tokens;
-        chunks.push({
-          filePath: relPath,
-          content,
-          startLine: 1,
-          endLine: lines.length,
-          estimatedTokens: tokens,
-        });
-      } catch {
-        // skip unreadable
-      }
-    }
-  }
-
-  await walk(trialDir);
-  return { chunks, totalTokens, tokenBudget: TOKEN_BUDGET, truncated: false, query };
-}
+// buildTrialContext now uses the REAL production retrieval (walkRepo →
+// buildContext, which sets targetFile + the size-gated edit format) imported from
+// task-runner — the previous local copy was a naive dir-walk that NEVER set
+// targetFile, so forensics saw a different prompt than the real eval path.
 
 // ---------------------------------------------------------------------------
 // Walk and print final source files
@@ -223,7 +172,8 @@ async function main(): Promise<void> {
     state,
     statePath,
     trialDeps,
-    async (goal: string): Promise<ContextBundle> => buildTrialContext(trialEnv.dir, goal),
+    async (goal: string): Promise<ContextBundle> =>
+      buildTrialContext(trialEnv.dir, goal, contextBudgetFor(profile)),
   );
 
   const trialFinishedAt = Date.now();
