@@ -309,7 +309,8 @@ describe("configModelsCommand", () => {
 
     const output = chunks.join("");
     expect(output).toContain("vibethinker-3b");
-    expect(output).toContain("qwen2.5-coder-7b");
+    expect(output).toContain("qwen2.5-coder:3b");
+    expect(output).toContain("qwen2.5-coder:7b");
     expect(output).toContain("qwen2.5-coder-14b");
   });
 });
