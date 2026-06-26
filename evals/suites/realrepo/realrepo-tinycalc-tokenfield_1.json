@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-tinycalc-tokenfield_1",
+  "desc": "In this tiny two-file arithmetic library (src/), src/parser.js is a recursive-descent evaluator that consumes the token stream produced by src/lexer.js. Every parse currently throws because the parser's peekKind() helper reads the wrong field off each token. The correct field name is defined by the lexer's token contract — read src/lexer.js to learn the token object shape, then fix src/parser.js so tests/parser.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-tinycalc-tokenfield_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/parser.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "tinycalc", "multifile", "cross-file-edit"],
+  "reference_solution": "realrepo-tinycalc-tokenfield_1-solution/"
+}
