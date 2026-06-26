@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-klona-array_1",
+  "desc": "In the real klona deep-clone library (src/index.js), the Array branch uses `--k` instead of `k--` in the for-loop condition, causing an off-by-one error: the element at index 0 is never copied (the loop exits before k reaches 0). Fix the Array branch so all elements including index 0 are cloned and tests/klona.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-klona-array_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/klona.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "klona", "Array", "off-by-one"],
+  "reference_solution": "realrepo-klona-array_1-solution/"
+}

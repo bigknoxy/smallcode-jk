@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-klona-regexp_1",
+  "desc": "In the real klona deep-clone library (src/index.js), the RegExp branch is missing the line `tmp.lastIndex = x.lastIndex;`, so cloned regular expressions lose their lastIndex state. Fix the RegExp branch to preserve lastIndex so tests/klona.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-klona-regexp_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/klona.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "klona", "RegExp", "missing-line"],
+  "reference_solution": "realrepo-klona-regexp_1-solution/"
+}

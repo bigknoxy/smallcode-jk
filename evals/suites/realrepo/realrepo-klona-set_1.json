@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-klona-set_1",
+  "desc": "In the real klona deep-clone library (src/index.js), the Set branch calls `tmp.add(val)` instead of `tmp.add(klona(val))`, so nested Set elements are not deep-cloned — the cloned Set shares object references with the original. Fix the Set branch to deep-clone each element so tests/klona.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-klona-set_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/klona.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "klona", "Set", "wrong-clone"],
+  "reference_solution": "realrepo-klona-set_1-solution/"
+}

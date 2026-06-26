@@ -1,0 +1,1 @@
+{ "id": "realrepo-v1", "kind": "capability", "description": "Real-world vendored-library bug-fix tasks (real source, bun:test oracle).", "defaultTrials": 1 }
