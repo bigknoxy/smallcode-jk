@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-klona-date_1",
+  "desc": "In the real klona deep-clone library (src/index.js), the Date branch returns the original Date object instead of a copy, so a cloned object shares its Date reference with the original — mutating the clone's date mutates the original. Fix the Date handling so dates are cloned by value. Edit only that branch so tests/klona.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-klona-date_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/klona.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "klona", "deep-clone", "wrong-return"],
+  "reference_solution": "realrepo-klona-date_1-solution/"
+}
