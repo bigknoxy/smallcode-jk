@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-mri-flags_1",
+  "desc": "In the real mri CLI arg-parser library (src/index.js), the next-arg lookahead check is inverted: consecutive flags like --foo --bar cause --bar to be consumed as the string value of --foo instead of being parsed as its own boolean flag. Fix the single comparison on the val= line so that tests/mri.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-mri-flags_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/mri.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "mri", "arg-parse"],
+  "reference_solution": "realrepo-mri-flags_1-solution/"
+}
