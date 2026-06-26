@@ -19,6 +19,20 @@ export interface BuildTurnPromptOpts {
   answerNow?: boolean;
 }
 
+// Experimental: SMALLCODE_DIFF_EDIT=1 switches PATCH (big-file) mode from
+// "re-emit the complete function" to a minimal SEARCH/REPLACE diff. The forensics
+// show coder models over-edit when asked for the whole function; a diff of only the
+// changed lines fits their natural "show only the change" behaviour. The parser +
+// fuzzy applier + repair pipeline already accept SEARCH/REPLACE. Flag-gated so the
+// default behaviour is untouched until the A/B confirms it.
+const DIFF_EDIT = process.env["SMALLCODE_DIFF_EDIT"] === "1";
+// Size gate: the minimal-diff format only pays off on LARGE target functions
+// (where whole-function re-emission over-edits). On small functions whole-function
+// PATCH already works and exact-match S/R only adds fragility (the edit-reliability
+// A/B: wrapText 42ln 0.20→0.60 win; padCell 10ln 0.70→0.10 regression). Apply diff
+// only when the target function is at least this many lines.
+const DIFF_MIN_FN_LINES = Number(process.env["SMALLCODE_DIFF_MIN_FN"] ?? "30");
+
 export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): string {
   // Delegate to promptSet if supplied; otherwise assemble the default set
   // (which preserves the disciplineRules toggle behaviour exactly).
@@ -26,10 +40,13 @@ export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): 
 
   // Append the ## SKILL block when the promptSet carries a non-empty skill string.
   // When skill is absent or empty, the output is byte-identical to the old behaviour.
-  if (ps.skill && ps.skill.trim().length > 0) {
-    return `${ps.system}\n\n## SKILL\n${ps.skill}`;
+  let system = ps.skill && ps.skill.trim().length > 0 ? `${ps.system}\n\n## SKILL\n${ps.skill}` : ps.system;
+  if (DIFF_EDIT) {
+    // Supersede the earlier rule that forbids SEARCH/REPLACE — for PATCH (big-file)
+    // mode we now WANT a minimal diff.
+    system += `\n\n## EDIT FORMAT OVERRIDE\nWhen the ## Edit Target section shows a SEARCH/REPLACE template, USE it — emit a minimal diff that changes ONLY the buggy line(s) instead of re-emitting the whole function. This supersedes any earlier rule forbidding SEARCH/REPLACE. When the Edit Target shows a FILE: or whole-function PATCH: template instead, follow that as written.`;
   }
-  return ps.system;
+  return system;
 }
 
 export function buildTurnPrompt(
@@ -58,7 +75,25 @@ export function buildTurnPrompt(
   if (target) {
     const usePatch = target.format === "patch" && target.functionName !== undefined;
     parts.push(`\n## Edit Target — ${target.path} (${target.lineCount} lines)`);
-    if (usePatch) {
+    const useDiff =
+      usePatch && DIFF_EDIT && (target.functionLineCount ?? 0) >= DIFF_MIN_FN_LINES;
+    if (useDiff) {
+      // Minimal SEARCH/REPLACE diff: change only the buggy lines of the target fn.
+      parts.push(
+        `This file is large. Make a MINIMAL edit to the \`${target.functionName}\` function: emit a SEARCH/REPLACE block that changes ONLY the buggy line(s). Copy the SEARCH text BYTE-FOR-BYTE from the file shown in Relevant Context below (same indentation — tabs vs spaces — and punctuation). Output it as the FIRST thing in your reply, in exactly this shape — no preamble, no whole-function rewrite:`,
+      );
+      parts.push("```");
+      parts.push(target.path);
+      parts.push("<<<<<<< SEARCH");
+      parts.push("(the exact current line(s) containing the bug)");
+      parts.push("=======");
+      parts.push("(the corrected line(s))");
+      parts.push(">>>>>>> REPLACE");
+      parts.push("```");
+      parts.push(
+        "Include only the lines that change; add ONE adjacent unchanged line if needed to make the SEARCH unique. Do NOT re-emit the whole function or file.",
+      );
+    } else if (usePatch) {
       parts.push(
         `This file is large — use PATCH: mode. Do NOT emit the whole file (it will be rejected). Edit ONLY the \`${target.functionName}\` function. Output the PATCH block as the FIRST thing in your reply — do not think out loud, do not restate the task, just emit it in exactly this shape (replace the placeholder with the corrected function body):`,
       );

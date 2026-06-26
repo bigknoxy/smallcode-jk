@@ -300,11 +300,16 @@ export async function buildContext(
       totalTokens += tokens;
       remaining -= tokens;
       const functionName = pickTargetFunction(cand.fileMap.symbols, content, query);
+      const targetSym = functionName
+        ? cand.fileMap.symbols.find((s) => s.name === functionName)
+        : undefined;
+      const functionLineCount = targetSym ? targetSym.endLine - targetSym.line + 1 : undefined;
       targetFile = {
         path: cand.fileMap.path,
         lineCount: cand.fileMap.lineCount,
         format: chooseEditFormat(cand.fileMap.lineCount),
         ...(functionName ? { functionName } : {}),
+        ...(functionLineCount !== undefined ? { functionLineCount } : {}),
       };
       break;
     }

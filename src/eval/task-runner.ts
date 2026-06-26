@@ -51,7 +51,7 @@ const TARGET_PIN_ENABLED = process.env["SMALLCODE_TARGET_PIN"] !== "0";
 // diverged from production — so evals measured a retrieval path that never
 // shipped. tokenBudget is the model's operative window minus the generation
 // reserve, so trials feel the same context pressure as production.
-async function buildTrialContext(
+export async function buildTrialContext(
   trialDir: string,
   query: string,
   tokenBudget: number,
