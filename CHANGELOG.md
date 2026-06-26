@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.2.2...v1.3.0) (2026-06-26)
+
+
+### Features
+
+* **eval:** compare-runs.ts — one-command CI-overlap A/B verdict ([#28](https://github.com/bigknoxy/smallcode-jk/issues/28)) ([efaa2af](https://github.com/bigknoxy/smallcode-jk/commit/efaa2afece122536d02ad868457c6332d8fc8963))
+* **eval:** pass@k with bootstrap CIs + grader infra-retry — trustworthy measuring stick (PR1) ([#26](https://github.com/bigknoxy/smallcode-jk/issues/26)) ([bd6cbc3](https://github.com/bigknoxy/smallcode-jk/commit/bd6cbc321886802e7935f57a4b12397eede28466))
+* gold-standard iteration — multi-file retrieval + diff default-on + cross-file eval task ([#34](https://github.com/bigknoxy/smallcode-jk/issues/34)) ([c242042](https://github.com/bigknoxy/smallcode-jk/commit/c24204235503cb1df0ab743f35ab91440d79d78e))
+* qwen2.5-coder model support + bug-containing-function PATCH target selection ([#32](https://github.com/bigknoxy/smallcode-jk/issues/32)) ([d548099](https://github.com/bigknoxy/smallcode-jk/commit/d548099a60390a8e4825102f84b84eaf3fd904af))
+* size-gated edit + target-file pinning (Option A) for small-model edit reliability ([#24](https://github.com/bigknoxy/smallcode-jk/issues/24)) ([7928096](https://github.com/bigknoxy/smallcode-jk/commit/79280968a53a4de9e15bf6c164da29c10fbedd72))
+* size-gated minimal-diff PATCH edit format (confirmed +0.17 OVERALL) ([#33](https://github.com/bigknoxy/smallcode-jk/issues/33)) ([5586979](https://github.com/bigknoxy/smallcode-jk/commit/558697959839fcdf22a1e6833e5c8f25620323e1))
+
+
+### Bug Fixes
+
+* **eval:** treat empty-generation wedge as infra error, not a 0.00 ([#31](https://github.com/bigknoxy/smallcode-jk/issues/31)) ([a8372c1](https://github.com/bigknoxy/smallcode-jk/commit/a8372c1ea190fec40c4c882f39364d247afc52ab))
+
 ## [1.2.2](https://github.com/bigknoxy/smallcode-jk/compare/v1.2.1...v1.2.2) (2026-06-25)
 
 
