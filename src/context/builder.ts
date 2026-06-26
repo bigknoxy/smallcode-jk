@@ -123,6 +123,96 @@ export function pickTargetFunction(
   return bestScore >= 1 ? best?.name : undefined;
 }
 
+/**
+ * Multi-file decoy disambiguation. When several source files export the same
+ * function name (e.g. the dequal repo ships `src/index.js`, `src/lite.js`, and
+ * `src/alts.js`, all exporting a `dequal`-family fn), lexical scoring ties and
+ * the pin loop may aim at a decoy. The tests only exercise ONE of them — the
+ * file they import — and that is the real edit target. We recover the imported
+ * file(s) by parsing the relative import specifiers out of the repo's test
+ * files and resolving them to repo-relative source paths.
+ *
+ * Pure string/path work — no disk reads beyond the test contents already passed
+ * in. Single-file repos yield an empty set, so this layer is a no-op there.
+ */
+function normalizeRel(path: string): string {
+  // Collapse `./` and `../` segments; forward-slashes only (walker guarantees).
+  const out: string[] = [];
+  for (const seg of path.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return out.join("/");
+}
+
+function dirOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? "" : path.slice(0, i);
+}
+
+/**
+ * Resolve a relative import specifier (from a file at `fromPath`) to the set of
+ * candidate repo-relative source paths it could denote. Mirrors Node/Bun module
+ * resolution loosely: strips a `.js`/`.mjs` extension that may actually map to a
+ * `.ts` source, tries the literal path, common source extensions, and an
+ * `/index.*` directory entry. Returns every plausible repo-relative form so the
+ * caller can match against the actual files present.
+ */
+function resolveImportCandidates(fromPath: string, spec: string): string[] {
+  if (!spec.startsWith(".")) return []; // bare specifier (a dependency) — not in-repo
+  const base = normalizeRel(`${dirOf(fromPath)}/${spec}`);
+  const exts = ["ts", "tsx", "js", "jsx", "mjs", "cjs"];
+  const out = new Set<string>([base]);
+  // `import "./x.js"` frequently resolves to `./x.ts` in a TS repo.
+  const dot = base.lastIndexOf(".");
+  const slash = base.lastIndexOf("/");
+  const hasExt = dot > slash;
+  if (hasExt) {
+    const stem = base.slice(0, dot);
+    for (const e of exts) out.add(`${stem}.${e}`);
+  } else {
+    for (const e of exts) out.add(`${base}.${e}`);
+    for (const e of exts) out.add(`${base}/index.${e}`);
+  }
+  return [...out];
+}
+
+const IMPORT_SPEC_RE =
+  /(?:import|export)[^'"`]*?from\s*["'`]([^"'`]+)["'`]|(?:import|require)\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g;
+
+/**
+ * Collect the repo-relative source paths that the repo's TEST files import.
+ * These are the files actually under test — the correct edit targets — and take
+ * priority over same-named decoys in the pin loop.
+ */
+async function findTestImportedPaths(repoMap: RepoMap, repoRoot: string): Promise<Set<string>> {
+  const present = new Set(repoMap.files.map((f) => f.path));
+  const imported = new Set<string>();
+  const testFiles = repoMap.files.filter((f) => isTestPath(f.path));
+  for (const tf of testFiles) {
+    let content: string;
+    try {
+      content = await Bun.file(`${repoRoot}/${tf.path}`).text();
+    } catch {
+      continue;
+    }
+    IMPORT_SPEC_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = IMPORT_SPEC_RE.exec(content)) !== null) {
+      const spec = m[1] ?? m[2];
+      if (!spec) continue;
+      for (const cand of resolveImportCandidates(tf.path, spec)) {
+        if (present.has(cand)) imported.add(cand);
+      }
+    }
+  }
+  return imported;
+}
+
 export interface BuildOptions {
   repoRoot: string;
   tokenBudget: number;
@@ -277,7 +367,21 @@ export async function buildContext(
     // that defines implementation — skipping barrels that merely re-export. The
     // winner's content is read here for pinning, so scanning a few candidates is
     // cheap (we stop at the first real source file).
-    const candidates = scoredFiles.filter((s) => s.score > 0 && !isTestPath(s.fileMap.path));
+    let candidates = scoredFiles.filter((s) => s.score > 0 && !isTestPath(s.fileMap.path));
+    // Decoy tie-breaker: when MORE than one source file could be the target
+    // (the only case this matters — single-candidate repos are unaffected),
+    // prefer the file(s) the tests actually import. Layered ON TOP of the
+    // existing lexical order via a stable partition, so it only promotes an
+    // import-backed candidate above an equally/again-scored decoy; it never
+    // reorders within either group and never demotes a uniquely-scored winner.
+    if (candidates.length > 1) {
+      const imported = await findTestImportedPaths(repoMap, repoRoot);
+      if (imported.size > 0) {
+        const inTests = candidates.filter((c) => imported.has(c.fileMap.path));
+        const rest = candidates.filter((c) => !imported.has(c.fileMap.path));
+        if (inTests.length > 0) candidates = [...inTests, ...rest];
+      }
+    }
     for (const cand of candidates) {
       const targetAbs = `${repoRoot}/${cand.fileMap.path}`;
       let content: string;
