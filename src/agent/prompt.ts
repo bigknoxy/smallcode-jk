@@ -109,9 +109,29 @@ export function buildTurnPrompt(
 
             if (result.status !== "applied") {
               parts.push(`  ✗ ${result.filePath} — edit did not apply.`);
-              // Show current file content so the model can re-emit the full file.
               const matchingChunk = context.chunks.find((c) => c.filePath === result.filePath);
-              if (matchingChunk) {
+              // PATCH-mode recovery must NOT tell the model to re-emit the whole
+              // file: on a large file (the only reason we PATCH) the whole-file
+              // emission truncates and is rejected, so the failed-edit feedback
+              // would itself force the failure loop. Keep the model on the PATCH
+              // block for the single target function instead.
+              const tgt = context.targetFile;
+              const patchRetry =
+                tgt?.format === "patch" &&
+                tgt.functionName !== undefined &&
+                tgt.path === result.filePath;
+              if (patchRetry) {
+                parts.push(
+                  `  Re-emit a PATCH block for ONLY the \`${tgt!.functionName}\` function — do NOT emit the whole file (it will be truncated and rejected). Change the minimal lines to fix the bug; copy every other line of the function unchanged.`,
+                );
+                if (matchingChunk) {
+                  parts.push(`  The file currently contains:`);
+                  parts.push("  ```");
+                  parts.push(matchingChunk.content);
+                  parts.push("  ```");
+                }
+              } else if (matchingChunk) {
+                // Show current file content so the model can re-emit the full file.
                 parts.push(`  The file currently contains:`);
                 parts.push("  ```");
                 parts.push(matchingChunk.content);

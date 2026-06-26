@@ -47,17 +47,22 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
       "Qwen2.5-Coder-3B-Instruct, Apache-2.0. Control arm vs vibethinker-3b: same size, no <think> reasoning, so no truncation spiral. Recommended sampling temp 0.7 / top_p 0.8 / top_k 20.",
   },
   {
-    id: "qwen2.5-coder-7b",
+    // id = the Ollama model name so the provider can reach it. Same non-reasoning
+    // family as the 3B, one size up — the larger arm of the 3-way model comparison.
+    // num_ctx + sampling matched to qwen2.5-coder:3b for a fair size A/B.
+    id: "qwen2.5-coder:7b",
     label: "Qwen/Qwen2.5-Coder-7B-Instruct",
-    contextWindow: 131_072,
+    contextWindow: 32_768,
     samplingDefaults: {
       temperature: 0.7,
-      top_p: 0.95,
-      top_k: -1,
+      top_p: 0.8,
+      top_k: 20,
       max_tokens: 4_096,
     },
     supportsGrammar: true,
     supportsJsonSchema: true,
+    ollamaOptions: { num_ctx: 8_192 },
+    notes: "Qwen2.5-Coder-7B-Instruct, Apache-2.0. Larger arm of the 3-way comparison.",
   },
   {
     id: "qwen2.5-coder-14b",
