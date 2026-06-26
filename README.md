@@ -333,7 +333,7 @@ MIT
 - `SMALLCODE_REPORT_KS`: comma list of k values to report pass@k for (default `1,2,3,5`). Each pass@k is reported with a 95% bootstrap CI; `n` is always added so `passAtK[n]` survives.
 - `SMALLCODE_CI_SEED`: seed for the bootstrap-CI RNG (default fixed) so confidence intervals are reproducible across reruns of the same trial outcomes.
 - `SMALLCODE_GRADER_RETRIES`: how many times the deterministic grader retries a transient **infra** error (lockfile/EAGAIN) that produced no test verdicts (default 1). Never retries a real test failure (a parsed `✗` blocks the retry).
-- `SMALLCODE_DIFF_EDIT`: `1` switches big-file PATCH editing from "re-emit the complete function" to a minimal SEARCH/REPLACE diff (changes only the buggy lines). Size-gated — applies only to target functions ≥ `SMALLCODE_DIFF_MIN_FN` lines, where whole-function re-emission causes over-editing. Default off.
+- `SMALLCODE_DIFF_EDIT`: big-file PATCH editing uses a minimal SEARCH/REPLACE diff (changes only the buggy lines) instead of re-emitting the complete function. Size-gated — applies only to target functions ≥ `SMALLCODE_DIFF_MIN_FN` lines, where whole-function re-emission causes over-editing. **Default ON** (confirmed +0.17 OVERALL on edit-reliability); opt out with `SMALLCODE_DIFF_EDIT=0`.
 - `SMALLCODE_DIFF_MIN_FN`: minimum target-function line span for `SMALLCODE_DIFF_EDIT` to use a diff (default `30`). Below it, whole-function PATCH is kept (small functions don't benefit and exact-match diffs add fragility).
 - `SMALLCODE_MODEL`: override the active model id for a run (e.g. `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, `vibethinker-3b`) — a cross-model A/B with no config edit.
 <!-- agent-skills:doc-keeper:end -->
