@@ -19,13 +19,15 @@ export interface BuildTurnPromptOpts {
   answerNow?: boolean;
 }
 
-// Experimental: SMALLCODE_DIFF_EDIT=1 switches PATCH (big-file) mode from
-// "re-emit the complete function" to a minimal SEARCH/REPLACE diff. The forensics
-// show coder models over-edit when asked for the whole function; a diff of only the
-// changed lines fits their natural "show only the change" behaviour. The parser +
-// fuzzy applier + repair pipeline already accept SEARCH/REPLACE. Flag-gated so the
-// default behaviour is untouched until the A/B confirms it.
-const DIFF_EDIT = process.env["SMALLCODE_DIFF_EDIT"] === "1";
+// SMALLCODE_DIFF_EDIT switches PATCH (big-file) mode from "re-emit the complete
+// function" to a minimal SEARCH/REPLACE diff. The forensics show coder models
+// over-edit when asked for the whole function; a diff of only the changed lines
+// fits their natural "show only the change" behaviour. The parser + fuzzy applier
+// + repair pipeline already accept SEARCH/REPLACE. The A/B confirmed a net win
+// (edit-reliability OVERALL 0.63 -> 0.80), so this is now DEFAULT ON. Opt OUT with
+// SMALLCODE_DIFF_EDIT=0. The size gate (DIFF_MIN_FN_LINES) still confines it to
+// LARGE target functions, so small-file FILE: mode is unaffected.
+const DIFF_EDIT = process.env["SMALLCODE_DIFF_EDIT"] !== "0";
 // Size gate: the minimal-diff format only pays off on LARGE target functions
 // (where whole-function re-emission over-edits). On small functions whole-function
 // PATCH already works and exact-match S/R only adds fragility (the edit-reliability
@@ -40,12 +42,17 @@ export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): 
 
   // Append the ## SKILL block when the promptSet carries a non-empty skill string.
   // When skill is absent or empty, the output is byte-identical to the old behaviour.
-  let system = ps.skill && ps.skill.trim().length > 0 ? `${ps.system}\n\n## SKILL\n${ps.skill}` : ps.system;
-  if (DIFF_EDIT) {
-    // Supersede the earlier rule that forbids SEARCH/REPLACE — for PATCH (big-file)
-    // mode we now WANT a minimal diff.
-    system += `\n\n## EDIT FORMAT OVERRIDE\nWhen the ## Edit Target section shows a SEARCH/REPLACE template, USE it — emit a minimal diff that changes ONLY the buggy line(s) instead of re-emitting the whole function. This supersedes any earlier rule forbidding SEARCH/REPLACE. When the Edit Target shows a FILE: or whole-function PATCH: template instead, follow that as written.`;
-  }
+  //
+  // Note: the minimal-diff (SEARCH/REPLACE) instruction is NOT injected into the
+  // system prompt. Now that DIFF_EDIT is default-ON, mutating the system prompt
+  // here would (a) break the GEPA prompt-seam invariant — buildSystemPrompt must
+  // return the promptSet's system verbatim so a mutated candidate carries cleanly
+  // — and (b) be redundant: the per-turn "## Edit Target" directive in
+  // buildTurnPrompt renders the literal SEARCH/REPLACE template and tells the
+  // model to use it, and it fires ONLY when a large target function is actually
+  // present (more precise than a blanket system rule). So the directive lives at
+  // the turn level, keeping the system prompt single-source-of-truth.
+  const system = ps.skill && ps.skill.trim().length > 0 ? `${ps.system}\n\n## SKILL\n${ps.skill}` : ps.system;
   return system;
 }
 
@@ -65,6 +72,38 @@ export function buildTurnPrompt(
   parts.push(`\n## Current Action (step ${state.currentGoalIndex + 1}/${state.goals.length})`);
   parts.push(goal !== undefined ? goal.description : "No active goal.");
   parts.push("\nExecute this action NOW with a FILE: block or tool calls. Do not describe — act.");
+
+  // Structured failure diagnostic from the most recent failing turn. This is the
+  // strongest bug-LOCALIZATION signal a small model gets: a wrong operator /
+  // off-by-one shows up as a specific expected≠received pair. qwen mechanically
+  // emits a valid diff but edits the WRONG line when the assertion is buried, so
+  // we render it HERE — above BOTH the "## Edit Target" mechanical directive AND
+  // Recent History — and lead with the concrete mismatch so "WHAT to fix" lands
+  // before "HOW to emit it". We do NOT fabricate line numbers; only the
+  // oracle-provided expected/received/message are shown. Suppressed under
+  // answerNow (no budget to reason) — there it would only re-trigger the
+  // think-loop the answerNow prompt exists to break.
+  const failingTurn = state.turns.at(-1);
+  const renderFailure = failingTurn?.diagnostic && !opts?.answerNow;
+  if (renderFailure) {
+    const d = failingTurn!.diagnostic!;
+    parts.push("\n## FAILING TEST — fix exactly this");
+    parts.push("**Failure (fix THIS):**");
+    const hasValues = d.expected !== undefined || d.actual !== undefined;
+    if (hasValues) {
+      // Lead with a stark one-line mismatch — the localization anchor — BEFORE any
+      // prose, so it is the first concrete thing the model reads. The arrow form
+      // is intentionally distinct from renderDiagnostic's two-line Expected:/
+      // Received: pair below, so the fact is reinforced, not duplicated verbatim.
+      const exp = d.expected ?? "(no value)";
+      const act = d.actual ?? "(no value)";
+      parts.push(`The test wants \`${exp}\` but the code produces \`${act}\`.`);
+      parts.push(
+        "The bug is the single line whose value produces `Received` where the test wants `Expected`. Find and change ONLY that line so it yields `Expected`. Do not touch correct lines.",
+      );
+    }
+    parts.push(renderDiagnostic(d));
+  }
 
   // Deterministic edit-format directive. The harness — not the model — decides
   // whole-file vs single-function editing based on the target file's size, and
@@ -190,15 +229,10 @@ export function buildTurnPrompt(
     }
   }
 
-  // Structured failure diagnostic from the most recent failing turn.
-  // When a diagnostic is available, render it prominently so the model can
-  // act on the specific assertion instead of guessing. Fall back to the raw
-  // slice already shown in tool results (no diagnostic → no extra block).
-  const lastTurn = state.turns.at(-1);
-  if (lastTurn?.diagnostic) {
-    parts.push("\n**Failure (fix THIS):**");
-    parts.push(renderDiagnostic(lastTurn.diagnostic));
-  }
+  // (The structured failure diagnostic is rendered near the TOP of the turn body
+  // — see the "## FAILING TEST — fix exactly this" block above — so it precedes
+  // BOTH the "## Edit Target" directive and Recent History, leading with the bare
+  // Expected/Received mismatch as the localization anchor.)
 
   // Scratchpad
   if (state.scratchpad.trim().length > 0) {
