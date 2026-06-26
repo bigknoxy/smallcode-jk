@@ -209,6 +209,17 @@ export function parsePatchBlocks(raw: string): PatchParseResult {
  * `{` to avoid call sites). Exported for testing.
  */
 export function findDefinitionLines(contentLines: string[], name: string): number[] {
+  // Synthetic name for an anonymous `export default function (…)` (the extractor
+  // tags it "default"). Anchor on the default-export line itself, since there is
+  // no identifier to match.
+  if (name === "default") {
+    const defaultRe = /^export\s+default\s+(?:async\s+)?function\b/;
+    const hits: number[] = [];
+    for (let i = 0; i < contentLines.length; i++) {
+      if (defaultRe.test((contentLines[i] ?? "").trim())) hits.push(i);
+    }
+    return hits;
+  }
   const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const strong = [
     new RegExp(`^(?:export\\s+)?(?:default\\s+)?(?:async\\s+)?function\\s*\\*?\\s*${esc}\\b`),

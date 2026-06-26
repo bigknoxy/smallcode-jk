@@ -42,32 +42,85 @@ function isBarrelFile(content: string): boolean {
 }
 
 /**
- * Choose the function a PATCH should target: the matched symbol whose name most
- * strongly matches the query. Prefer an exact token match (the bug usually names
- * its function) over a weak substring match — otherwise a 2-char query token
- * like "to" matches `tokenize` ahead of the intended `toKebab`.
+ * Choose the function a PATCH should target.
+ *
+ * The query usually NAMES the buggy function ("fix wrapText…") — an EXACT
+ * name-token match is the strongest signal and wins outright. When NO function
+ * is exactly named by the query (an anonymous `export default function`, or a bug
+ * described by behaviour rather than name), fall back to BODY-CONTENT relevance:
+ * the function whose body contains the most distinct query terms is where the bug
+ * lives. A weak substring name match (`toVal` ⊇ "val") is deliberately NOT trusted
+ * on its own — that is exactly what mis-targeted a 9-line helper over the real
+ * 100-line parser on the mri fixture. Scans ALL function symbols (with bodies),
+ * not just the pre-filtered name-matched set, so the right target is always in
+ * the candidate pool.
  */
-function pickFunctionName(matched: CodeSymbol[], query: string): string | undefined {
-  if (matched.length === 0) return undefined;
-  const tokens = query
-    .split(/[^a-zA-Z0-9_]/)
-    .filter((t) => t.length >= 2)
-    .map((t) => t.toLowerCase());
+export function pickTargetFunction(
+  symbols: CodeSymbol[],
+  content: string,
+  query: string,
+): string | undefined {
+  const fns = symbols.filter((s) => s.kind === "function" || s.kind === "method");
+  if (fns.length === 0) return undefined;
+  const lines = content.split("\n");
+  const tokens = [
+    ...new Set(
+      query
+        .split(/[^a-zA-Z0-9_]/)
+        .filter((t) => t.length >= 3)
+        .map((t) => t.toLowerCase()),
+    ),
+  ];
+  if (tokens.length === 0) return undefined;
+
+  // Structural signal FIRST — query-INDEPENDENT. The per-turn query is the
+  // planner's model-generated goal text, which may not carry the bug's terms;
+  // relying on it alone re-introduced the mri mis-target. When ONE function
+  // dominates the file (covers most of it and dwarfs the next-largest), the bug is
+  // almost certainly inside it — target it regardless of the query. This is the
+  // common real-repo shape: a module whose default export IS the implementation
+  // (mri, klona, dequal). Checked before name match so a coincidental query word
+  // matching a tiny helper (dequal's `find`) can't override the real parser.
+  const sized = fns
+    .map((s) => ({ sym: s, span: s.endLine - s.line + 1 }))
+    .sort((a, b) => b.span - a.span);
+  const nonBlank = lines.filter((l) => l.trim() !== "").length || lines.length;
+  const top = sized[0]!;
+  const second = sized[1];
+  const dominates =
+    top.span >= nonBlank * 0.5 && (second === undefined || top.span >= second.span * 2);
+  if (dominates) return top.sym.name;
+
+  // An EXACT name match anywhere in the query is the next strongest signal — the
+  // bug explicitly named its function (the edit-reliability multi-function case).
+  for (const sym of fns) {
+    if (tokens.includes(sym.name.toLowerCase())) return sym.name;
+  }
+
+  // Otherwise rank by BODY-CONTENT relevance (multi-function files where no single
+  // function dominates — e.g. a utils file with several similar-sized helpers).
   let best: CodeSymbol | undefined;
   let bestScore = -1;
-  for (const sym of matched) {
-    const name = sym.name.toLowerCase();
-    let score = 0;
+  for (const sym of fns) {
+    const body = lines
+      .slice(Math.max(0, sym.line - 1), sym.endLine)
+      .join("\n")
+      .toLowerCase();
+    let bodyHits = 0;
     for (const t of tokens) {
-      if (name === t) score += 10;
-      else if (name.includes(t)) score += 3;
+      if (body.includes(t)) bodyHits += 1;
     }
+    // Faint size tiebreak; never overrides a real content difference.
+    const sizeBias = Math.min((sym.endLine - sym.line) / 1000, 0.5);
+    const score = bodyHits + sizeBias;
     if (score > bestScore) {
       bestScore = score;
       best = sym;
     }
   }
-  return best?.name;
+  // Require ≥1 body term — else leave undefined so the caller keeps whole-file
+  // mode rather than aiming at an arbitrary function.
+  return bestScore >= 1 ? best?.name : undefined;
 }
 
 export interface BuildOptions {
@@ -246,7 +299,7 @@ export async function buildContext(
       });
       totalTokens += tokens;
       remaining -= tokens;
-      const functionName = pickFunctionName(cand.matchedSymbols, query);
+      const functionName = pickTargetFunction(cand.fileMap.symbols, content, query);
       targetFile = {
         path: cand.fileMap.path,
         lineCount: cand.fileMap.lineCount,
