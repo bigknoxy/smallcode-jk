@@ -242,7 +242,23 @@ function countThinkOnlyTurns(turns: import("@/agent/types.ts").TurnRecord[]): nu
  * EAGAIN, …) never actually ran the tests — exclude it from the rate rather
  * than count it as a model failure. */
 function trialHitInfraError(trial: TaskEvalResult["trials"][number]): boolean {
-  return trial.graderResults.some((r) => r.details?.["infraError"] === true);
+  // (a) Grader subprocess infra fault (lockfile/EAGAIN), marked after retries.
+  if (trial.graderResults.some((r) => r.details?.["infraError"] === true)) return true;
+  // (b) Empty-generation wedge: the provider returned zero tokens for EVERY turn
+  // (loop tags these "infra: empty model generation"). A disconnected/wedged backend
+  // never gave the model a real chance — excluding it stops a flap from forging a
+  // false 0.00. Requiring ALL turns empty keeps a real model fail (any real token)
+  // in the denominator; the wedge signature is a whole trial of nothing.
+  const turns = trial.transcript?.turns ?? [];
+  if (
+    turns.length > 0 &&
+    turns.every((t) =>
+      t.toolResults.some((r) => r.error?.includes("infra: empty model generation")),
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
 async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
@@ -484,9 +500,16 @@ async function main(): Promise<void> {
         if (m.passAt1 > 0) passCount++;
         const ci1 = m.passAtKCI[1];
         const ciStr = ci1 ? ` [${ci1.lo.toFixed(2)}-${ci1.hi.toFixed(2)}]` : "";
-        console.log(
-          `        pass@1=${m.passAt1.toFixed(2)}${ciStr} n=${m.n} turns=${m.avgTurns.toFixed(1)} think-only=${m.thinkOnlyTurns}(${m.trialsWithTruncation}t)${m.infraDropped ? ` infra-dropped=${m.infraDropped}` : ""} (${elapsed}s)`,
-        );
+        if (m.n === 0) {
+          // Every trial was infra-poisoned (e.g. wedged backend) — UNMEASURED, not 0.00.
+          console.log(
+            `        UNMEASURED — all ${m.infraDropped} trials hit infra errors (no real model output). Restart backend + rerun this task. (${elapsed}s)`,
+          );
+        } else {
+          console.log(
+            `        pass@1=${m.passAt1.toFixed(2)}${ciStr} n=${m.n} turns=${m.avgTurns.toFixed(1)} think-only=${m.thinkOnlyTurns}(${m.trialsWithTruncation}t)${m.infraDropped ? ` infra-dropped=${m.infraDropped}` : ""} (${elapsed}s)`,
+          );
+        }
       } catch (err) {
         console.error(`  ERROR: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
