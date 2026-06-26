@@ -271,6 +271,17 @@ export async function runLoop(
       reasoning = parsed.reasoning ?? undefined;
       answer = parsed.answer;
 
+      // Empty generation: the provider returned ZERO tokens — no reasoning, no answer,
+      // empty raw content. This is a wedged/disconnected backend (a flapping local
+      // Ollama returns {"response":"","done":false}), NOT a model failure. Tag it
+      // distinctly ("infra: empty model generation") so the eval can exclude the trial
+      // instead of forging a clean 0.00. Distinct from think-only, which HAS reasoning.
+      if (rawResponse.trim() === "" && completionTokens === 0) {
+        throw new Error(
+          "infra: empty model generation (provider returned zero tokens — likely wedged/disconnected backend)",
+        );
+      }
+
       // Think-only truncation: reasoning present but answer empty → completion was cut short.
       // Treat as an error turn rather than silently scoring a non-answer, and flag
       // the next turn for answer-now recovery so we don't re-run the same prompt.

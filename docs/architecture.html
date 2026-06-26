@@ -596,7 +596,11 @@ flowchart TD
         overlap means raise <code>n</code> (CI width ~1/√n) rather than trust the point estimate. A
         grader-side <strong>infra-error retry</strong> (<code>SMALLCODE_GRADER_RETRIES</code>) keeps
         transient <code>bun test</code> lockfile/EAGAIN failures from being mis-counted as model
-        failures — those trials are excluded from the denominator, never invented as passes. Each
+        failures — those trials are excluded from the denominator, never invented as passes. The same
+        denominator also drops <strong>empty-generation wedges</strong> — a flapping local backend that
+        returns zero tokens for an entire trial (every turn tagged <code>"infra: empty model
+        generation"</code>) would otherwise forge a clean 0.00; a task with no surviving trials prints
+        <code>UNMEASURED</code> instead. Each
         live snapshot in <code>evals/metrics-history.jsonl</code> records <code>n</code>, per-k rates,
         CIs, think-only-truncation totals, and the sampling overrides in effect, so history rows are
         self-describing.
