@@ -60,6 +60,11 @@ export interface TargetFile {
   format: "full" | "patch";
   /** Best-scoring matched symbol — the function to PATCH when format==="patch". */
   functionName?: string;
+  /** Line span of the target function (endLine − line + 1), when known. Drives the
+   * size-gated minimal-diff format: a minimal SEARCH/REPLACE pays off on LARGE
+   * functions (where whole-function re-emission over-edits) but hurts small ones
+   * (where whole-function PATCH already works and exact-match S/R adds fragility). */
+  functionLineCount?: number;
 }
 
 export interface ContextBundle {
