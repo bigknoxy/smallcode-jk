@@ -467,6 +467,11 @@ flowchart TD
         <code>FILE:</code>; a large file (&gt; 80 lines, with a known function) ⇒ replace ONLY that one
         function via <code>PATCH:</code>/<code>FUNCTION:</code>. The model no longer self-assesses
         "is this file large?" (the old advisory "&gt;300 lines" prose had no effect).
+        The PATCH <em>target function</em> is the one that CONTAINS the bug, chosen by
+        <code>pickTargetFunction</code>: a dominant function (≥50% of the file and ≥2× the next) wins
+        query-independently — the common real-repo shape where a default export IS the implementation,
+        including an anonymous <code>export default function</code> extracted as <code>"default"</code> —
+        else an exact query name-match, else body-content relevance (never a weak name-substring match).
       </p>
       <div class="diagram-wrap">
         <div class="mermaid">

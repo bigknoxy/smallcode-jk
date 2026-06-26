@@ -172,7 +172,10 @@ async function main(): Promise<void> {
   const { config, extraModels } = loadConfig();
   for (const m of extraModels) defaultRegistry.register(m);
 
-  const profile = defaultRegistry.get(config.activeModel);
+  // SMALLCODE_MODEL swaps the model for a cross-model forensic (e.g. qwen2.5-coder:3b
+  // vs vibethinker-3b), mirroring run-baseline's override.
+  const activeModel = process.env.SMALLCODE_MODEL || config.activeModel;
+  const profile = defaultRegistry.get(activeModel);
   const provider = createProvider(config.provider, defaultRegistry);
   const reasoningHandler = new ReasoningHandler(
     profile.reasoningTags ?? { open: "<think>", close: "</think>" },

@@ -37,22 +37,29 @@ function extractTypeScriptSymbols(content: string, filePath: string): CodeSymbol
   let currentClassName: string | null = null;
 
   function visit(node: ts.Node): void {
-    // Function declarations
-    if (ts.isFunctionDeclaration(node) && node.name) {
-      const name = node.name.text;
-      const params = printParams(node.parameters, sf);
-      const ret = printTypeNode(node.type, sf);
-      const asyncKw = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)
-        ? "async "
-        : "";
-      const sig = truncate(`${asyncKw}function ${name}(${params})${ret}`);
-      symbols.push({
-        name,
-        kind: "function",
-        line: lineOf(sf, node.getStart(sf)),
-        endLine: endLineOf(sf, node),
-        signature: sig,
-      });
+    // Function declarations — including an anonymous `export default function (…)`,
+    // which has no node.name. Such a default export is often the module's MAIN
+    // function (e.g. mri's parser); without a symbol for it the PATCH target
+    // selector can never aim at it and mis-targets a named helper instead. Give
+    // it the synthetic name "default" so it becomes a first-class target.
+    if (ts.isFunctionDeclaration(node)) {
+      const isDefault = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
+      const name = node.name?.text ?? (isDefault ? "default" : undefined);
+      if (name) {
+        const params = printParams(node.parameters, sf);
+        const ret = printTypeNode(node.type, sf);
+        const asyncKw = node.modifiers?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)
+          ? "async "
+          : "";
+        const sig = truncate(`${asyncKw}function ${name}(${params})${ret}`);
+        symbols.push({
+          name,
+          kind: "function",
+          line: lineOf(sf, node.getStart(sf)),
+          endLine: endLineOf(sf, node),
+          signature: sig,
+        });
+      }
     }
 
     // Class declarations

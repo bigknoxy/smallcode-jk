@@ -46,7 +46,8 @@ function label(s: MetricsSnapshot): string {
   if (samp.temp !== undefined) bits.push(`temp=${samp.temp}`);
   const cfg = bits.length ? bits.join(" ") : "default sampling";
   const when = new Date(s.timestamp).toISOString().slice(0, 16).replace("T", " ");
-  return `${cfg}  (n=${s.n ?? "?"}, ${when}, ${s.runId})`;
+  const model = s.modelId ? `${s.modelId} · ` : "";
+  return `${model}${cfg}  (n=${s.n ?? "?"}, ${when}, ${s.runId})`;
 }
 
 /** Two 95% CIs are significantly different iff they do NOT overlap. */

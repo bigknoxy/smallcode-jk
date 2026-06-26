@@ -75,6 +75,11 @@ const MAX_TOKENS_OVERRIDE = process.env.SMALLCODE_MAX_TOKENS
 const TEMP_OVERRIDE = process.env.SMALLCODE_TEMP
   ? Number(process.env.SMALLCODE_TEMP)
   : undefined;
+// Model swap: override config.activeModel for a cross-model A/B (e.g. compare a
+// non-reasoning coder model against VibeThinker on the same suite/n). Must name a
+// registered profile whose id equals the Ollama model name. Unset = config default.
+// e.g. SMALLCODE_MODEL=qwen2.5-coder:3b.
+const MODEL_OVERRIDE = process.env.SMALLCODE_MODEL || undefined;
 // Measuring-stick controls. SMALLCODE_EVAL_N is the SAMPLE COUNT n (trials per
 // task) — decoupled from the reported k. SMALLCODE_REPORT_KS is the comma list
 // of k values to report pass@k for. Larger n → tighter confidence intervals
@@ -265,7 +270,8 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
   const { config, extraModels } = loadConfig();
   for (const m of extraModels) defaultRegistry.register(m);
 
-  const baseProfile = defaultRegistry.get(config.activeModel);
+  const activeModel = MODEL_OVERRIDE ?? config.activeModel;
+  const baseProfile = defaultRegistry.get(activeModel);
   // Apply sampling overrides (cause-attack A/B: max_tokens and/or temperature) by
   // cloning the profile so the registry default is untouched for other consumers.
   const profile =
@@ -535,7 +541,7 @@ async function main(): Promise<void> {
       timestamp: Date.now(),
       runId: `live-${Date.now()}`,
       suiteId: suite.id,
-      modelId: loadConfig().config.activeModel,
+      modelId: MODEL_OVERRIDE ?? loadConfig().config.activeModel,
       overallPassAt1: overallPassAtK[1] ?? (pooledFlags.length ? pooledFlags.filter(Boolean).length / pooledFlags.length : 0),
       totalTasksPassed: passCount,
       totalTasks: suite.tasks.length,

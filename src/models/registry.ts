@@ -22,17 +22,47 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
       "Qwen2.5-3B base, MIT license. Strong at verifiable code/math, weak at open-domain knowledge. High variance — use best-of-N. top_k=-1 requires Modelfile (not settable via OpenAI-compat route).",
   },
   {
-    id: "qwen2.5-coder-7b",
-    label: "Qwen/Qwen2.5-Coder-7B-Instruct",
-    contextWindow: 131_072,
+    // NOTE: id MUST equal the Ollama model name (the provider sends it verbatim to
+    // /v1). Qwen2.5-Coder-Instruct is a NON-reasoning model — no <think> traces, so
+    // think-only truncation physically cannot occur. This is the control arm for the
+    // "is VibeThinker's reasoning training the root cause of the truncation spiral?"
+    // experiment. num_ctx + max_tokens matched to vibethinker-3b so the A/B isolates
+    // the MODEL; sampling is Qwen's own recommended coding config (temp 0.7 gives
+    // pass@k trial diversity without the temp=1.0 spiral). Keeps "harness > model
+    // size" honest: same 3B size class as VibeThinker.
+    id: "qwen2.5-coder:3b",
+    label: "Qwen/Qwen2.5-Coder-3B-Instruct",
+    contextWindow: 32_768,
     samplingDefaults: {
       temperature: 0.7,
-      top_p: 0.95,
-      top_k: -1,
+      top_p: 0.8,
+      top_k: 20,
       max_tokens: 4_096,
     },
     supportsGrammar: true,
     supportsJsonSchema: true,
+    // No reasoningTags: non-reasoning instruct model emits the answer directly.
+    ollamaOptions: { num_ctx: 8_192 },
+    notes:
+      "Qwen2.5-Coder-3B-Instruct, Apache-2.0. Control arm vs vibethinker-3b: same size, no <think> reasoning, so no truncation spiral. Recommended sampling temp 0.7 / top_p 0.8 / top_k 20.",
+  },
+  {
+    // id = the Ollama model name so the provider can reach it. Same non-reasoning
+    // family as the 3B, one size up — the larger arm of the 3-way model comparison.
+    // num_ctx + sampling matched to qwen2.5-coder:3b for a fair size A/B.
+    id: "qwen2.5-coder:7b",
+    label: "Qwen/Qwen2.5-Coder-7B-Instruct",
+    contextWindow: 32_768,
+    samplingDefaults: {
+      temperature: 0.7,
+      top_p: 0.8,
+      top_k: 20,
+      max_tokens: 4_096,
+    },
+    supportsGrammar: true,
+    supportsJsonSchema: true,
+    ollamaOptions: { num_ctx: 8_192 },
+    notes: "Qwen2.5-Coder-7B-Instruct, Apache-2.0. Larger arm of the 3-way comparison.",
   },
   {
     id: "qwen2.5-coder-14b",
