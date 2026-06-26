@@ -564,6 +564,16 @@ flowchart TD
         </div>
       </div>
       <p>
+        The <code>realrepo</code> suite evaluates the harness on REAL vendored libraries —
+        <a href="https://github.com/lukeed/klona" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/klona</a>
+        (deep-clone) and
+        <a href="https://github.com/lukeed/dequal" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/dequal</a>
+        (deep-equal), both MIT, zero-dep — with real seeded bugs graded by authored <code>bun:test</code>
+        oracles. Tasks require genuine multi-file retrieval and correct reasoning about library
+        internals, testing real-world coding ability beyond the synthetic textkit fixtures.
+        Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code>.
+      </p>
+      <p>
         Env vars: <code>SMALLCODE_HE_LIMIT</code> (default 20), <code>SMALLCODE_HE_OFFSET</code> (default 0),
         <code>SMALLCODE_HE_K</code> (default 3), <code>SMALLCODE_HE_MAX_TURNS</code> (default 5),
         <code>SMALLCODE_HE_TIMEOUT_MS</code> (default 600000 — 10 min per trial),
@@ -976,7 +986,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-25</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-26</span>
   </div>
 </footer>
 

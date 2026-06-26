@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-dequal-multifile_1",
+  "desc": "In this small multi-file deep-equal library (src/), the deep-equal function wrongly reports arrays of different lengths as equal when the shorter array is a prefix of the longer one — e.g. dequal([1,2],[1,2,3]) returns true instead of false. The bug is somewhere in this small multi-file library; find the right file, locate the broken array-comparison logic, and fix it so tests/dequal.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-dequal-multifile_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/dequal.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "dequal", "multifile", "retrieval"],
+  "reference_solution": "realrepo-dequal-multifile_1-solution/"
+}

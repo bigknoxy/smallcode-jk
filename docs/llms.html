@@ -908,6 +908,11 @@ function add(a: number, b: number): number { return a + b; }
 <span class="comment"># edit-reliability = real multi-file textkit repo (26 tests, files spanning the size</span>
 <span class="comment"># spectrum) measuring edit-localization reliability, distinct from synthetic suites</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability bun scripts/run-baseline.ts</span>
+
+<span class="comment"># realrepo = vendored real libraries (lukeed/klona deep-clone + lukeed/dequal deep-equal,</span>
+<span class="comment"># both MIT, zero-dep) with seeded bugs and authored bun:test oracles — tests real-world</span>
+<span class="comment"># coding (multi-file retrieval, library internals) beyond the synthetic textkit fixtures</span>
+<span class="cmd">SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</span>
       </div>
 
       <h3 class="doc-section__subheading">Debug a single task</h3>
@@ -997,7 +1002,7 @@ PARAMETER num_ctx 8192
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-25</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-26</span>
   </div>
 </footer>
 
