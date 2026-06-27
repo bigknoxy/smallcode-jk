@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-chunkdrop_1",
+  "desc": "Fix the off-by-one slice bug in `chunk` inside src/chunk.ts — the loop condition `i+size<=arr.length` drops the final partial chunk. Edit only that function so tests/chunk.test.ts passes. src/flatten.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-chunkdrop_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/chunk.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "mediumfile", "off-by-one-slice"],
+  "reference_solution": "edit-rel-heldout-chunkdrop_1-solution/"
+}

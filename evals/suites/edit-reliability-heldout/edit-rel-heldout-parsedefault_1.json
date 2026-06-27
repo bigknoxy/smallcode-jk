@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-parsedefault_1",
+  "desc": "Fix the missing NaN guard in `parseIntOr` inside src/parseint.ts — it returns parseInt(s,10) directly so non-numeric input yields NaN instead of fallback. Edit only that function so tests/parseint.test.ts passes. src/clampint.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-parsedefault_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/parseint.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "mediumfile", "missing-nan-guard"],
+  "reference_solution": "edit-rel-heldout-parsedefault_1-solution/"
+}

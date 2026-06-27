@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-productinit_1",
+  "desc": "Fix the wrong reduce accumulator init bug in `product` inside src/product.ts — it uses init 0 so every product is 0 instead of the correct product. Edit only that function so tests/product.test.ts passes. src/mean.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-productinit_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/product.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "mediumfile", "wrong-reduce-init"],
+  "reference_solution": "edit-rel-heldout-productinit_1-solution/"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-clampinvert_1",
+  "desc": "Fix the inverted-bounds bug in `clamp` inside src/clamp.ts: it returns `hi` when n is below lo and `lo` when n is above hi, snapping out-of-range values to the wrong bound. Edit only that function so tests/clamp.test.ts passes. src/lerp.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-clampinvert_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/clamp.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "mediumfile", "inverted-comparison"],
+  "reference_solution": "edit-rel-heldout-clampinvert_1-solution/"
+}
