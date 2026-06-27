@@ -65,6 +65,27 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
     notes: "Qwen2.5-Coder-7B-Instruct, Apache-2.0. Larger arm of the 3-way comparison.",
   },
   {
+    // Strong reflector for the GEPA loop (frontier-reflector -> 3B-target design).
+    // Not an executor arm — used by LLMReflectiveMutator to rewrite the weak
+    // target's system prompt from failed transcripts. Bigger num_ctx (it reads
+    // multiple full failed transcripts) and bigger max_tokens (it re-emits whole
+    // prompt blocks). Slow on a single GPU but invoked only ~once per generation.
+    id: "qwen2.5-coder:32b",
+    label: "Qwen/Qwen2.5-Coder-32B-Instruct",
+    contextWindow: 32_768,
+    samplingDefaults: {
+      temperature: 0.6,
+      top_p: 0.9,
+      top_k: 20,
+      max_tokens: 8_192,
+    },
+    supportsGrammar: true,
+    supportsJsonSchema: true,
+    ollamaOptions: { num_ctx: 16_384 },
+    notes:
+      "Qwen2.5-Coder-32B-Instruct, Apache-2.0. GEPA reflection model — strong build-time prompt optimizer for a weak (3B) runtime target.",
+  },
+  {
     id: "qwen2.5-coder-14b",
     label: "Qwen/Qwen2.5-Coder-14B-Instruct",
     contextWindow: 131_072,
