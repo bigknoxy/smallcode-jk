@@ -954,8 +954,9 @@ function add(a: number, b: number): number { return a + b; }
 <span class="comment"># x file sizes (small/medium/big/deep) — measures edit-localization + format reliability</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability bun scripts/run-baseline.ts</span>
 
-<span class="comment"># edit-reliability-heldout = 2-task validation split (missing-export, empty-boundary),</span>
-<span class="comment"># reserved for measuring generalization (e.g. GEPA candidates) — never used for tuning</span>
+<span class="comment"># edit-reliability-heldout = 8-task validation split across distinct archetypes (missing-export,</span>
+<span class="comment"># empty-boundary, off-by-one slice, inverted-clamp, reduce-init, wrong-key groupBy, missing-NaN-guard,</span>
+<span class="comment"># wrong-direction findLast) — reserved for measuring generalization (GEPA); never used for tuning</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability-heldout bun scripts/run-baseline.ts</span>
 
 <span class="comment"># realrepo = vendored real libraries (lukeed/klona deep-clone + lukeed/dequal deep-equal,</span>
@@ -977,8 +978,8 @@ function add(a: number, b: number): number { return a + b; }
 <span class="comment"># Tune the search budget (defaults: generations=3, trials=5, populationCap=6) + opt into planner rewrites</span>
 <span class="cmd">SMALLCODE_GEPA_REFLECT_MODEL=&lt;strong-model-id&gt; SMALLCODE_GEPA_GENERATIONS=5 SMALLCODE_GEPA_TRIALS=8 SMALLCODE_GEPA_MUTATE_PLANNER=1 bun scripts/gepa-run.ts</span>
 
-<span class="comment"># Validate the evolved prompt on the held-out split (load evals/gepa-best.json as the PromptSet)</span>
-<span class="cmd">SMALLCODE_SUITE=edit-reliability-heldout bun scripts/run-baseline.ts</span>
+<span class="comment"># Validate the evolved prompt on the held-out split — SMALLCODE_PROMPTSET injects gepa-best.json as the PromptSet</span>
+<span class="cmd">SMALLCODE_SUITE=edit-reliability-heldout SMALLCODE_PROMPTSET=evals/gepa-best.json bun scripts/run-baseline.ts</span>
       </div>
 
       <h3 class="doc-section__subheading">Debug a single task</h3>

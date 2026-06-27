@@ -1,6 +1,6 @@
 {
   "id": "edit-reliability-heldout-v1",
   "kind": "mixed",
-  "description": "Held-out validation split for edit-reliability — small/medium single-bug repos in qwen's strong range (missing-export, empty-boundary archetypes). NEVER used for prompt/harness optimization; reserved for measuring generalization (e.g. GEPA candidates).",
+  "description": "Held-out validation split for edit-reliability — 8 small/medium single-bug textkit repos across distinct archetypes NOT in the train suite (missing-export, empty-boundary, off-by-one slice, inverted-clamp, reduce-init, wrong-key groupBy, missing-NaN-guard, wrong-direction findLast). Each target file has multiple functions so the model must localize. NEVER used for prompt/harness optimization; reserved for measuring generalization (e.g. GEPA candidates).",
   "defaultTrials": 5
 }

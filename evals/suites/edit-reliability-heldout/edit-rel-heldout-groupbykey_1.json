@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-groupbykey_1",
+  "desc": "Fix the wrong-key-field bug in `groupBy` inside src/groupby.ts: it calls `String(item)` instead of `key(item)`, so all items land under one stringified-object key. Edit only that function so tests/groupby.test.ts passes. src/uniqueby.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-groupbykey_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/groupby.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "mediumfile", "wrong-key-field"],
+  "reference_solution": "edit-rel-heldout-groupbykey_1-solution/"
+}

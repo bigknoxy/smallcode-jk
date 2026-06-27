@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-findlast_1",
+  "desc": "Fix `findLast` in src/findLast.ts — it iterates forward and returns the first match instead of iterating from the end and returning the last match. Edit only that function so tests/findLast.test.ts passes. src/findFirst.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-findlast_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/findLast.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "mediumfile", "wrong-iteration-direction"],
+  "reference_solution": "edit-rel-heldout-findlast_1-solution/"
+}
