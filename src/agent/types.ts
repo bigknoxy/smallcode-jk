@@ -59,6 +59,15 @@ export interface TurnRecord {
   answerNow?: boolean;
   /** Structured diagnostic for this turn's failure, if any. */
   diagnostic?: FailureDiagnostic;
+  /**
+   * Set when this turn's applied edit was ROLLED BACK because it regressed
+   * previously-green tests. `newFailures` lists the tests that flipped red. The
+   * edited files have been restored to their pre-turn content, so the next
+   * prompt surfaces a warning and tells the model to re-edit only the target.
+   * Only present on a true regression (verdict.newFailures non-empty) — a still-
+   * red suite with no new failures is NOT a revert.
+   */
+  reverted?: { newFailures: string[] };
 }
 
 export interface AgentState {

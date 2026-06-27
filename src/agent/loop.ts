@@ -136,6 +136,24 @@ function buildWriteFile(repoRoot: string): (p: string, content: string) => Promi
   };
 }
 
+/**
+ * Restore each captured original file content via `writeFileFn`. Used to roll an
+ * applied edit back to its pre-turn state when the edit regressed previously-green
+ * tests, so the next turn doesn't iterate on a corrupted baseline. Pure-ish (no
+ * loop state, no oracle) so it can be unit-tested against a fake write function.
+ * `originals` maps the SAME path string that was passed to the read/write path
+ * (relative to repoRoot) to its captured content. Only files that existed before
+ * the edit are captured, so every entry is a plain content restore.
+ */
+export async function revertFiles(
+  originals: Map<string, string>,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+): Promise<void> {
+  for (const [filePath, content] of originals) {
+    await writeFileFn(filePath, content);
+  }
+}
+
 export async function runLoop(
   state: AgentState,
   statePath: string,
@@ -404,6 +422,41 @@ export async function runLoop(
       // Verification failure is non-fatal — continue the loop.
     }
 
+    // Revert-on-REGRESSION: if an applied edit regressed the suite (flipped
+    // previously-green tests red, OR crashed a module so more tests are red than
+    // baseline with no parseable `(fail)` line), roll the edited files back to
+    // their pre-turn content so the next turn doesn't build on a corrupted
+    // baseline. Gate on `verdict.regressed` — NOT `newFailures.length` — so a
+    // crash-regression (empty parseable failures) is reverted too.
+    // CRITICAL: revert ONLY on a TRUE regression. A still-red suite with NO
+    // regression (outcome "failing", regressed falsy — the model just hasn't
+    // fixed the target yet) is NOT reverted: that would discard legitimate
+    // progress. "solved" (fully green) is never a regression, so never reverts.
+    //
+    // Build the revert set from the APPLY RESULTS, not a pre-apply capture by
+    // emitted block path: applyBatch's path-typo rescue can write to a different
+    // effective path than the block named, and it reports the pre-batch original
+    // per effective path. Reverting by effectivePath restores the file actually
+    // corrupted; reverting by the emitted (typo) path would miss it.
+    const revertOriginals = new Map<string, string>();
+    for (const r of applyResults) {
+      if (r.status !== "applied") continue;
+      if (r.originalContent === undefined) continue; // brand-new file → leave in place
+      const key = r.effectivePath ?? r.filePath;
+      if (!revertOriginals.has(key)) revertOriginals.set(key, r.originalContent);
+    }
+    let revertedNewFailures: string[] | undefined;
+    let reverted = false;
+    if (verdict?.regressed === true && revertOriginals.size > 0) {
+      try {
+        await revertFiles(revertOriginals, writeFileFn);
+        revertedNewFailures = [...(verdict.newFailures ?? [])];
+        reverted = true;
+      } catch {
+        // Restore failure is non-fatal: leave the edit in place and continue.
+      }
+    }
+
     // Stall detection: compute failure signature and check if we're stuck.
     //
     // Fix 3b: Gate stall on verdict.outcome === "failing" ALONE — do NOT require
@@ -413,6 +466,15 @@ export async function runLoop(
     // previously returned null) also participate in stall detection.
     let turnFailureSig: string | undefined;
     let turnRedrafted = false;
+
+    // Snapshot the prior failure signature BEFORE the stall block overwrites it.
+    // Fix 3: on a reverted turn the disk is back to its PRE-turn state, so the
+    // post-edit verdict signature does not describe the effective state. Using
+    // the prior signature instead means consecutive regress→revert cycles are
+    // seen as the SAME repeated failure, so the stall counter ADVANCES and the
+    // existing redraft/answer-now brake eventually fires (instead of oscillating
+    // to maxTurns).
+    const priorFailureSig = state.lastFailureSignature;
 
     if (verdict?.outcome === "failing") {
       // Compute a stable signature: prefer the structured diagnostic; fall back
@@ -430,6 +492,16 @@ export async function runLoop(
           .trim()
           .slice(0, 200);
         turnFailureSig = `feedback:${fbStable}`;
+      }
+
+      // Fix 3: when this turn was REVERTED, fold its signature back onto the
+      // prior one (when there was a prior failing turn) so a repeated regress→
+      // revert loop registers as a stall. If there was no prior signature, keep
+      // this turn's computed signature — it is itself stable for an identical
+      // regression, so the NEXT reverted turn still matches and the counter
+      // advances. Either way the normal (non-revert) path is untouched.
+      if (reverted && priorFailureSig !== undefined) {
+        turnFailureSig = priorFailureSig;
       }
 
       if (turnFailureSig === state.lastFailureSignature) {
@@ -474,6 +546,7 @@ export async function runLoop(
       ...(turnRedrafted && { redrafted: true }),
       ...(turnAnswerNow && { answerNow: true }),
       ...(verdict?.diagnostic && { diagnostic: verdict.diagnostic }),
+      ...(revertedNewFailures && { reverted: { newFailures: revertedNewFailures } }),
     };
 
     addTurn(state, turn);

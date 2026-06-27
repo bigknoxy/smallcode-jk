@@ -26,8 +26,21 @@ export interface ApplyResult {
   status: ApplyStatus;
   diff?: string; // unified diff string, populated on success
   error?: string;
+  /**
+   * The file's content BEFORE this batch FIRST modified it. For a single block
+   * this is the on-disk content prior to the edit; for multiple blocks targeting
+   * the same file it is the content before the FIRST edit to that file (NOT the
+   * intermediate in-memory state), so reverting it fully undoes the whole batch.
+   * Undefined for a brand-new file (no prior content) — revert skips those.
+   */
   originalContent?: string;
   newContent?: string;
+  /**
+   * The path actually written, AFTER any path-typo rescue (dots→slashes). May
+   * differ from `filePath` when the model flattened the separators. Revert must
+   * restore `originalContent` to THIS path, not the emitted (typo) path.
+   */
+  effectivePath?: string;
   /**
    * Set when a search/replace block only matched after fuzzy repair (the model's
    * search text drifted from the source — whitespace/indent/near-miss). Records

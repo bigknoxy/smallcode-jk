@@ -429,7 +429,11 @@ flowchart TD
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
     EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
-    ORACLE --> ADDTURN[addTurn + saveState\nstore turn.failureSignature + diagnostic]
+    ORACLE --> REGRESSED{verdict.regressed?\nnewFailures present OR\ntotal red > baseline red}
+    REGRESSED -- yes --> REVERT[revertFiles\nrestore pre-turn content\nvia ApplyResult.effectivePath\n+ originalContent\nfold stall signature onto prior turn]
+    REVERT --> WARNMODEL[feed revert notice to next turn\nYour edit was REVERTED — broke\ntests that were passing before]
+    WARNMODEL --> GOAL
+    REGRESSED -- no, keep progress --> ADDTURN[addTurn + saveState\nstore turn.failureSignature + diagnostic]
 
     ADDTURN --> GREEN{suite FULLY green?\ncurrentRed=0 ∧ passCount≥1}
     GREEN -- yes --> ALLDONE[mark all goals done\nstatus = done, verified = true]
@@ -452,6 +456,9 @@ flowchart TD
     style ANSWERNOW fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
     style THINKONLY fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
     style STALL fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
+    style REGRESSED fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
+    style REVERT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
+    style WARNMODEL fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
         </div>
       </div>
     </section>
@@ -490,6 +497,18 @@ flowchart TD
         diffs only add fragility. Confirmed <strong>+0.17 OVERALL</strong> on the edit-reliability suite.
         The SEARCH text must be copied byte-for-byte from the shown context; the existing fuzzy-repair
         applier accepts SEARCH/REPLACE and fails safe (no write) on a missing/ambiguous anchor.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Format-consistent not-applied feedback</strong>:
+        when a SEARCH/REPLACE edit (DIFF_EDIT mode, gated by <code>functionLineCount ≥ SMALLCODE_DIFF_MIN_FN</code>)
+        fails to apply, the retry feedback instructs the model to re-emit a SEARCH/REPLACE block with
+        the SEARCH text copied <em>byte-for-byte</em> from the shown current file — not "re-emit the
+        complete file", which contradicts the SR directive and causes truncation on large functions.
+        Whole-file and small-function PATCH targets keep their existing not-applied feedback.
+        <code>applyBatch</code> returns each applied result's <code>effectivePath</code> (the path
+        actually written, after path-typo rescue) and <code>originalContent</code> (pre-batch on-disk
+        content); these are also used by the revert-on-regression path to restore the correct file
+        even when the model typo'd the path.
       </p>
       <div class="diagram-wrap">
         <div class="mermaid">
