@@ -281,6 +281,7 @@
   <a href="#agent-loop">Agent loop</a>
   <a href="#edit-pipeline">Edit pipeline</a>
   <a href="#eval-harness">Eval harness</a>
+  <a href="#gepa">GEPA evolution</a>
   <a href="#benchmark">Benchmark results</a>
   <a href="#design-decisions">Design decisions</a>
   <a href="#modules">Modules</a>
@@ -634,6 +635,65 @@ flowchart TD
         live snapshot in <code>evals/metrics-history.jsonl</code> records <code>n</code>, per-k rates,
         CIs, think-only-truncation totals, and the sampling overrides in effect, so history rows are
         self-describing.
+      </p>
+    </section>
+
+    <!-- ===== GEPA EVOLUTION LOOP ===== -->
+    <section id="gepa" class="doc-section">
+      <h2 class="doc-section__heading">GEPA reflective prompt evolution</h2>
+      <p>
+        GEPA evolves the executor's <code>system</code> prompt instead of the model weights. A
+        <strong>STRONG reflection model</strong> reads transcripts from tasks the small executor
+        FAILED, diagnoses the single dominant generalizable failure pattern, and rewrites the
+        system prompt to fix it — preserving the FILE:/PATCH: edit format and the
+        TOOL: run_tests/finish protocol. Each candidate is scored on the full train suite
+        (<code>edit-reliability</code>) and kept on a Pareto front; the best <code>PromptSet</code>
+        is written to <code>evals/gepa-best.json</code> for held-out validation against
+        <code>edit-reliability-heldout</code>.
+      </p>
+      <div class="diagram-wrap">
+        <div class="mermaid">
+flowchart TD
+    SEED["seed Candidate gen=0\nprompts = defaultPromptSet()"]
+    SELECT["ParetoFront.select\nGEPA-weighted parent pick"]
+    FAILED["gather FailedInstance[]\nre-run parent on tasks with score<1\ncollect transcripts"]
+    DIGEST["buildReflectionPrompt (pure)\nparent system verbatim +\ncapped digest per failure:\ntaskId, outcome, tool-call flag,\nfinal rawResponse (~1500 chars, ≤4 shown)"]
+    REFLECT["LLMReflectiveMutator.mutate\ncomplete(prompt) → STRONG model\nparse &lt;NEW_SYSTEM&gt;…&lt;/NEW_SYSTEM&gt;"]
+    GUARD{"throw / missing block /\nsystem < 200 chars?"}
+    NOOP["return parent UNCHANGED\n(no-op mutation, stderr warn)"]
+    CHILD["child Candidate\n{ ...parent, system: newSystem }\n(+ planner if mutatePlanner)"]
+    SCORE["evaluateCandidate\nrunTask × trialsPerTask per task\n→ scores{taskId: passAt1}"]
+    ADD["ParetoFront.add\nevict dominated, cap population"]
+    DONE["after maxGenerations:\nprint front + best\nwrite evals/gepa-best.json"]
+
+    SEED --> SELECT --> FAILED --> DIGEST --> REFLECT --> GUARD
+    GUARD -- yes --> NOOP --> SCORE
+    GUARD -- no --> CHILD --> SCORE
+    SCORE --> ADD
+    ADD -- next generation --> SELECT
+    ADD --> DONE
+
+    style REFLECT fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    style GUARD fill:#451a03,stroke:#d97706,color:#fcd34d
+    style NOOP fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
+    style SCORE fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    style DONE fill:#1e2130,stroke:#4f5b8a,color:#a5b4fc
+        </div>
+      </div>
+      <p>
+        The reflection model call is <strong>injected</strong> as
+        <code>complete(prompt) =&gt; Promise&lt;string&gt;</code>, so unit tests run with no GPU,
+        no LLM, and no network. <code>makeProviderComplete()</code> / <code>reflectConfigFromEnv()</code>
+        build that <code>complete</code> fn from the existing <code>createProvider</code> + model
+        registry — no hand-rolled HTTP. Reflector model + endpoint are env-configured
+        (<code>SMALLCODE_GEPA_REFLECT_MODEL</code>, optional <code>_BASE_URL</code>/<code>_API_KEY</code>/<code>_MAX_TOKENS</code>),
+        falling back to the loaded provider config. The runner
+        (<code>scripts/gepa-run.ts</code>) exposes a <code>SMALLCODE_GEPA_DRY_RUN=1</code> mode
+        (MockMutator + stubbed runTask) for CI smoke, and a search budget via
+        <code>SMALLCODE_GEPA_GENERATIONS</code> (3) / <code>_TRIALS</code> (5) / <code>_POP_CAP</code> (6).
+        <strong>Robustness contract:</strong> any malformed or failed reflection returns the parent
+        PromptSet unchanged rather than corrupting the candidate — a bad reflection costs a wasted
+        scoring pass, never a regression.
       </p>
     </section>
 
