@@ -359,4 +359,5 @@ MIT
 - `SMALLCODE_GEPA_POP_CAP`: maximum Pareto-front size kept across generations (default `6`).
 - `SMALLCODE_GEPA_MUTATE_PLANNER`: when `=1`, the reflective mutator also rewrites the planner prompt (default off — conservative; only the executor `system` prompt is mutated).
 - `SMALLCODE_GEPA_REFLECT_MODEL`: **required for a live run** — model id of the STRONG reflection model that diagnoses failures and rewrites prompts (must resolve in the model registry). Optional overrides: `SMALLCODE_GEPA_REFLECT_BASE_URL`, `SMALLCODE_GEPA_REFLECT_API_KEY`, `SMALLCODE_GEPA_REFLECT_MAX_TOKENS` (fall back to the provider config).
+- `SMALLCODE_PROMPTSET`: path to a JSON file (`{ prompts: { system, planner, reflection, skill? } }`) produced by a GEPA run (e.g. `evals/gepa-best.json`); when set, `run-baseline.ts` injects those prompts as the agent's `promptSet`, overriding the defaults — use for held-out A/B validation of a GEPA-evolved prompt.
 <!-- agent-skills:doc-keeper:end -->

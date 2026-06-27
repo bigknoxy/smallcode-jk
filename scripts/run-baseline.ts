@@ -80,6 +80,10 @@ const TEMP_OVERRIDE = process.env.SMALLCODE_TEMP
 // registered profile whose id equals the Ollama model name. Unset = config default.
 // e.g. SMALLCODE_MODEL=qwen2.5-coder:3b.
 const MODEL_OVERRIDE = process.env.SMALLCODE_MODEL || undefined;
+// Inject an evolved PromptSet (e.g. evals/gepa-best.json from a GEPA run) so the
+// held-out suite can be scored with the optimized prompt vs the default. The file
+// must contain a `prompts` object with {system, planner, reflection, skill?}.
+const PROMPTSET_PATH = process.env.SMALLCODE_PROMPTSET || undefined;
 // Measuring-stick controls. SMALLCODE_EVAL_N is the SAMPLE COUNT n (trials per
 // task) — decoupled from the reported k. SMALLCODE_REPORT_KS is the comma list
 // of k values to report pass@k for. Larger n → tighter confidence intervals
@@ -270,6 +274,17 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
   const { config, extraModels } = loadConfig();
   for (const m of extraModels) defaultRegistry.register(m);
 
+  // Optional evolved PromptSet (GEPA held-out validation). Loaded once per trial
+  // call — cheap relative to a model turn; keeps the override fully env-driven.
+  let promptSetOverride: import("../src/agent/prompt-set.ts").PromptSet | undefined;
+  if (PROMPTSET_PATH) {
+    const parsed = (await Bun.file(PROMPTSET_PATH).json()) as { prompts?: unknown };
+    if (!parsed.prompts || typeof parsed.prompts !== "object") {
+      throw new Error(`SMALLCODE_PROMPTSET ${PROMPTSET_PATH} has no "prompts" object`);
+    }
+    promptSetOverride = parsed.prompts as import("../src/agent/prompt-set.ts").PromptSet;
+  }
+
   const activeModel = MODEL_OVERRIDE ?? config.activeModel;
   const baseProfile = defaultRegistry.get(activeModel);
   // Apply sampling overrides (cause-attack A/B: max_tokens and/or temperature) by
@@ -299,6 +314,7 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     requireApproval: false,
     disciplineRules: DISCIPLINE,
     preSolveReflection: PRESOLVE,
+    ...(promptSetOverride ? { promptSet: promptSetOverride } : {}),
   };
 
   const loopDeps = {

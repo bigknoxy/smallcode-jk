@@ -706,10 +706,15 @@ flowchart TD
         build that <code>complete</code> fn from the existing <code>createProvider</code> + model
         registry — no hand-rolled HTTP. Reflector model + endpoint are env-configured
         (<code>SMALLCODE_GEPA_REFLECT_MODEL</code>, optional <code>_BASE_URL</code>/<code>_API_KEY</code>/<code>_MAX_TOKENS</code>),
-        falling back to the loaded provider config. The runner
+        falling back to the loaded provider config. The registered reflector profile is
+        <code>qwen2.5-coder:32b</code> (contextWindow 32768, num_ctx 16384, max_tokens 8192,
+        temp 0.6, Apache-2.0) — a strong build-time optimizer, not an executor arm. The runner
         (<code>scripts/gepa-run.ts</code>) exposes a <code>SMALLCODE_GEPA_DRY_RUN=1</code> mode
         (MockMutator + stubbed runTask) for CI smoke, and a search budget via
         <code>SMALLCODE_GEPA_GENERATIONS</code> (3) / <code>_TRIALS</code> (5) / <code>_POP_CAP</code> (6).
+        The best <code>PromptSet</code> is written to <code>evals/gepa-best.json</code>; pass it to
+        <code>run-baseline.ts</code> via <code>SMALLCODE_PROMPTSET=evals/gepa-best.json</code> for
+        held-out A/B validation on the heldout split.
         <strong>Robustness contract:</strong> any malformed or failed reflection returns the parent
         PromptSet unchanged rather than corrupting the candidate — a bad reflection costs a wasted
         scoring pass, never a regression.
@@ -1075,6 +1080,17 @@ flowchart TD
               <td><span class="badge badge-green">Yes</span></td>
               <td>Highest quality built-in. Grammar-constrained output supported.</td>
             </tr>
+            <tr>
+              <td><code>qwen2.5-coder:32b</code></td>
+              <td>Qwen/Qwen2.5-Coder-32B-Instruct</td>
+              <td>32,768</td>
+              <td>0.6</td>
+              <td>—</td>
+              <td>8,192</td>
+              <td>—</td>
+              <td><span class="badge badge-green">Yes</span></td>
+              <td><span class="badge badge-amber">Reflector only</span> GEPA reflection model — strong build-time prompt optimizer used by <code>LLMReflectiveMutator</code> to diagnose failures and rewrite the system prompt. Apache-2.0. num_ctx 16384. NOT an executor arm; select via <code>SMALLCODE_GEPA_REFLECT_MODEL=qwen2.5-coder:32b</code>.</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1149,7 +1165,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-26</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-27</span>
   </div>
 </footer>
 
