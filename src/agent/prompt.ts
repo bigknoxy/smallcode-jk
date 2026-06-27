@@ -174,6 +174,15 @@ export function buildTurnPrompt(
       for (const turn of recentTurns) {
         parts.push(`### Turn ${turn.turn} — Goal: ${turn.goalId}`);
 
+        // Revert warning: this turn's edit applied but broke previously-passing
+        // tests, so the loop rolled the file(s) back to their pre-turn state. Lead
+        // with it so the model knows its change is GONE and must not build on it.
+        if (turn.reverted && turn.reverted.newFailures.length > 0) {
+          parts.push(
+            `⚠ Your edit was REVERTED — it broke tests that were passing before: ${turn.reverted.newFailures.join(", ")}. The file is back to its original state. Re-edit and change ONLY the target function/line; do NOT modify other functions or unrelated code.`,
+          );
+        }
+
         if (turn.applyResults.length > 0) {
           parts.push("**Edit results:**");
           for (const result of turn.applyResults) {
@@ -190,11 +199,35 @@ export function buildTurnPrompt(
               // would itself force the failure loop. Keep the model on the PATCH
               // block for the single target function instead.
               const tgt = context.targetFile;
+              // SR-mode recovery: when the failed file was given the SEARCH/REPLACE
+              // (minimal-diff) directive — same gate buildTurnPrompt's "## Edit
+              // Target" uses (patch format + functionName + DIFF_EDIT + large fn) —
+              // the not-applied feedback must keep the model on SR. Falling through
+              // to "re-emit the complete file" would CONTRADICT the directive it was
+              // given for a large file → whole-file emission → truncation → fail
+              // loop. Detect SR-mode BEFORE the generic PATCH/whole-file branches.
+              const srRetry =
+                tgt?.path === result.filePath &&
+                tgt.format === "patch" &&
+                tgt.functionName !== undefined &&
+                DIFF_EDIT &&
+                (tgt.functionLineCount ?? 0) >= DIFF_MIN_FN_LINES;
               const patchRetry =
+                !srRetry &&
                 tgt?.format === "patch" &&
                 tgt.functionName !== undefined &&
                 tgt.path === result.filePath;
-              if (patchRetry) {
+              if (srRetry) {
+                parts.push(
+                  `  Re-emit a SEARCH/REPLACE block for \`${tgt!.functionName}\`. Copy the SEARCH text BYTE-FOR-BYTE (exact indentation, every character) from the file shown below — the previous SEARCH did not match. Change only the buggy line(s) in REPLACE.`,
+                );
+                if (matchingChunk) {
+                  parts.push(`  The file currently contains:`);
+                  parts.push("  ```");
+                  parts.push(matchingChunk.content);
+                  parts.push("  ```");
+                }
+              } else if (patchRetry) {
                 parts.push(
                   `  Re-emit a PATCH block for ONLY the \`${tgt!.functionName}\` function — do NOT emit the whole file (it will be truncated and rejected). Change the minimal lines to fix the bug; copy every other line of the function unchanged.`,
                 );

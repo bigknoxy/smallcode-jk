@@ -36,6 +36,14 @@ export interface OracleVerdict {
   feedback: string;
   /** Failing test IDs introduced since the baseline (baseline fix). */
   newFailures?: string[];
+  /**
+   * True when this turn's edit REGRESSED the suite relative to baseline — either
+   * parseable new `(fail)` lines (`newFailures` non-empty) OR a count regression
+   * (more red than baseline) with NO parseable lines, e.g. a crash/module-load
+   * error that prints only in bun's summary counts. The loop reverts on this flag
+   * (not on `newFailures.length` alone), so a crash-regression is rolled back too.
+   */
+  regressed?: boolean;
   /** Failing test IDs that were already failing at baseline capture time. */
   baselineFailures?: string[];
   /** Structured diagnostic for the first failing assertion (set on failing paths). */
@@ -199,6 +207,18 @@ export async function runTieredOracle(
       };
     }
 
+    // A regression is EITHER parseable new failures OR a count regression with no
+    // parseable `(fail)` lines (a crash/module-load error shows only in bun's
+    // summary counts). Surface a synthetic newFailures entry in the latter case so
+    // the model-facing list — and the loop's ⚠ revert warning — is informative.
+    const reportedFailures = [...newFailures];
+    if (countRegression && newFailures.length === 0) {
+      reportedFailures.push(
+        `<unparseable failure: ${currentRed - baselineRed} more test(s) red than baseline>`,
+      );
+    }
+    const regressed = newFailures.length > 0 || countRegression;
+
     // Build focused feedback: lead with new failures, then pre-existing reds.
     const stalledOnBaseline = newFailures.length === 0 && !countRegression;
     const feedbackBody =
@@ -214,8 +234,9 @@ export async function runTieredOracle(
       outcome: "failing",
       checks: [test.result],
       feedback: `Tests failing:\n${feedbackBody}`,
-      newFailures,
+      newFailures: reportedFailures,
       baselineFailures: [...baselineFailing],
+      regressed,
       diagnostic: extractFirstFailure(test.result.output) ?? undefined,
     };
   }

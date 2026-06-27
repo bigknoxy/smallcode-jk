@@ -369,6 +369,12 @@ export async function applyBatch(
 ): Promise<ApplyBatchResult> {
   const inMemory = new Map<string, string>();
   const results: ApplyResult[] = [];
+  // Pre-batch on-disk content per EFFECTIVE path, stashed the first time the
+  // batch touches that file. This is the content a revert must restore to (so a
+  // multi-block edit to one file undoes back to before the FIRST block, not the
+  // intermediate state). Absent entry ⇒ the file did not exist before the batch
+  // (brand-new file) ⇒ originalContent stays undefined ⇒ revert skips it.
+  const preBatchOriginal = new Map<string, string | null>();
 
   for (const block of blocks) {
     // Resolve the effective target path. If the emitted path is missing on disk
@@ -392,10 +398,21 @@ export async function applyBatch(
     } else {
       const disk = await readFile(path);
       content = disk ?? "";
+      // First touch of this effective path in the batch — stash its pre-edit
+      // on-disk content (null = file did not exist) for the revert path.
+      if (!preBatchOriginal.has(path)) preBatchOriginal.set(path, disk);
     }
 
     const effectiveBlock = path === block.filePath ? block : { ...block, filePath: path };
     const result = applyBlock(effectiveBlock, content);
+    // Annotate every result with the effective (actually-targeted) path and the
+    // pre-batch original. applyBlock set `originalContent` to the in-memory
+    // `content`; for the 2nd+ block on a file that is the intermediate state, so
+    // override it with the stashed pre-batch original (or undefined for a new
+    // file) so a revert fully undoes the batch.
+    result.effectivePath = path;
+    const stashed = preBatchOriginal.get(path);
+    result.originalContent = stashed ?? undefined;
     results.push(result);
 
     if (result.status === "applied" && result.newContent !== undefined) {
