@@ -425,7 +425,7 @@ flowchart TD
     THINKONLY -- yes --> ANSWERNOW[record failed turn\nset answerNowNext=true\nNEXT turn: ANSWER NOW prompt\nno think, act immediately]
     ANSWERNOW --> GOAL
     THINKONLY -- no --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
-    PARSEEDITS --> APPLY[applyBatch\npath-typo rescue dots→slashes\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
+    PARSEEDITS --> APPLY[applyBatch\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
     EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
@@ -508,7 +508,10 @@ flowchart TD
         <code>applyBatch</code> returns each applied result's <code>effectivePath</code> (the path
         actually written, after path-typo rescue) and <code>originalContent</code> (pre-batch on-disk
         content); these are also used by the revert-on-regression path to restore the correct file
-        even when the model typo'd the path.
+        even when the model typo'd the path. <strong>Anti-fake-green</strong>: <code>applyBatch</code>
+        rejects any edit whose path is a test/spec file (<code>isTestFilePath</code>) with no write and
+        a feedback error — the tests are the oracle, so a model editing them to pass can never forge a
+        "solved" verdict.
       </p>
       <div class="diagram-wrap">
         <div class="mermaid">
@@ -957,7 +960,7 @@ flowchart TD
             <tr>
               <td class="td-name">Models</td>
               <td><code>src/models/</code></td>
-              <td>Built-in profiles (VibeThinker-3B, Qwen2.5-Coder 7B/14B) and a runtime registry for custom profiles.</td>
+              <td>Built-in profiles (VibeThinker-3B, Qwen2.5-Coder 3B/7B/14B executors + 32B GEPA reflector) and a runtime registry for custom profiles.</td>
               <td><code>ModelProfile</code>, <code>ModelRegistry</code>, <code>defaultRegistry</code></td>
             </tr>
             <tr>

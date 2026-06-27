@@ -326,7 +326,7 @@
           </thead>
           <tbody>
             <tr><td><code>parser.ts</code></td><td>Parse model output into <code>EditBlock[]</code>. Tries <code>PATCH:</code> (function-level) first, then full-file, then search-replace, then JSON. Public: <code>parse(raw)</code>.</td></tr>
-            <tr><td><code>applier.ts</code></td><td>Apply <code>EditBlock</code> to disk. Full-file (search='') overwrites the whole file — guarded by <code>truncationReason(original, replace)</code> which rejects likely-truncated re-emits (unbalanced brackets vs a balanced original, &gt;50% line loss, blanking a non-empty file) so a dropped tail never silently corrupts a file. Search-replace tries exact match, then <code>repairBlock</code> fuzzy repair on a miss (records <code>ApplyResult.repair</code>). <code>flattenedPathCandidate(path)</code> + <code>applyBatch</code> redirect a dots-flattened path (<code>src.stats.ts</code> → <code>src/stats.ts</code>) onto the real existing file instead of creating a stray one. <code>patch-function</code> blocks dispatch via a sentinel prefix. Each <code>ApplyResult</code> carries <code>effectivePath</code> (the path actually written, after path-typo rescue) and <code>originalContent</code> (pre-batch on-disk content) — both consumed by <code>loop.ts</code>'s revert-on-regression path to restore the correct file even when the model typo'd the path. Public: <code>applyBatch</code>, <code>truncationReason</code>, <code>flattenedPathCandidate</code>.</td></tr>
+            <tr><td><code>applier.ts</code></td><td>Apply <code>EditBlock</code> to disk. Full-file (search='') overwrites the whole file — guarded by <code>truncationReason(original, replace)</code> which rejects likely-truncated re-emits (unbalanced brackets vs a balanced original, &gt;50% line loss, blanking a non-empty file) so a dropped tail never silently corrupts a file. Search-replace tries exact match, then <code>repairBlock</code> fuzzy repair on a miss (records <code>ApplyResult.repair</code>). <code>flattenedPathCandidate(path)</code> + <code>applyBatch</code> redirect a dots-flattened path (<code>src.stats.ts</code> → <code>src/stats.ts</code>) onto the real existing file instead of creating a stray one. <code>patch-function</code> blocks dispatch via a sentinel prefix. Each <code>ApplyResult</code> carries <code>effectivePath</code> (the path actually written, after path-typo rescue) and <code>originalContent</code> (pre-batch on-disk content) — both consumed by <code>loop.ts</code>'s revert-on-regression path to restore the correct file even when the model typo'd the path. <strong>Anti-fake-green</strong>: <code>applyBatch</code> rejects any edit whose path is a test/spec file (<code>isTestFilePath</code> — matches <code>.test.</code>/<code>.spec.</code>/<code>tests/</code>/<code>__tests__/</code>, checked on both the emitted and the flatten-rescued path) with <code>status: "error"</code> + feedback and NO write — the tests are the oracle, so a model editing them to pass can never produce a false "solved". Public: <code>applyBatch</code>, <code>isTestFilePath</code>, <code>truncationReason</code>, <code>flattenedPathCandidate</code>.</td></tr>
             <tr><td><code>patch-function.ts</code></td><td>Function-level edits for large files: <code>parsePatchBlocks</code>, <code>applyPatchBlock</code> (anchors on the function's DEFINITION located by NAME via <code>findDefinitionLines</code> — robust to a small model emitting a drifted signature; the synthetic name <code>"default"</code> anchors on the <code>export default function</code> line; falls back to first-replacement-line match only when name lookup finds nothing; brace-depth scan finds the region end), <code>preserveExport</code> (re-adds a leading <code>export</code>/<code>export default</code> the model dropped — a common slip that un-exports the function and breaks importers), <code>chooseEditFormat</code> (<code>PATCH_LINE_THRESHOLD = 80</code> lines or &gt;8KB → <code>patch</code> eligible; threshold lowered from 300). The harness — not the model — decides the format deterministically from the pinned target file's size and emits it as the <code>## Edit Target</code> directive. Fail-safe: ambiguous/not-found anchor → error <code>ApplyResult</code>, no write.</td></tr>
             <tr><td><code>repair.ts</code></td><td>Fuzzy repair for failed search-replace blocks — strategies: exact → whitespace-normalize → per-line-trim → char-similarity fuzzy (≥0.85). <code>repairBlock(block, content)</code> returns the verbatim recovered search text + strategy/confidence. Wired into <code>applier.ts</code> (no longer dead code): a search/replace that misses exact match retries against the repaired text.</td></tr>
             <tr><td><code>types.ts</code></td><td><code>EditBlock</code>, <code>EditFormat</code> (incl. <code>patch-function</code>), <code>ParseResult</code>, <code>ParseError</code>, <code>ApplyResult</code>, <code>ApplyStatus</code>, <code>ApplyBatchResult</code>, <code>RepairResult</code>.</td></tr>
@@ -810,7 +810,7 @@ function add(a: number, b: number): number { return a + b; }
             <tr>
               <td><code>SMALLCODE_EVAL_MAX_TURNS</code></td>
               <td>5</td>
-              <td><code>run-baseline.ts</code>, <code>debug-task.ts</code></td>
+              <td><code>run-baseline.ts</code>, <code>debug-task.ts</code>, <code>gepa-run.ts</code></td>
               <td>Max agent turns per eval trial (override for capability suite)</td>
             </tr>
             <tr>
@@ -914,6 +914,30 @@ function add(a: number, b: number): number { return a + b; }
               <td>—</td>
               <td><code>run-baseline.ts</code></td>
               <td>Path to a JSON file (<code>{ prompts: { system, planner, reflection, skill? } }</code>) produced by a GEPA run (e.g. <code>evals/gepa-best.json</code>); injects those prompts as the agent's <code>promptSet</code>, overriding the defaults — use for held-out A/B validation of a GEPA-evolved prompt against the default</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_DIFF_EDIT</code></td>
+              <td>on</td>
+              <td><code>prompt.ts</code></td>
+              <td>Minimal SEARCH/REPLACE diff for large target functions (confirmed +0.17 on edit-reliability). Set <code>0</code> to revert to whole-function PATCH</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_DIFF_MIN_FN</code></td>
+              <td>30</td>
+              <td><code>prompt.ts</code></td>
+              <td>Minimum target-function line count to use DIFF_EDIT mode; below this, whole-function PATCH is used</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_HE_CACHE</code></td>
+              <td><code>/tmp/mpe-he-ts.json</code></td>
+              <td><code>run-humaneval.ts</code>, <code>cache-humaneval.ts</code></td>
+              <td>Local disk path for the cached nuprl/MultiPL-E humaneval-ts dataset; set to run fully offline</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_SMOKE_OFFSET</code> / <code>_N</code> / <code>_MAX_TURNS</code></td>
+              <td>see script</td>
+              <td><code>smoke-bestofn.ts</code></td>
+              <td>Best-of-N smoke controls: task offset into the suite, number of tasks, max turns per trial</td>
             </tr>
           </tbody>
         </table>
