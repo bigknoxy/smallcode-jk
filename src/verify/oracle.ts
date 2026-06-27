@@ -58,9 +58,10 @@ export function parseFailingTestIds(output: string): Set<string> {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI strip
   const cleaned = output.replace(/\x1b\[[0-9;]*m/g, "");
   const ids = new Set<string>();
-  // Match: (fail) <label> [<digits>ms]  (with optional leading whitespace)
+  // Match: (fail) <label> [optional [<digits>ms]]  (with optional leading whitespace)
   // Also handle the ✗ marker variant some Bun versions emit.
-  const re = /^\s*(?:\(fail\)|✗)\s+(.+?)\s+\[\d+(?:\.\d+)?ms\]\s*$/gm;
+  // Timing suffix is optional because Bun sometimes omits it under high concurrency.
+  const re = /^\s*(?:\(fail\)|✗)\s+(.+?)(?:\s+\[\d+(?:\.\d+)?ms\])?\s*$/gm;
   for (const m of cleaned.matchAll(re)) {
     const label = (m[1] ?? "").trim();
     if (label) ids.add(label);

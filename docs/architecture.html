@@ -298,7 +298,7 @@
     <section id="topology" class="doc-section">
       <h2 class="doc-section__heading">System topology</h2>
       <p>
-        CLI/runner calls the agent loop, which delegates to the provider (Ollama/VibeThinker),
+        CLI/runner calls the agent loop, which delegates to the provider (Ollama — qwen2.5-coder:3b/7b production, vibethinker-3b legacy),
         context engine, and edit protocol. Graders and the eval harness sit outside the hot path.
         Config and Model Registry are cross-cutting — every component reads them at startup.
       </p>
@@ -310,7 +310,7 @@ graph TD
 
     CLI["CLI / Script runner<br/><small>src/cli/ &amp; scripts/</small>"]
     PROV["Provider Layer<br/><small>src/provider/ — OpenAI-compat HTTP + tok/s watchdog</small>"]
-    OLLAMA["Ollama<br/><small>localhost:11434/v1<br/>VibeThinker-3B (Q8_0)</small>"]
+    OLLAMA["Ollama<br/><small>localhost:11434/v1<br/>qwen2.5-coder:3b/7b (production)<br/>vibethinker-3b (baseline)</small>"]
     REASON["Reasoning Handler<br/><small>src/reasoning/ — strips &lt;think&gt; tags</small>"]
     CTX["Context Engine<br/><small>src/context/ — RepoMap + token budget</small>"]
     EDIT["Edit Protocol<br/><small>src/edit/ — patch-function / full-file / S/R / JSON</small>"]
@@ -461,7 +461,7 @@ flowchart TD
       <p>
         <code>src/edit/parser.ts</code> tries three formats in order, returning on the first that
         produces valid blocks. Full-file is primary — it is what the system prompt instructs the model
-        to use and what VibeThinker-3B reliably emits.
+        to use and what both qwen2.5-coder and VibeThinker-3B reliably emit.
       </p>
       <p>
         <strong style="color: var(--text-primary);">Deterministic size-gated format</strong>:
@@ -676,10 +676,10 @@ flowchart TD
         </table>
       </div>
 
-      <h3 class="doc-section__subheading">HumanEval-TS external validation</h3>
+      <h3 class="doc-section__subheading">HumanEval-TS external validation (VibeThinker-3B origin baseline)</h3>
       <p>
         Dataset: <a href="https://huggingface.co/datasets/nuprl/MultiPL-E" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">nuprl/MultiPL-E</a>
-        humaneval-ts. Model: VibeThinker-3B (Q8_0, temp 1.0, top_p 0.95).
+        humaneval-ts. Model: VibeThinker-3B (Q8_0, temp 1.0, top_p 0.95) — origin baseline.
         Agent context: stub only (test file hidden). Grader: <code>bun test</code>.
       </p>
       <div class="sc-table-wrap">
@@ -731,6 +731,44 @@ flowchart TD
         same 3B model to 0.828 pass@1 / 0.906 solve-rate on the full TypeScript HumanEval. Forward plan:
         <a href="ROADMAP.md" style="color: var(--text-accent);">ROADMAP</a>.
       </p>
+
+      <h3 class="doc-section__subheading">Real-repo benchmark — qwen2.5-coder:3b / :7b (2026-06-17)</h3>
+      <p>
+        After confirming the harness drove the VibeThinker result, we swapped to qwen2.5-coder:3b (same 3B size, no think-only spiral, 30-60x faster)
+        and reran the realrepo suite — vendored lukeed/klona + lukeed/dequal with authored bun:test oracles.
+      </p>
+      <div class="sc-table-wrap">
+        <table class="sc-table" aria-label="Real-repo benchmark results">
+          <thead>
+            <tr>
+              <th scope="col">Model</th>
+              <th scope="col">Suite</th>
+              <th scope="col">pass@1 (overall)</th>
+              <th scope="col">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="td-name">qwen2.5-coder:3b</td>
+              <td>realrepo</td>
+              <td><span class="badge badge-green">0.52</span></td>
+              <td>Recommended production model. Aces klona tasks (10/10 1-turn) where VibeThinker was 0/10.</td>
+            </tr>
+            <tr>
+              <td class="td-name">qwen2.5-coder:7b</td>
+              <td>realrepo</td>
+              <td><span class="badge badge-green">0.73</span></td>
+              <td>Larger arm. Same harness, no code changes.</td>
+            </tr>
+            <tr>
+              <td class="td-name">qwen-3b / qwen-7b</td>
+              <td>mri + dequal</td>
+              <td><span class="badge badge-amber">0/10 both</span></td>
+              <td>Honest ceiling: mri retrieval mis-targets wrong function; dequal requires multi-file edits. HARNESS gaps, tracked for GEPA/pickFunctionName.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ===== KEY DESIGN DECISIONS ===== -->
@@ -767,7 +805,8 @@ flowchart TD
             degenerates into repetitive, low-diversity output that fails to self-correct. Required
             sampling params: temp 1.0 (minimum 0.6), top_p 0.95, top_k=-1 (requires Modelfile —
             the OpenAI-compat route silently ignores it). High variance addressed by best-of-N
-            and k=3 eval protocol.
+            and k=3 eval protocol. qwen2.5-coder uses temp 0.7 — no reasoning-spiral; diversity
+            is handled by top_k=20 and best-of-N.
           </p>
         </div>
         <div class="decision">
@@ -914,17 +953,6 @@ flowchart TD
           </thead>
           <tbody>
             <tr>
-              <td><code>vibethinker-3b</code></td>
-              <td>WeiboAI/VibeThinker-3B</td>
-              <td>65,536</td>
-              <td>1.0</td>
-              <td>0.95</td>
-              <td>4,096</td>
-              <td><code>&lt;think&gt;/&lt;/think&gt;</code></td>
-              <td><span class="badge badge-amber">No</span></td>
-              <td>Primary target. MIT. Qwen2.5-3B base. num_ctx=8192 via ollamaOptions. top_k=-1 needs Modelfile.</td>
-            </tr>
-            <tr>
               <td><code>qwen2.5-coder:3b</code></td>
               <td>Qwen/Qwen2.5-Coder-3B-Instruct</td>
               <td>32,768</td>
@@ -933,7 +961,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td>Non-reasoning control arm vs vibethinker-3b (same 3B size, no &lt;think&gt; spiral). Apache-2.0. <code>id</code> = Ollama model name. top_k 20, num_ctx 8192. Aces several real-lib bugs (klona) where the reasoning model scored 0/10.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.52. Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder:7b</code></td>
@@ -944,7 +972,18 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td>Larger arm of the 3-way comparison. Apache-2.0. <code>id</code> = Ollama model name. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.73. top_k 20, num_ctx 8192.</td>
+            </tr>
+            <tr>
+              <td><code>vibethinker-3b</code></td>
+              <td>WeiboAI/VibeThinker-3B</td>
+              <td>65,536</td>
+              <td>1.0</td>
+              <td>0.95</td>
+              <td>4,096</td>
+              <td><code>&lt;think&gt;/&lt;/think&gt;</code></td>
+              <td><span class="badge badge-amber">No</span></td>
+              <td>Origin model / legacy baseline. MIT. Produced 0.828 HumanEval-TS. Think-only spiral on some real-lib bugs (0/10 klona). Still supported via <code>SMALLCODE_MODEL=vibethinker-3b</code>. top_k=-1 needs Modelfile.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder-14b</code></td>

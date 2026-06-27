@@ -6,7 +6,7 @@
 [![Bun](https://img.shields.io/badge/Bun-1.x-black?logo=bun)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 
-> Agentic coding for small, local models. Designed for WeiboAI/VibeThinker-3B and any OpenAI-compatible endpoint.
+> Agentic coding for small, local models. Designed for small local models: qwen2.5-coder:3b/7b (recommended), VibeThinker-3B (origin baseline), and any OpenAI-compatible endpoint.
 
 smallcode wraps 3B–14B class models in scaffolding that compensates for their weaknesses — format fragility, weak long context, high output variance — and amplifies their strengths: verifiable reasoning on self-contained tasks. Unlike Aider, Claude Code, and Goose, which assume a frontier model that can hold arbitrary context and reason reliably, smallcode inverts the approach: minimize context, externalize state, constrain output format, decompose tasks, verify deterministically, and sample best-of-N.
 
@@ -21,7 +21,8 @@ smallcode wraps 3B–14B class models in scaffolding that compensates for their 
 - **[Bun](https://bun.sh)** (JavaScript runtime + package manager) — `curl -fsSL https://bun.sh/install | bash`
 - **[Ollama](https://ollama.com/download)** (local model server) — then pull the model:
   ```bash
-  ollama pull weiboai/vibethinker-3b
+  ollama pull qwen2.5-coder:3b
+  # or: ollama pull weiboai/vibethinker-3b  # origin baseline
   ollama serve   # default: http://localhost:11434
   ```
 
@@ -55,11 +56,12 @@ smallcode uninstall --yes   # actually removes ~/.smallcode and the wrapper
 
 ## Manual quick start (dev / no install)
 
-**1. Install Ollama and pull VibeThinker-3B**
+**1. Install Ollama and pull a model**
 
 ```bash
 # Install Ollama: https://ollama.com/download
-ollama pull weiboai/vibethinker-3b
+ollama pull qwen2.5-coder:3b
+# or: ollama pull weiboai/vibethinker-3b  # origin baseline
 ollama serve   # default: http://localhost:11434
 ```
 
@@ -75,7 +77,7 @@ cat > smallcode.config.json << 'EOF'
       "apiKey": "none",
       "timeoutMs": 120000
     },
-    "activeModel": "vibethinker-3b",
+    "activeModel": "qwen2.5-coder:3b",
     "sandbox": {
       "enabled": true,
       "requireApproval": true,
@@ -102,13 +104,14 @@ bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo 
 
 ---
 
-## Serving VibeThinker-3B
+## Serving models
 
 ### Ollama (recommended)
 
 ```bash
-# Pull the model
-ollama pull weiboai/vibethinker-3b
+# Pull the recommended model
+ollama pull qwen2.5-coder:3b
+# or: ollama pull weiboai/vibethinker-3b  # origin baseline
 
 # Serve on default port 11434
 ollama serve
@@ -131,11 +134,12 @@ The throughput watchdog (`SMALLCODE_WATCHDOG`, on by default) also detects decay
 ### llama.cpp
 
 ```bash
-# Build llama.cpp, then:
+# Build llama.cpp, then (example with qwen2.5-coder:3b GGUF):
 ./llama-server \
-  --model models/VibeThinker-3B-Q4_K_M.gguf \
+  --model models/Qwen2.5-Coder-3B-Instruct-Q8_0.gguf \
   --port 8080 \
-  --ctx-size 65536
+  --ctx-size 32768
+# VibeThinker-3B (origin baseline): use VibeThinker-3B-Q4_K_M.gguf, --ctx-size 65536
 ```
 
 Set `provider.baseUrl` to `http://localhost:8080/v1`.
@@ -143,22 +147,24 @@ Set `provider.baseUrl` to `http://localhost:8080/v1`.
 ### LM Studio
 
 1. Download and open LM Studio.
-2. Search for `WeiboAI/VibeThinker-3B` and download the GGUF.
+2. Search for `Qwen/Qwen2.5-Coder-3B-Instruct` (recommended) or `WeiboAI/VibeThinker-3B` (origin baseline) and download the GGUF.
 3. Start the local server (default port: 1234).
 4. Set `provider.baseUrl` to `http://localhost:1234/v1`.
 
 ### vLLM / SGLang
 
 ```bash
-# vLLM
-vllm serve WeiboAI/VibeThinker-3B \
+# vLLM (qwen — recommended)
+vllm serve Qwen/Qwen2.5-Coder-3B-Instruct \
   --port 8000 \
-  --max-model-len 65536
+  --max-model-len 32768
 
-# SGLang
+# SGLang (qwen — recommended)
 python -m sglang.launch_server \
-  --model-path WeiboAI/VibeThinker-3B \
+  --model-path Qwen/Qwen2.5-Coder-3B-Instruct \
   --port 30000
+
+# VibeThinker-3B (origin baseline): replace with WeiboAI/VibeThinker-3B
 ```
 
 All three expose an OpenAI-compatible `/v1/chat/completions` endpoint. Point `provider.baseUrl` at whichever you use.
@@ -177,7 +183,7 @@ All three expose an OpenAI-compatible `/v1/chat/completions` endpoint. Point `pr
       "apiKey": "none",
       "timeoutMs": 120000
     },
-    "activeModel": "vibethinker-3b",
+    "activeModel": "qwen2.5-coder:3b",
     "sandbox": {
       "enabled": true,
       "requireApproval": true,
@@ -268,12 +274,16 @@ smallcode works with any model served on an OpenAI-compatible `/v1/chat/completi
 
 | Model ID | Context window | Temperature | Reasoning tags | Notes |
 |---|---|---|---|---|
-| `vibethinker-3b` | 65,536 tokens | 1.0 | `<think>` / `</think>` | Reference model. MIT license. Strong at verifiable code/math, high variance — use `bestOfN ≥ 3` for important tasks. |
-| `qwen2.5-coder:3b` | 32,768 tokens | 0.7 | — | Apache-2.0. Non-reasoning control arm vs `vibethinker-3b` (same 3B size, no `<think>` spiral). Profile `id` = the Ollama model name. Supports JSON schema and grammar-constrained output. Aces several real-lib bugs (klona) where the reasoning model scored 0/10. |
-| `qwen2.5-coder:7b` | 32,768 tokens | 0.7 | — | Apache-2.0. Larger arm of the 3-way comparison. Profile `id` = the Ollama model name. Supports JSON schema and grammar-constrained output. |
+| `qwen2.5-coder:3b` | 32,768 tokens | 0.7 | — | **Recommended.** Apache-2.0. No think-only spiral. 30-60x faster than VibeThinker. realrepo pass@1: 0.52. Aces klona tasks where VibeThinker scored 0/10. |
+| `qwen2.5-coder:7b` | 32,768 tokens | 0.7 | — | **Recommended (larger).** Apache-2.0. realrepo pass@1: 0.73. Bigger model arm of the 3-way comparison. |
 | `qwen2.5-coder-14b` | 131,072 tokens | 0.7 | — | Highest quality of built-in profiles. Supports JSON schema and grammar-constrained output. |
+| `vibethinker-3b` | 65,536 tokens | 1.0 | `<think>` / `</think>` | Origin baseline. MIT license. Produced the 0.828 HumanEval-TS result. Think-only spiral on some real-lib bugs (0/10 klona). Still supported via `SMALLCODE_MODEL=vibethinker-3b`. |
 
 Swap the active model per-run without editing config via `SMALLCODE_MODEL` (e.g. `SMALLCODE_MODEL=qwen2.5-coder:3b`). Custom models can be registered in the `models` array of your config file using the `ModelProfile` schema.
+
+### Why qwen?
+
+We built smallcode on VibeThinker-3B — it produced the 0.828 HumanEval-TS baseline and revealed a "think-only" reasoning spiral: the model burns its generation budget inside `<think>`, emits no code, scoring 0/10 on some real-lib bugs. We confirmed the HARNESS, not the model, does the work by swapping to qwen2.5-coder:3b — same 3B size, no think-only, 30-60x faster — and rerunning the realrepo suite: qwen-3b 0.52, qwen-7b 0.73. VibeThinker-3B remains the origin story and is still fully supported.
 
 ---
 

@@ -581,7 +581,7 @@
       <p>
         Emit <code>FILE: &lt;path&gt;</code> on its own line, then a fenced code block with the <em>complete</em>
         corrected file. The <code>search</code> field is empty — the applier overwrites the whole file.
-        This is what the system prompt instructs and what VibeThinker-3B reliably emits.
+        This is what the system prompt instructs and what both qwen2.5-coder and VibeThinker-3B reliably emit.
       </p>
       <div class="llms-code-block">
 <span class="comment"># Full-file format</span>
@@ -626,7 +626,7 @@ export function parseConfig(raw: string): Config {
       <h3 class="doc-section__subheading">Fallback 1: search-replace</h3>
       <p>
         Classic diff-like format. The file path is on the line immediately before the <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; SEARCH</code>
-        marker (3+ angle brackets, case-insensitive). VibeThinker-3B has trouble with this format;
+        marker (3+ angle brackets, case-insensitive). Small models (incl. VibeThinker-3B) have trouble with this format;
         use full-file instead.
       </p>
       <div class="llms-code-block">
@@ -702,7 +702,7 @@ function add(a: number, b: number): number { return a + b; }
       <span class="key">"apiKey"</span>: <span class="str">"none"</span>,                             <span class="comment">// unused for local Ollama</span>
       <span class="key">"timeoutMs"</span>: <span class="val">180000</span>                           <span class="comment">// 3 min per HTTP call</span>
     },
-    <span class="key">"activeModel"</span>: <span class="str">"vibethinker-3b"</span>,
+    <span class="key">"activeModel"</span>: <span class="str">"qwen2.5-coder:3b"</span>,
     <span class="key">"maxTurns"</span>: <span class="val">15</span>,
     <span class="key">"bestOfN"</span>: <span class="val">1</span>,
     <span class="key">"sandbox"</span>: {
@@ -887,7 +887,7 @@ function add(a: number, b: number): number { return a + b; }
       <h2 class="doc-section__heading">How to run</h2>
 
       <h3 class="doc-section__subheading">Run the HumanEval-TS benchmark</h3>
-      <p>Fetches problems from the HuggingFace API. Requires Ollama running with VibeThinker-3B.</p>
+      <p>Fetches problems from the HuggingFace API. Requires Ollama running. Published 0.828 used VibeThinker-3B; any supported model works.</p>
       <div class="llms-code-block">
 <span class="comment"># First 30 problems, k=3 (reproduces the 0.967 result)</span>
 <span class="cmd">SMALLCODE_HE_LIMIT=30 SMALLCODE_HE_K=3 bun scripts/run-humaneval.ts</span>
@@ -937,7 +937,7 @@ function add(a: number, b: number): number { return a + b; }
       <h3 class="doc-section__subheading">Re-run timeout problems from a marathon log</h3>
       <div class="llms-code-block">
 <span class="comment"># Reads the log, finds "trial timeout" lines, re-runs those problems</span>
-<span class="comment"># Restart Ollama first: ollama stop vibethinker-3b (reloads on next call)</span>
+<span class="comment"># Restart Ollama first: ollama stop &lt;model-name&gt; (reloads on next call)</span>
 <span class="cmd">SMALLCODE_HE_K=3 bun scripts/rerun-timeouts.ts /tmp/humaneval-full.log</span>
       </div>
 
@@ -974,10 +974,11 @@ function add(a: number, b: number): number { return a + b; }
 <span class="cmd">bun run src/cli/index.ts config models</span>
       </div>
 
-      <h3 class="doc-section__subheading">VibeThinker-3B Modelfile (for top_k=-1)</h3>
+      <h3 class="doc-section__subheading">VibeThinker-3B Modelfile (legacy, for top_k=-1)</h3>
       <p>
-        The OpenAI-compat route silently ignores <code>top_k</code>. To set <code>top_k=-1</code> (disable top-k
-        sampling as the model was trained), create a Modelfile:
+        qwen2.5-coder models need no Modelfile — their defaults work out of the box.
+        For VibeThinker-3B (origin baseline), the OpenAI-compat route silently ignores <code>top_k</code>.
+        To set <code>top_k=-1</code> (disable top-k sampling as the model was trained), create a Modelfile:
       </p>
       <div class="llms-code-block">
 <span class="comment"># Modelfile</span>
