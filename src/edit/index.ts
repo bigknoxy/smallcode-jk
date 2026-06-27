@@ -1,4 +1,10 @@
-export { applyBatch, applyBlock, generateDiff } from "./applier.ts";
+export {
+  applyBatch,
+  applyBlock,
+  generateDiff,
+  isTestFilePath,
+  TEST_FILE_EDIT_REJECTED,
+} from "./applier.ts";
 export { parse } from "./parser.ts";
 export { repairBlock } from "./repair.ts";
 export { applyPatchBlock, chooseEditFormat, parsePatchBlocks, PATCH_BYTE_THRESHOLD, PATCH_LINE_THRESHOLD } from "./patch-function.ts";

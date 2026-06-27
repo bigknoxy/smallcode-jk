@@ -362,6 +362,25 @@ export function flattenedPathCandidate(filePath: string): string | null {
 // applyBatch — orchestrates I/O via injected functions
 // ---------------------------------------------------------------------------
 
+/**
+ * True for paths that are test/spec files. This harness fixes IMPLEMENTATION so
+ * the existing tests pass; the tests are the ORACLE. A model that edits a test
+ * to make it pass produces a fake-green — the trial reports "solved" while the
+ * real bug remains. `applyBatch` rejects writes to these paths so the oracle
+ * cannot be tampered with. Mirrors the `isTestPath` heuristic in context/builder.
+ */
+export function isTestFilePath(path: string): boolean {
+  return /(?:\.test\.|\.spec\.|(?:^|\/)tests?\/|(?:^|\/)__tests__\/)/i.test(path);
+}
+
+/**
+ * Stable marker embedded in the ApplyResult.error of a rejected test-file edit.
+ * The prompt builder matches on this to give format-consistent feedback (pivot
+ * to the implementation) instead of the generic "re-emit the file" recovery —
+ * exported so the two sites can never drift.
+ */
+export const TEST_FILE_EDIT_REJECTED = "editing test/spec files is not allowed";
+
 export async function applyBatch(
   blocks: EditBlock[],
   readFile: (path: string) => Promise<string | null>,
@@ -401,6 +420,21 @@ export async function applyBatch(
       // First touch of this effective path in the batch — stash its pre-edit
       // on-disk content (null = file did not exist) for the revert path.
       if (!preBatchOriginal.has(path)) preBatchOriginal.set(path, disk);
+    }
+
+    // Anti-fake-green: never write to a test/spec file. The tests are the oracle;
+    // a model that edits them to pass produces a false "solved". Reject with
+    // feedback instead, BEFORE reading/applying — no write, nothing to revert.
+    // Checked on the EFFECTIVE path so a flattened typo (tests.x.test.ts) can't
+    // sneak past, and on block.filePath so an unresolved test path is still caught.
+    if (isTestFilePath(path) || isTestFilePath(block.filePath)) {
+      results.push({
+        filePath: block.filePath,
+        effectivePath: path,
+        status: "error",
+        error: `edit rejected: ${TEST_FILE_EDIT_REJECTED} — the tests are the specification. Fix the implementation file so the existing tests pass; do not modify the tests.`,
+      });
+      continue;
     }
 
     const effectiveBlock = path === block.filePath ? block : { ...block, filePath: path };
