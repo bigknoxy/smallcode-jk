@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-mediumfile-wrongreturn_1",
+  "desc": "Fix the bug in `maxOf` inside the medium file src/ranges.ts. Its loop uses `n < best` (the min comparison) so it returns the smallest value instead of the largest. Edit only that function so tests/ranges.test.ts passes. The other functions (minOf, sumOf, span, clampToRange) already pass.",
+  "setup": { "repoFixture": "edit-rel-mediumfile-wrongreturn_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/ranges.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "mediumfile", "wrong-comparison"],
+  "reference_solution": "edit-rel-mediumfile-wrongreturn_1-solution/"
+}

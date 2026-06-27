@@ -911,9 +911,14 @@ function add(a: number, b: number): number { return a + b; }
 <span class="cmd">SMALLCODE_EVAL_K=1 SMALLCODE_EVAL_MAX_TURNS=3 bun scripts/run-baseline.ts</span>
 
 <span class="comment"># Select a different suite under evals/suites/ (default: capability)</span>
-<span class="comment"># edit-reliability = real multi-file textkit repo (26 tests, files spanning the size</span>
-<span class="comment"># spectrum) measuring edit-localization reliability, distinct from synthetic suites</span>
+<span class="comment"># edit-reliability = 12 multi-file textkit repos, one seeded fail-&gt;pass bug each,</span>
+<span class="comment"># spanning bug archetypes (off-by-one, wrong-operator, wrong-comparison, wrong-return)</span>
+<span class="comment"># x file sizes (small/medium/big/deep) — measures edit-localization + format reliability</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability bun scripts/run-baseline.ts</span>
+
+<span class="comment"># edit-reliability-heldout = 2-task validation split (missing-export, empty-boundary),</span>
+<span class="comment"># reserved for measuring generalization (e.g. GEPA candidates) — never used for tuning</span>
+<span class="cmd">SMALLCODE_SUITE=edit-reliability-heldout bun scripts/run-baseline.ts</span>
 
 <span class="comment"># realrepo = vendored real libraries (lukeed/klona deep-clone + lukeed/dequal deep-equal,</span>
 <span class="comment"># both MIT, zero-dep) with seeded bugs and authored bun:test oracles — tests real-world</span>

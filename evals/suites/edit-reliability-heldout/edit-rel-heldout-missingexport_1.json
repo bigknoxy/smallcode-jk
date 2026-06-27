@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-missingexport_1",
+  "desc": "Fix the missing-export bug in src/format.ts. The `pluralize` function is declared without the `export` keyword, so tests/format.test.ts cannot import it. Add the export (edit only that declaration) so the test passes. `capitalize` is already exported and passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-missingexport_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/format.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "smallfile", "missing-export"],
+  "reference_solution": "edit-rel-heldout-missingexport_1-solution/"
+}
