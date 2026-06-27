@@ -113,13 +113,25 @@ export function buildTurnPrompt(
   const target = context.targetFile;
   if (target) {
     const usePatch = target.format === "patch" && target.functionName !== undefined;
+    // Human-readable label for the edit target. The extractor names an anonymous
+    // `export default function (…)` with the synthetic anchor "default" so the
+    // PATCH applier can find it — but telling the model to edit "the `default`
+    // function" names nothing it can see in the source (there is no `function
+    // default`), which on real-repo default exports (mri, klona, dequal) reads as
+    // an opaque instruction and costs localization confidence. Show prose the
+    // model recognizes; keep the synthetic name only where the applier anchors on
+    // it (the PATCH FUNCTION: line).
+    const isDefaultExport = target.functionName === "default";
+    const fnLabel = isDefaultExport
+      ? "the file's `export default function` (its default export)"
+      : `the \`${target.functionName}\` function`;
     parts.push(`\n## Edit Target — ${target.path} (${target.lineCount} lines)`);
     const useDiff =
       usePatch && DIFF_EDIT && (target.functionLineCount ?? 0) >= DIFF_MIN_FN_LINES;
     if (useDiff) {
       // Minimal SEARCH/REPLACE diff: change only the buggy lines of the target fn.
       parts.push(
-        `This file is large. Make a MINIMAL edit to the \`${target.functionName}\` function: emit a SEARCH/REPLACE block that changes ONLY the buggy line(s). Copy the SEARCH text BYTE-FOR-BYTE from the file shown in Relevant Context below (same indentation — tabs vs spaces — and punctuation). Output it as the FIRST thing in your reply, in exactly this shape — no preamble, no whole-function rewrite:`,
+        `This file is large. Make a MINIMAL edit to ${fnLabel}: emit a SEARCH/REPLACE block that changes ONLY the buggy line(s). Copy the SEARCH text BYTE-FOR-BYTE from the file shown in Relevant Context below (same indentation — tabs vs spaces — and punctuation). Output it as the FIRST thing in your reply, in exactly this shape — no preamble, no whole-function rewrite:`,
       );
       parts.push("```");
       parts.push(target.path);
@@ -134,13 +146,17 @@ export function buildTurnPrompt(
       );
     } else if (usePatch) {
       parts.push(
-        `This file is large — use PATCH: mode. Do NOT emit the whole file (it will be rejected). Edit ONLY the \`${target.functionName}\` function. Output the PATCH block as the FIRST thing in your reply — do not think out loud, do not restate the task, just emit it in exactly this shape (replace the placeholder with the corrected function body):`,
+        `This file is large — use PATCH: mode. Do NOT emit the whole file (it will be rejected). Edit ONLY ${fnLabel}. Output the PATCH block as the FIRST thing in your reply — do not think out loud, do not restate the task, just emit it in exactly this shape (replace the placeholder with the corrected function body):`,
       );
       parts.push("```");
       parts.push(`PATCH: ${target.path}`);
       parts.push(`FUNCTION: ${target.functionName}`);
       parts.push("```ts");
-      parts.push(`export function ${target.functionName}(...) { /* corrected body, signature line included */ }`);
+      parts.push(
+        isDefaultExport
+          ? `export default function (...) { /* corrected body, signature line included */ }`
+          : `export function ${target.functionName}(...) { /* corrected body, signature line included */ }`,
+      );
       parts.push("```");
     } else {
       parts.push(
