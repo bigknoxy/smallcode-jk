@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-smallfile-wrongop_1",
+  "desc": "Fix the wrong-operator bug in `mean` inside the small file src/stats.ts. It multiplies the total by the count instead of dividing, so the average is wildly wrong. Edit only that function so tests/stats.test.ts passes. src/sum.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-smallfile-wrongop_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/stats.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "smallfile", "wrong-operator"],
+  "reference_solution": "edit-rel-smallfile-wrongop_1-solution/"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-smallfile-offbyone_1",
+  "desc": "Fix the off-by-one bug in `lastN` inside the small file src/slicing.ts. Its slice start index is `arr.length - n + 1`, so it drops one element and returns too few. Edit only that function so tests/slicing.test.ts passes. src/firstN.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-smallfile-offbyone_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/slicing.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "smallfile", "off-by-one"],
+  "reference_solution": "edit-rel-smallfile-offbyone_1-solution/"
+}

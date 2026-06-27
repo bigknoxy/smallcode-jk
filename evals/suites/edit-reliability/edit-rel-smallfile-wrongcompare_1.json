@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-smallfile-wrongcompare_1",
+  "desc": "Fix the wrong-comparison bug in `isBetween` inside the small file src/between.ts. It uses strict `>` and `<`, so the inclusive boundary cases (x equal to lo or hi) wrongly return false. Edit only that function so tests/between.test.ts passes. src/clamp.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-smallfile-wrongcompare_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/between.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "smallfile", "wrong-comparison"],
+  "reference_solution": "edit-rel-smallfile-wrongcompare_1-solution/"
+}

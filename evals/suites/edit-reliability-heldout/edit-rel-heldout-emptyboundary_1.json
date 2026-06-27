@@ -1,0 +1,11 @@
+{
+  "id": "edit-rel-heldout-emptyboundary_1",
+  "desc": "Fix the empty-input boundary bug in `firstOr` inside src/safe.ts. It returns arr[0] unconditionally, so for an empty array it returns undefined instead of the provided fallback. Edit only that function so tests/safe.test.ts passes. src/last.ts already passes.",
+  "setup": { "repoFixture": "edit-rel-heldout-emptyboundary_1" },
+  "graders": [
+    { "type": "deterministic_tests", "required": ["tests/safe.test.ts"], "command": "bun test" }
+  ],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["edit-reliability", "held-out", "smallfile", "empty-boundary"],
+  "reference_solution": "edit-rel-heldout-emptyboundary_1-solution/"
+}
