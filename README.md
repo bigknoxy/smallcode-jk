@@ -1,5 +1,11 @@
 # smallcode
 
+[![CI](https://github.com/bigknoxy/smallcode-jk/actions/workflows/ci.yml/badge.svg)](https://github.com/bigknoxy/smallcode-jk/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/bigknoxy/smallcode-jk)](https://github.com/bigknoxy/smallcode-jk/releases)
+[![License: MIT](https://img.shields.io/github/license/bigknoxy/smallcode-jk)](#license)
+[![Bun](https://img.shields.io/badge/Bun-1.x-black?logo=bun)](https://bun.sh)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
+
 > Agentic coding for small, local models. Designed for WeiboAI/VibeThinker-3B and any OpenAI-compatible endpoint.
 
 smallcode wraps 3B–14B class models in scaffolding that compensates for their weaknesses — format fragility, weak long context, high output variance — and amplifies their strengths: verifiable reasoning on self-contained tasks. Unlike Aider, Claude Code, and Goose, which assume a frontier model that can hold arbitrary context and reason reliably, smallcode inverts the approach: minimize context, externalize state, constrain output format, decompose tasks, verify deterministically, and sample best-of-N.
@@ -31,7 +37,7 @@ If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to
 ### Verify, update, uninstall
 
 ```bash
-smallcode --version   # prints: smallcode v0.1.0
+smallcode --version   # prints: smallcode v1.3.0
 smallcode update      # re-downloads latest release (or SMALLCODE_TARBALL) and reinstalls
 smallcode uninstall   # dry-run: shows what would be removed
 smallcode uninstall --yes   # actually removes ~/.smallcode and the wrapper
@@ -263,10 +269,11 @@ smallcode works with any model served on an OpenAI-compatible `/v1/chat/completi
 | Model ID | Context window | Temperature | Reasoning tags | Notes |
 |---|---|---|---|---|
 | `vibethinker-3b` | 65,536 tokens | 1.0 | `<think>` / `</think>` | Reference model. MIT license. Strong at verifiable code/math, high variance — use `bestOfN ≥ 3` for important tasks. |
-| `qwen2.5-coder-7b` | 131,072 tokens | 0.7 | — | Supports JSON schema and grammar-constrained output. Lower variance than VibeThinker-3B. |
+| `qwen2.5-coder:3b` | 32,768 tokens | 0.7 | — | Apache-2.0. Non-reasoning control arm vs `vibethinker-3b` (same 3B size, no `<think>` spiral). Profile `id` = the Ollama model name. Supports JSON schema and grammar-constrained output. Aces several real-lib bugs (klona) where the reasoning model scored 0/10. |
+| `qwen2.5-coder:7b` | 32,768 tokens | 0.7 | — | Apache-2.0. Larger arm of the 3-way comparison. Profile `id` = the Ollama model name. Supports JSON schema and grammar-constrained output. |
 | `qwen2.5-coder-14b` | 131,072 tokens | 0.7 | — | Highest quality of built-in profiles. Supports JSON schema and grammar-constrained output. |
 
-Custom models can be registered in the `models` array of your config file using the `ModelProfile` schema.
+Swap the active model per-run without editing config via `SMALLCODE_MODEL` (e.g. `SMALLCODE_MODEL=qwen2.5-coder:3b`). Custom models can be registered in the `models` array of your config file using the `ModelProfile` schema.
 
 ---
 

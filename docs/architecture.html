@@ -217,6 +217,11 @@
     }
 
     .code-example .comment { color: var(--text-tertiary); }
+
+    /* Mobile safety: Mermaid diagrams + media never overflow the viewport on small screens
+       (tables are handled by site.css .sc-table-wrap, which scrolls horizontally). */
+    .diagram-wrap, .mermaid { max-width: 100%; overflow-x: auto; }
+    img, svg { max-width: 100%; height: auto; }
   </style>
 </head>
 <body>
@@ -473,6 +478,18 @@ flowchart TD
         including an anonymous <code>export default function</code> extracted as <code>"default"</code> —
         else an exact query name-match, else body-content relevance (never a weak name-substring match).
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">Minimal-diff PATCH (default ON, size-gated)</strong>:
+        re-emitting a whole large function invites over-editing, so for big target functions the
+        harness now asks for a minimal <code>SEARCH/REPLACE</code> diff that changes only the buggy
+        line(s) instead of the complete function. This is governed by
+        <code>SMALLCODE_DIFF_EDIT</code> (default ON; set <code>0</code> to revert to whole-function
+        PATCH) and gated by <code>SMALLCODE_DIFF_MIN_FN</code> (default <code>30</code> lines) — below
+        that span, whole-function PATCH is kept since small functions don't benefit and exact-match
+        diffs only add fragility. Confirmed <strong>+0.17 OVERALL</strong> on the edit-reliability suite.
+        The SEARCH text must be copied byte-for-byte from the shown context; the existing fuzzy-repair
+        applier accepts SEARCH/REPLACE and fails safe (no write) on a missing/ambiguous anchor.
+      </p>
       <div class="diagram-wrap">
         <div class="mermaid">
 flowchart LR
@@ -569,14 +586,22 @@ flowchart TD
         </div>
       </div>
       <p>
-        The <code>realrepo</code> suite evaluates the harness on REAL vendored libraries —
+        The <code>realrepo</code> suite (7 tasks) evaluates the harness on REAL vendored libraries —
         <a href="https://github.com/lukeed/klona" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/klona</a>
-        (deep-clone) and
+        (deep-clone, 4 tasks),
         <a href="https://github.com/lukeed/dequal" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/dequal</a>
-        (deep-equal), both MIT, zero-dep — with real seeded bugs graded by authored <code>bun:test</code>
-        oracles. Tasks require genuine multi-file retrieval and correct reasoning about library
-        internals, testing real-world coding ability beyond the synthetic textkit fixtures.
-        Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code>.
+        (deep-equal),
+        <a href="https://github.com/lukeed/mri" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/mri</a>
+        (arg parser), all MIT, zero-dep — plus a hand-built two-file <code>tinycalc</code> arithmetic
+        library (<code>realrepo-tinycalc-tokenfield_1</code>) whose fix requires a genuine
+        <strong>cross-file edit</strong>: the parser reads the wrong token field, and the correct
+        name is defined only by the lexer's token contract in a sibling file. Bugs are real and seeded,
+        graded by authored <code>bun:test</code> oracles. Tasks require genuine multi-file retrieval and
+        correct reasoning about library internals, beyond the synthetic textkit fixtures.
+        Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code> and swap models with
+        <code>SMALLCODE_MODEL=qwen2.5-coder:3b</code> (or <code>:7b</code>). Honest framing: the Qwen
+        coders ace several real-lib bugs (klona) where the reasoning model scored 0/10; the remaining
+        wall is bug-localization on tasks like mri/dequal where the buggy line must be found first.
       </p>
       <p>
         Env vars: <code>SMALLCODE_HE_LIMIT</code> (default 20), <code>SMALLCODE_HE_OFFSET</code> (default 0),
@@ -900,15 +925,26 @@ flowchart TD
               <td>Primary target. MIT. Qwen2.5-3B base. num_ctx=8192 via ollamaOptions. top_k=-1 needs Modelfile.</td>
             </tr>
             <tr>
-              <td><code>qwen2.5-coder-7b</code></td>
-              <td>Qwen/Qwen2.5-Coder-7B-Instruct</td>
-              <td>131,072</td>
+              <td><code>qwen2.5-coder:3b</code></td>
+              <td>Qwen/Qwen2.5-Coder-3B-Instruct</td>
+              <td>32,768</td>
               <td>0.7</td>
-              <td>0.95</td>
+              <td>0.8</td>
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td>Lower variance. Grammar-constrained output supported.</td>
+              <td>Non-reasoning control arm vs vibethinker-3b (same 3B size, no &lt;think&gt; spiral). Apache-2.0. <code>id</code> = Ollama model name. top_k 20, num_ctx 8192. Aces several real-lib bugs (klona) where the reasoning model scored 0/10.</td>
+            </tr>
+            <tr>
+              <td><code>qwen2.5-coder:7b</code></td>
+              <td>Qwen/Qwen2.5-Coder-7B-Instruct</td>
+              <td>32,768</td>
+              <td>0.7</td>
+              <td>0.8</td>
+              <td>4,096</td>
+              <td>—</td>
+              <td><span class="badge badge-green">Yes</span></td>
+              <td>Larger arm of the 3-way comparison. Apache-2.0. <code>id</code> = Ollama model name. top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder-14b</code></td>

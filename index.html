@@ -607,6 +607,9 @@
       .stat-cell { padding: var(--space-5) var(--space-4); }
       .stat-cell__value { font-size: var(--text-2xl); }
     }
+
+    /* Mobile safety: media never overflows the viewport (tables handled by site.css .sc-table-wrap). */
+    img, svg { max-width: 100%; height: auto; }
   </style>
 </head>
 <body>
@@ -973,8 +976,11 @@
 <span class="comment"># Run the first 30 HumanEval problems, k=3 trials</span>
 <span class="cmd">SMALLCODE_HE_LIMIT=30 SMALLCODE_HE_K=3 bun scripts/run-humaneval.ts</span>
 
-<span class="comment"># Run the full in-house capability suite (or pick another: SMALLCODE_SUITE=edit-reliability)</span>
+<span class="comment"># Run the full in-house capability suite (or pick another: SMALLCODE_SUITE=edit-reliability | realrepo)</span>
 <span class="cmd">bun scripts/run-baseline.ts</span>
+
+<span class="comment"># Swap the model per-run (no config edit) — qwen2.5-coder:3b / :7b / vibethinker-3b</span>
+<span class="cmd">SMALLCODE_MODEL=qwen2.5-coder:3b SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</span>
 
 <span class="comment"># Trustworthy measurement: n samples/task, pass@k with 95% bootstrap CIs</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability SMALLCODE_EVAL_N=15 SMALLCODE_REPORT_KS=1,2,3,5 bun scripts/run-baseline.ts</span>
