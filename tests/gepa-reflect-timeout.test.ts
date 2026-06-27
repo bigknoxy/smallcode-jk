@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { reflectConfigFromEnv } from "../src/improve/gepa/reflective-mutator.ts";
-import type { ProviderConfig } from "../src/provider/types.ts";
+import type { ProviderConfig } from "../src/config/types.ts";
 
 // ---------------------------------------------------------------------------
 // SMALLCODE_GEPA_REFLECT_TIMEOUT: a strong reflector (e.g. 32B) rewriting a full
@@ -26,23 +26,23 @@ afterEach(() => {
 
 describe("reflectConfigFromEnv — timeout knob", () => {
   test("overrides provider.timeoutMs when SMALLCODE_GEPA_REFLECT_TIMEOUT is set", () => {
-    process.env.SMALLCODE_GEPA_REFLECT_MODEL = "qwen2.5-coder:32b";
-    process.env.SMALLCODE_GEPA_REFLECT_TIMEOUT = "600000";
+    process.env["SMALLCODE_GEPA_REFLECT_MODEL"] = "qwen2.5-coder:32b";
+    process.env["SMALLCODE_GEPA_REFLECT_TIMEOUT"] = "600000";
     const cfg = reflectConfigFromEnv(FALLBACK);
     expect(cfg.provider.timeoutMs).toBe(600_000);
     expect(cfg.modelId).toBe("qwen2.5-coder:32b");
   });
 
   test("inherits the fallback timeout when the knob is unset", () => {
-    process.env.SMALLCODE_GEPA_REFLECT_MODEL = "qwen2.5-coder:32b";
-    delete process.env.SMALLCODE_GEPA_REFLECT_TIMEOUT;
+    process.env["SMALLCODE_GEPA_REFLECT_MODEL"] = "qwen2.5-coder:32b";
+    delete process.env["SMALLCODE_GEPA_REFLECT_TIMEOUT"];
     const cfg = reflectConfigFromEnv(FALLBACK);
     expect(cfg.provider.timeoutMs).toBe(180_000);
   });
 
   test("ignores a non-numeric timeout (keeps fallback)", () => {
-    process.env.SMALLCODE_GEPA_REFLECT_MODEL = "qwen2.5-coder:32b";
-    process.env.SMALLCODE_GEPA_REFLECT_TIMEOUT = "not-a-number";
+    process.env["SMALLCODE_GEPA_REFLECT_MODEL"] = "qwen2.5-coder:32b";
+    process.env["SMALLCODE_GEPA_REFLECT_TIMEOUT"] = "not-a-number";
     const cfg = reflectConfigFromEnv(FALLBACK);
     expect(cfg.provider.timeoutMs).toBe(180_000);
   });
