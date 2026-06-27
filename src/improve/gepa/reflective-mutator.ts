@@ -292,8 +292,22 @@ export function reflectConfigFromEnv(
   const maxTokensRaw = process.env["SMALLCODE_GEPA_REFLECT_MAX_TOKENS"];
   const maxTokens = maxTokensRaw ? Number(maxTokensRaw) : undefined;
 
+  // Reflection is far slower than an executor turn: a strong model (e.g. 32B)
+  // rewriting a full system prompt from many failed transcripts can take several
+  // minutes — well past the executor's default provider timeout (180s). When that
+  // fires, complete() throws and the mutator silently returns the parent UNCHANGED
+  // (no-op mutation), degrading GEPA to noise. Allow a dedicated, longer timeout
+  // for the reflection provider; defaults to the executor timeout when unset.
+  const timeoutRaw = process.env["SMALLCODE_GEPA_REFLECT_TIMEOUT"];
+  const timeoutMs = timeoutRaw ? Number(timeoutRaw) : undefined;
+
   return {
-    provider: { ...fallback, baseUrl, apiKey },
+    provider: {
+      ...fallback,
+      baseUrl,
+      apiKey,
+      ...(timeoutMs !== undefined && Number.isFinite(timeoutMs) ? { timeoutMs } : {}),
+    },
     modelId,
     registry,
     ...(maxTokens !== undefined && Number.isFinite(maxTokens) ? { maxTokens } : {}),

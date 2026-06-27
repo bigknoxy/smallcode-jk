@@ -23,6 +23,9 @@
  *   SMALLCODE_GEPA_REFLECT_BASE_URL -> (live, optional) reflection provider base url
  *   SMALLCODE_GEPA_REFLECT_API_KEY  -> (live, optional) reflection provider api key
  *   SMALLCODE_GEPA_REFLECT_MAX_TOKENS -> (live, optional) reflection sampling cap
+ *   SMALLCODE_GEPA_REFLECT_TIMEOUT  -> (live, optional) reflection request timeout ms
+ *                                      (default = executor timeout 180s). Raise for a
+ *                                      slow strong reflector or the call no-ops to parent.
  *   SMALLCODE_GEPA_MUTATE_PLANNER=1 -> (optional) also rewrite the planner prompt
  *   SMALLCODE_GEPA_GENERATIONS      -> generations (default 3)
  *   SMALLCODE_GEPA_TRIALS           -> trials per task when scoring (default 5)
