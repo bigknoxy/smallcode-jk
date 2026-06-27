@@ -664,7 +664,7 @@
       </h1>
 
       <p class="hero__sub">
-        smallcode wraps VibeThinker-3B in scaffolding that compensates for
+        smallcode wraps local 3B-7B models (qwen2.5-coder, VibeThinker) in scaffolding that compensates for
         small-model weaknesses and amplifies verifiable reasoning.
         Fully offline. No cloud APIs. Runs on a laptop.
       </p>
@@ -674,7 +674,7 @@
         <div class="hero__stat-callout__value">0.828</div>
         <div class="hero__stat-callout__text">
           <strong>HumanEval-TS pass@1</strong>
-          Full 159 problems, k=3 — VibeThinker-3B raw single-shot is ~0.45–0.60
+          Full 159 problems, k=3 (VibeThinker-3B origin baseline); qwen-3b/-7b realrepo: 0.52 / 0.73
         </div>
       </div>
 
@@ -711,7 +711,7 @@
       <div class="stat-cell" role="listitem">
         <div class="stat-cell__value">3B</div>
         <div class="stat-cell__label">Model size</div>
-        <div class="stat-cell__detail">VibeThinker-3B Q8_0 via Ollama, laptop-grade hardware</div>
+        <div class="stat-cell__detail">qwen2.5-coder:3b/:7b via Ollama (recommended). VibeThinker-3B also supported.</div>
       </div>
     </div>
   </div>
@@ -733,9 +733,12 @@
           state, constrain output format, decompose tasks, verify deterministically, and sample best-of-N.</strong>
         </p>
         <p>
-          VibeThinker-3B raw single-shot HumanEval pass@1 is roughly 0.45–0.60.
-          The agentic loop lifts the same model to <strong style="color: var(--text-primary);">0.828 pass@1 / 0.906 solve-rate</strong>
-          on the full TypeScript HumanEval — without touching the model weights.
+          We built the harness on VibeThinker-3B — it produced the
+          <strong style="color: var(--text-primary);">0.828 HumanEval-TS pass@1</strong> baseline and revealed a
+          "think-only" reasoning spiral (model burns its generation budget inside &lt;think&gt;, emits no code, 0/10 on some real-lib bugs).
+          We confirmed the HARNESS, not the model, does the work by swapping to qwen2.5-coder:3b — same size, no think-only, 30-60x faster —
+          and rerunning the realrepo suite: <strong style="color: var(--text-primary);">qwen-3b 0.52, qwen-7b 0.73</strong>.
+          VibeThinker still supported via <code>SMALLCODE_MODEL=vibethinker-3b</code>.
         </p>
         <p>
           The bet: if a 3B-class local model with this harness yields solid coding output, capable
@@ -759,6 +762,7 @@
           <li>GEPA prompt-optimization seam — evolve better prompts automatically</li>
           <li>Offline skill distillation — mine passing sessions into a seed skill block injected alongside the system prompt</li>
           <li>Real-repo eval layer — evaluated on vendored real libraries (lukeed/klona, lukeed/dequal) with authored bun:test oracles, not only synthetic fixtures</li>
+          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.52 / 0.73 overall (mri/dequal 0/10 both = honest bug-localization ceiling)</li>
         </ul>
       </div>
     </div>
@@ -905,12 +909,55 @@
 
     <p class="bench-note">
       External validation on <a href="https://huggingface.co/datasets/nuprl/MultiPL-E" target="_blank" rel="noopener noreferrer">nuprl/MultiPL-E</a>
-      humaneval-ts (TypeScript translation of OpenAI HumanEval; 159 of 164 ship in TS). Agent context
+      humaneval-ts (TypeScript translation of OpenAI HumanEval; 159 of 164 ship in TS). Model: VibeThinker-3B (origin baseline). Agent context
       contains <em>only the function stub</em> — the test file is on disk but never shown to the model.
       Easy first-30 subset scores 0.967 pass@1 / 1.000 pass@3.
       The run hit Ollama KV-cache slowdown over ~16h; affected problems were re-run on a fresh server
       via <code>scripts/rerun-timeouts.ts</code> and merged back. See
       <a href="docs/ROADMAP.md">ROADMAP</a> for next steps (oracle best-of-N, AlphaCodium pre-solve, LiveCodeBench).
+    </p>
+
+    <h3 style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-10); letter-spacing: 0.02em;">
+      Real-repo benchmark — qwen2.5-coder:3b / :7b (2026-06-17)
+    </h3>
+
+    <div class="sc-table-wrap">
+      <table class="sc-table" aria-label="Real-repo benchmark results">
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Suite</th>
+            <th scope="col">pass@1 (overall)</th>
+            <th scope="col">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">qwen2.5-coder:3b</td>
+            <td>realrepo</td>
+            <td class="td-pass">0.52</td>
+            <td>Vendored real libraries (lukeed/klona, lukeed/dequal) with authored bun:test oracles</td>
+          </tr>
+          <tr>
+            <td class="td-name">qwen2.5-coder:7b</td>
+            <td>realrepo</td>
+            <td class="td-pass">0.73</td>
+            <td>Larger model arm; same harness, no code changes</td>
+          </tr>
+          <tr>
+            <td class="td-name">qwen-3b / qwen-7b</td>
+            <td>mri + dequal tasks</td>
+            <td class="td-fail">0/10 both</td>
+            <td>Honest ceiling: multi-file bug-localization (mri retrieval mis-targets wrong function; dequal requires multi-file edits). HARNESS gaps, not model.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="bench-note">
+      Realrepo suite vendors lukeed/klona (deep-clone) and lukeed/dequal (deep-equal) — MIT, zero-dep real libraries
+      with seeded bugs and authored bun:test oracles. VibeThinker-3B scored 0/10 on klona (think-only spiral);
+      qwen2.5-coder:3b aced all klona tasks on the first turn. mri/dequal 0/10 for both models expose the current
+      bug-localization ceiling in the harness — tracked for GEPA/pickFunctionName improvements.
     </p>
   </div>
 </section>
@@ -928,8 +975,8 @@
         <ol class="quickstart-steps" aria-label="Quick start steps">
           <li>
             <div>
-              <strong>Install Ollama + pull the model</strong>
-              <span>Download from <a href="https://ollama.com/download" style="color:var(--text-accent)" target="_blank" rel="noopener noreferrer">ollama.com/download</a> then pull VibeThinker-3B</span>
+              <strong>Install Ollama + pull a model</strong>
+              <span>Download from <a href="https://ollama.com/download" style="color:var(--text-accent)" target="_blank" rel="noopener noreferrer">ollama.com/download</a> then pull qwen2.5-coder:3b (recommended)</span>
             </div>
           </li>
           <li>
@@ -953,7 +1000,7 @@
         </ol>
         <p style="margin-top: var(--space-6); font-size: var(--text-sm); color: var(--text-tertiary);">
           Config lives in <code>smallcode.config.json</code>. Default points at
-          <code>http://localhost:11434/v1</code> with model <code>vibethinker-3b</code>.
+          <code>http://localhost:11434/v1</code> with model <code>qwen2.5-coder:3b</code> (recommended).
           See <a href="docs/llms.html" style="color:var(--text-accent);">LLM Reference</a> for all env vars.
         </p>
       </div>
@@ -963,8 +1010,9 @@
           <div class="code-block__label">
             <span>shell</span>
           </div>
-<span class="comment"># Pull the model and start Ollama</span>
-<span class="cmd">ollama pull weiboai/vibethinker-3b</span>
+<span class="comment"># Pull the recommended model and start Ollama</span>
+<span class="cmd">ollama pull qwen2.5-coder:3b</span>
+<span class="comment"># or: ollama pull weiboai/vibethinker-3b  # origin baseline</span>
 <span class="cmd">ollama serve</span>
 
 <span class="comment"># Install dependencies (Bun required)</span>
