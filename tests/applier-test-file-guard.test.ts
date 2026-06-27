@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { applyBatch, isTestFilePath } from "../src/edit/index.ts";
+import { applyBatch, isTestFilePath, TEST_FILE_EDIT_REJECTED } from "../src/edit/index.ts";
+import { buildTurnPrompt } from "../src/agent/prompt.ts";
+import type { AgentState } from "../src/agent/types.ts";
+import type { ContextBundle } from "../src/context/types.ts";
 import type { EditBlock } from "../src/edit/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -86,5 +89,63 @@ describe("applyBatch — test-file edit guard", () => {
     expect(byPath["src/m.ts"]).toBe("applied");
     expect(byPath["tests/m.test.ts"]).toBe("error");
     expect(writes.map((w) => w.path)).toEqual(["src/m.ts"]);
+  });
+
+});
+
+describe("buildTurnPrompt — test-guard rejection feedback pivots to implementation", () => {
+  const state: AgentState = {
+    sessionId: "s",
+    task: "fix the bug",
+    repoRoot: "/tmp/r",
+    modelId: "m",
+    goals: [{ id: "g", description: "fix src/m.ts", status: "in_progress" }],
+    currentGoalIndex: 0,
+    status: "running",
+    scratchpad: "",
+    startedAt: 0,
+    updatedAt: 0,
+    maxTurns: 10,
+    turns: [
+      {
+        turn: 1,
+        goalId: "g",
+        prompt: "p",
+        rawResponse: "r",
+        answer: "a",
+        toolCalls: [],
+        toolResults: [],
+        editBlocks: [],
+        applyResults: [
+          {
+            filePath: "tests/m.test.ts",
+            status: "error",
+            error: `edit rejected: ${TEST_FILE_EDIT_REJECTED} — the tests are the specification.`,
+          },
+        ],
+        promptTokens: 0,
+        completionTokens: 0,
+        timestamp: 0,
+      },
+    ],
+  };
+  const ctx: ContextBundle = {
+    chunks: [{ filePath: "tests/m.test.ts", startLine: 1, endLine: 1, content: "TEST CONTENT", estimatedTokens: 5 }],
+    totalTokens: 5,
+    tokenBudget: 4096,
+    truncated: false,
+    query: "q",
+  };
+
+  it("tells the model to edit the implementation, NOT re-emit the test file", () => {
+    const prompt = buildTurnPrompt(state, ctx);
+    expect(prompt).toContain("cannot be edited");
+    expect(prompt).toContain("IMPLEMENTATION");
+    // The generic recovery must NOT fire: no "re-emit the complete file"
+    // instruction and no "The file currently contains:" re-show inside the edit
+    // feedback. (The test file may still appear under ## Relevant Context — the
+    // model always sees the repo; that is not the recovery instruction.)
+    expect(prompt).not.toContain("Re-emit the COMPLETE corrected file");
+    expect(prompt).not.toContain("The file currently contains:");
   });
 });

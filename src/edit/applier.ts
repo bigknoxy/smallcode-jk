@@ -373,6 +373,14 @@ export function isTestFilePath(path: string): boolean {
   return /(?:\.test\.|\.spec\.|(?:^|\/)tests?\/|(?:^|\/)__tests__\/)/i.test(path);
 }
 
+/**
+ * Stable marker embedded in the ApplyResult.error of a rejected test-file edit.
+ * The prompt builder matches on this to give format-consistent feedback (pivot
+ * to the implementation) instead of the generic "re-emit the file" recovery —
+ * exported so the two sites can never drift.
+ */
+export const TEST_FILE_EDIT_REJECTED = "editing test/spec files is not allowed";
+
 export async function applyBatch(
   blocks: EditBlock[],
   readFile: (path: string) => Promise<string | null>,
@@ -424,8 +432,7 @@ export async function applyBatch(
         filePath: block.filePath,
         effectivePath: path,
         status: "error",
-        error:
-          "edit rejected: editing test/spec files is not allowed — the tests are the specification. Fix the implementation file so the existing tests pass; do not modify the tests.",
+        error: `edit rejected: ${TEST_FILE_EDIT_REJECTED} — the tests are the specification. Fix the implementation file so the existing tests pass; do not modify the tests.`,
       });
       continue;
     }

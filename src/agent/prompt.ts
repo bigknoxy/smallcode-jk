@@ -1,5 +1,6 @@
 import { estimateTokens } from "@/context/tokens.ts";
 import type { ContextBundle } from "@/context/types.ts";
+import { TEST_FILE_EDIT_REJECTED } from "@/edit/index.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import { renderDiagnostic } from "@/verify/failure-extract.ts";
 import { defaultPromptSet } from "./prompt-set.ts";
@@ -206,7 +207,15 @@ export function buildTurnPrompt(
             const detail = result.error ? ` — ${result.error}` : "";
             parts.push(`  ${icon} ${result.filePath} (${result.status})${detail}`);
 
-            if (result.status !== "applied") {
+            if (result.status !== "applied" && result.error?.includes(TEST_FILE_EDIT_REJECTED)) {
+              // Test-file edit was rejected by the anti-fake-green guard. The
+              // generic "re-emit the file" recovery below would CONTRADICT the
+              // rejection (and re-show the test content) — push the model to the
+              // implementation instead, and skip all re-emit branches.
+              parts.push(
+                `  ✗ ${result.filePath} — test/spec files are the specification and cannot be edited. Make your fix in the IMPLEMENTATION file (e.g. under src/) so the existing tests pass; do NOT emit any edit to a test file.`,
+              );
+            } else if (result.status !== "applied") {
               parts.push(`  ✗ ${result.filePath} — edit did not apply.`);
               const matchingChunk = context.chunks.find((c) => c.filePath === result.filePath);
               // PATCH-mode recovery must NOT tell the model to re-emit the whole
