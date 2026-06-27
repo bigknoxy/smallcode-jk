@@ -353,4 +353,10 @@ MIT
 - `SMALLCODE_DIFF_EDIT`: big-file PATCH editing uses a minimal SEARCH/REPLACE diff (changes only the buggy lines) instead of re-emitting the complete function. Size-gated — applies only to target functions ≥ `SMALLCODE_DIFF_MIN_FN` lines, where whole-function re-emission causes over-editing. **Default ON** (confirmed +0.17 OVERALL on edit-reliability); opt out with `SMALLCODE_DIFF_EDIT=0`.
 - `SMALLCODE_DIFF_MIN_FN`: minimum target-function line span for `SMALLCODE_DIFF_EDIT` to use a diff (default `30`). Below it, whole-function PATCH is kept (small functions don't benefit and exact-match diffs add fragility).
 - `SMALLCODE_MODEL`: override the active model id for a run (e.g. `qwen2.5-coder:3b`, `qwen2.5-coder:7b`, `vibethinker-3b`) — a cross-model A/B with no config edit.
+- `SMALLCODE_GEPA_DRY_RUN`: run `scripts/gepa-run.ts` with the MockMutator + a stubbed runner — exercises the GEPA evolution loop with NO GPU and NO reflection-LLM calls (smoke/CI). Set `=1`.
+- `SMALLCODE_GEPA_GENERATIONS`: number of GEPA evolution generations to run (default `3`). Each generation reflects on a Pareto parent's failures and scores one mutated candidate on the full train suite.
+- `SMALLCODE_GEPA_TRIALS`: trials per task when scoring a GEPA candidate (default `5`). Higher = tighter per-task pass@1 but more GPU time.
+- `SMALLCODE_GEPA_POP_CAP`: maximum Pareto-front size kept across generations (default `6`).
+- `SMALLCODE_GEPA_MUTATE_PLANNER`: when `=1`, the reflective mutator also rewrites the planner prompt (default off — conservative; only the executor `system` prompt is mutated).
+- `SMALLCODE_GEPA_REFLECT_MODEL`: **required for a live run** — model id of the STRONG reflection model that diagnoses failures and rewrites prompts (must resolve in the model registry). Optional overrides: `SMALLCODE_GEPA_REFLECT_BASE_URL`, `SMALLCODE_GEPA_REFLECT_API_KEY`, `SMALLCODE_GEPA_REFLECT_MAX_TOKENS` (fall back to the provider config).
 <!-- agent-skills:doc-keeper:end -->

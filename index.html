@@ -1092,9 +1092,11 @@
         <div class="feature-card__icon" aria-hidden="true">&#x1F9EC;</div>
         <div class="feature-card__title">GEPA prompt-optimization</div>
         <p class="feature-card__body">
-          Generative Evolutionary Prompt Architect seam is live. <code>AgentConfig.promptSet</code>
-          injects candidate prompts end-to-end; <code>src/improve/gepa/</code> provides the
-          Pareto-front evolution engine with eval-suite fitness function.
+          Generative Evolutionary Prompt Architect is live end-to-end. <code>AgentConfig.promptSet</code>
+          injects candidate prompts; <code>src/improve/gepa/</code> provides the Pareto-front evolution
+          engine with an eval-suite fitness function and a <code>LLMReflectiveMutator</code> — a strong
+          reflection model rewrites the system prompt from failed-task transcripts. Run it with
+          <code>bun scripts/gepa-run.ts</code> (CI-smokeable via <code>SMALLCODE_GEPA_DRY_RUN=1</code>).
         </p>
       </div>
 
