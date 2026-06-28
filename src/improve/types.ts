@@ -69,6 +69,11 @@ export interface MetricsSnapshot {
   trialsWithTruncationTotal?: number;
   /** Sampling overrides in effect, so history rows are self-describing. */
   sampling?: { temp?: number; maxTokens?: number };
+  /** Run-level Best-of-N: attempts allowed per trial (1/undefined = single-shot).
+   * When >1, overallPassAtK[1] is the empirical pass@N(any) of the BoN mechanism. */
+  bestOfN?: number;
+  /** Mean BoN attempts spent per trial across the run (cost; undefined when off). */
+  avgAttemptsUsed?: number;
 }
 
 export interface MetricsHistory {

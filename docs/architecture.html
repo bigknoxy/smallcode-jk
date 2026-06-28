@@ -658,6 +658,20 @@ flowchart TD
         CIs, think-only-truncation totals, and the sampling overrides in effect, so history rows are
         self-describing.
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">Run-level Best-of-N (oracle-verified)</strong>:
+        set <code>SMALLCODE_BEST_OF_N=N</code> and each trial becomes up to <code>N</code> independent
+        full agent-loop attempts — a FRESH trial dir per attempt, temperatures swept around 1.0 in
+        <code>[0.7, 1.3]</code> (<code>defaultTemperatures(N)</code>) for diversity — resolving on the
+        FIRST attempt whose graders all pass. The deterministic <code>bun test</code> grader is a sound
+        oracle, so any-attempt-green == solved with ZERO selection error: under BoN the reported
+        <code>pass@1</code> IS the empirical <code>pass@N(any)</code> of the mechanism. The loop
+        (<code>src/agent/bestofn-loop.ts</code>) short-circuits on the first green, so spent attempts
+        ≤ N; the runner records <code>avgAttemptsUsed</code> (mean attempts/trial = cost) alongside the
+        rate. Wired through the same <code>runBestOfNLoop</code> the CLI ships, so the eval measures
+        production behaviour. Distinct from the per-TURN candidate selection (<code>bestofn.ts</code>),
+        which is off by default.
+      </p>
     </section>
 
     <!-- ===== GEPA EVOLUTION LOOP ===== -->
@@ -1168,7 +1182,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-27</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-28</span>
   </div>
 </footer>
 

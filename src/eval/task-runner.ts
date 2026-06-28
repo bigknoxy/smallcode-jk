@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { runBestOfNLoop, defaultTemperatures } from "../agent/bestofn-loop.ts";
 import type { LoopDependencies } from "../agent/loop.ts";
 import { runLoop } from "../agent/loop.ts";
 import { createState, getStatePath } from "../agent/state.ts";
-import type { AgentConfig } from "../agent/types.ts";
+import type { AgentConfig, AgentState } from "../agent/types.ts";
 import { buildContext } from "../context/builder.ts";
 import { walkRepo } from "../context/walker.ts";
 import type { ContextBundle } from "../context/types.ts";
@@ -39,6 +40,44 @@ export interface TaskRunnerOptions {
   bootstrapIters?: number;
   /** Seed for the CI bootstrap RNG (reproducible intervals). Default fixed. */
   ciSeed?: number;
+  /** Run-level oracle-verified Best-of-N: each trial runs up to N independent
+   * full agent-loop attempts (fresh env each, temperature-swept for diversity)
+   * and resolves on the FIRST attempt whose graders all pass — the deterministic
+   * test grader is a sound oracle, so any-attempt-green == solved with zero
+   * selection error. Default 1 (a plain single-shot trial). */
+  bestOfN?: number;
+  /** Per-attempt temperatures for Best-of-N. Defaults to defaultTemperatures(N),
+   * a sweep around 1.0 in [0.7, 1.3]. Ignored when bestOfN ≤ 1. */
+  bonTemperatures?: number[];
+}
+
+// Map an AgentState's terminal status to a transcript outcome. Shared by the
+// single-shot and Best-of-N trial paths so both record outcomes identically.
+function buildTranscript(
+  state: AgentState,
+  taskId: string,
+  trialIndex: number,
+  startedAt: number,
+  finishedAt: number,
+): Transcript {
+  return {
+    id: randomUUID(),
+    sessionId: state.sessionId,
+    taskId,
+    trialIndex,
+    modelId: state.modelId,
+    turns: state.turns,
+    outcome:
+      state.status === "done"
+        ? "passed"
+        : state.status === "failed"
+          ? "failed"
+          : state.status === "max_turns"
+            ? "timeout"
+            : "error",
+    startedAt,
+    finishedAt,
+  };
 }
 
 // Option A toggle: pin the edit target + size-gate the format. Default on; set
@@ -68,6 +107,99 @@ export async function buildTrialContext(
   }
 }
 
+// Run-level oracle-verified Best-of-N for ONE trial: up to N independent full
+// agent-loop attempts (fresh env each, temperature-swept), resolving on the
+// first attempt whose graders all pass. Reuses runBestOfNLoop (the same
+// mechanism the CLI ships) so the eval measures production behaviour. The
+// deterministic test grader is the sound oracle; verify runs the full grader
+// set per attempt and stashes the verdicts so the winner needs no re-grade.
+async function runBonTrial(
+  task: EvalTask,
+  opts: TaskRunnerOptions,
+  trialIndex: number,
+  trialStartedAt: number,
+  bestOfN: number,
+  cleanups: Array<() => Promise<void>>,
+): Promise<TrialResult> {
+  const { fixturesRoot, agentConfig, loopDeps, graderOpts } = opts;
+  const temps = opts.bonTemperatures ?? defaultTemperatures(bestOfN);
+
+  const attemptDirs: string[] = [];
+  const attemptStates: AgentState[] = [];
+  const attemptGrades: GraderResult[][] = [];
+
+  const bon = await runBestOfNLoop({
+    n: bestOfN,
+    temperatures: temps,
+    deps: { ...loopDeps, config: agentConfig },
+    setup: async (attempt) => {
+      const env = await createTrialEnv(task, fixturesRoot);
+      cleanups.push(env.cleanup);
+      attemptDirs[attempt] = env.dir;
+      const trialConfig: AgentConfig = {
+        ...agentConfig,
+        repoRoot: env.dir,
+        statePath: join(env.dir, ".smallcode", "state.json"),
+      };
+      const state = createState(trialConfig, task.desc);
+      attemptStates[attempt] = state;
+      return {
+        state,
+        statePath: getStatePath(trialConfig),
+        getContext: async (goal: string): Promise<ContextBundle> =>
+          buildTrialContext(env.dir, goal, contextBudgetFor(loopDeps.profile)),
+      };
+    },
+    verify: async (attempt) => {
+      const dir = attemptDirs[attempt]!;
+      const state = attemptStates[attempt]!;
+      const transcript = buildTranscript(state, task.id, trialIndex, trialStartedAt, Date.now());
+      const grades: GraderResult[] = [];
+      for (const graderConfig of task.graders) {
+        try {
+          grades.push(await runGrader(graderConfig, dir, transcript, graderOpts));
+        } catch (err) {
+          grades.push({
+            type: graderConfig.type,
+            verdict: "error",
+            score: 0,
+            output: err instanceof Error ? err.message : String(err),
+            durationMs: 0,
+            details: { error: String(err) },
+          });
+        }
+      }
+      attemptGrades[attempt] = grades;
+      return grades.length === 0 || grades.every((r) => r.verdict === "pass");
+    },
+  });
+
+  // Winner = first green; if none passed, the last attempt run is recorded as
+  // the trial's (failed) outcome.
+  const winIdx = bon.winningAttempt ?? bon.attemptsUsed - 1;
+  const winState = bon.states[winIdx] ?? attemptStates[winIdx]!;
+  const graderResults = attemptGrades[winIdx] ?? [];
+  const passed = bon.passed;
+  const partialScore =
+    graderResults.length === 0
+      ? passed
+        ? 1
+        : 0
+      : graderResults.reduce((sum, r) => sum + r.score, 0) / graderResults.length;
+  const transcript = buildTranscript(winState, task.id, trialIndex, trialStartedAt, Date.now());
+
+  return {
+    taskId: task.id,
+    trialIndex,
+    passed,
+    partialScore,
+    graderResults,
+    transcript,
+    metrics: collectMetrics(transcript),
+    attemptsUsed: bon.attemptsUsed,
+  };
+}
+
 export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<TaskEvalResult> {
   const { trialsPerTask, fixturesRoot, agentConfig, loopDeps, graderOpts } = opts;
   const trialTimeoutMs = opts.trialTimeoutMs ?? 10 * 60 * 1000; // default 10 min
@@ -75,11 +207,21 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
 
   for (let trialIndex = 0; trialIndex < trialsPerTask; trialIndex++) {
     const trialStartedAt = Date.now();
-    let cleanup: (() => Promise<void>) | undefined;
+    const bestOfN = opts.bestOfN ?? 1;
+    // Best-of-N spins up one env per attempt; collect every cleanup so finally
+    // tears them all down (single-shot pushes exactly one).
+    const cleanups: Array<() => Promise<void>> = [];
 
     try {
+      if (bestOfN > 1) {
+        trials.push(
+          await runBonTrial(task, opts, trialIndex, trialStartedAt, bestOfN, cleanups),
+        );
+        continue;
+      }
+
       const trialEnv = await createTrialEnv(task, fixturesRoot);
-      cleanup = trialEnv.cleanup;
+      cleanups.push(trialEnv.cleanup);
 
       // Override repoRoot with the trial dir
       const trialConfig: AgentConfig = {
@@ -111,24 +253,13 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
 
       const trialFinishedAt = Date.now();
 
-      const transcript: Transcript = {
-        id: randomUUID(),
-        sessionId: finalState.sessionId,
-        taskId: task.id,
+      const transcript = buildTranscript(
+        finalState,
+        task.id,
         trialIndex,
-        modelId: finalState.modelId,
-        turns: finalState.turns,
-        outcome:
-          finalState.status === "done"
-            ? "passed"
-            : finalState.status === "failed"
-              ? "failed"
-              : finalState.status === "max_turns"
-                ? "timeout"
-                : "error",
-        startedAt: trialStartedAt,
-        finishedAt: trialFinishedAt,
-      };
+        trialStartedAt,
+        trialFinishedAt,
+      );
 
       // Run all graders
       const graderResults: GraderResult[] = [];
@@ -196,7 +327,7 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
         error: errMsg,
       });
     } finally {
-      if (cleanup !== undefined) {
+      for (const cleanup of cleanups) {
         try {
           await cleanup();
         } catch {
@@ -234,6 +365,13 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
     trials.reduce((sum, t) => sum + t.partialScore, 0) / Math.max(n, 1);
   const avgMetrics = averageMetrics(trials.map((t) => t.metrics));
 
+  // Best-of-N cost: mean attempts spent per trial (≤ N via first-green stop).
+  const bestOfN = opts.bestOfN ?? 1;
+  const avgAttemptsUsed =
+    bestOfN > 1 && n > 0
+      ? trials.reduce((sum, t) => sum + (t.attemptsUsed ?? 1), 0) / n
+      : undefined;
+
   return {
     task,
     trials,
@@ -244,5 +382,7 @@ export async function runTask(task: EvalTask, opts: TaskRunnerOptions): Promise<
     avgMetrics,
     n,
     passAtKCI,
+    ...(bestOfN > 1 ? { bestOfN } : {}),
+    ...(avgAttemptsUsed !== undefined ? { avgAttemptsUsed } : {}),
   };
 }

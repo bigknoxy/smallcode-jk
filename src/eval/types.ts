@@ -95,6 +95,9 @@ export interface TrialResult {
   transcript: Transcript;
   metrics: TrialMetrics;
   error?: string;
+  /** Best-of-N only: independent attempts run before this trial resolved (≤ N,
+   * stops on first deterministic-green). 1 (or undefined) for a plain trial. */
+  attemptsUsed?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +125,11 @@ export interface TaskEvalResult {
   n?: number;
   /** 95% bootstrap CI per reported k, parallel to passAtK. */
   passAtKCI?: Record<number, PassAtKCI>;
+  /** Best-of-N: attempts allowed per trial (N). 1/undefined = plain single-shot. */
+  bestOfN?: number;
+  /** Best-of-N: mean attempts actually spent per trial (cost; ≤ bestOfN thanks
+   * to first-green short-circuit). undefined when bestOfN ≤ 1. */
+  avgAttemptsUsed?: number;
 }
 
 export interface EvalRunResult {
