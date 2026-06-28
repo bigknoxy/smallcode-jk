@@ -19,6 +19,7 @@ import { mkdir, cp, rm, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
+import { defaultTemperatures } from "../src/agent/bestofn-loop.ts";
 import { runTask } from "../src/eval/task-runner.ts";
 import { bootstrapCI, passAtKFromFlags } from "../src/eval/stats.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
@@ -96,6 +97,12 @@ const REPORT_KS = (process.env.SMALLCODE_REPORT_KS ?? "1,2,3,5")
   .filter((k) => Number.isFinite(k) && k >= 1);
 // Fixed seed → reproducible bootstrap CIs across reruns of the same outcomes.
 const CI_SEED = process.env.SMALLCODE_CI_SEED ? Number(process.env.SMALLCODE_CI_SEED) : 0xc0ffee;
+// Run-level oracle-verified Best-of-N. >1 makes EACH of the n trials run up to N
+// independent full-loop attempts (temperature-swept), resolving on the first
+// deterministic-green — so the reported pass@1 IS the empirical pass@N(any) of
+// the shipped BoN mechanism, and avg_attempts shows the cost (≤ N via early
+// stop). Default 1 = plain single-shot, identical to prior behaviour.
+const BEST_OF_N = Math.max(1, Number(process.env.SMALLCODE_BEST_OF_N ?? "1"));
 
 // ---------------------------------------------------------------------------
 // Grader dispatch (same as validate-e1)
@@ -240,6 +247,10 @@ interface LiveTaskMetrics {
   trialsWithTruncation: number;
   /** Trials dropped from the rate because the grader hit a transient infra error. */
   infraDropped: number;
+  /** Best-of-N attempts allowed per trial (1 = single-shot). */
+  bestOfN: number;
+  /** Mean BoN attempts actually spent per trial (≤ bestOfN; undefined when off). */
+  avgAttemptsUsed?: number;
 }
 
 /** Count turns whose tool results carry the think-only truncation error. */
@@ -309,7 +320,7 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     repoRoot: PROJECT_ROOT, // overridden per trial inside runTask
     modelId: profile.id,
     maxTurns: EVAL_MAX_TURNS,
-    bestOfN: 1, // best-of-N inside eval adds noise; use k trials instead
+    bestOfN: 1, // per-TURN candidate selection off; run-level BoN is below via SMALLCODE_BEST_OF_N
     allowedCommands: config.sandbox.allowedCommands,
     requireApproval: false,
     disciplineRules: DISCIPLINE,
@@ -331,6 +342,7 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     fixturesRoot: FIXTURES_DIR,
     agentConfig,
     loopDeps,
+    bestOfN: BEST_OF_N,
     trialTimeoutMs: 20 * 60 * 1000, // 20 min per trial (VibeThinker-3B ~100-300s/call)
   });
 
@@ -379,6 +391,8 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     thinkOnlyTurns,
     trialsWithTruncation,
     infraDropped,
+    bestOfN: BEST_OF_N,
+    avgAttemptsUsed: result.avgAttemptsUsed,
   };
 }
 
@@ -403,8 +417,13 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
     `\n${padEnd("task-id", COL1)} | ${padEnd("pass@1 [95% CI]", COL2)} | ${padEnd(`pass@${bigK} [95% CI]`, COL3)} | ${padEnd("n", COL4)} | ${padEnd("avg_turns", COL5)} | ${"think-only"}`,
   );
   console.log(sep);
+  const bonActive = metrics.some((m) => m.bestOfN > 1);
   for (const m of metrics) {
-    const truncCol = `${m.thinkOnlyTurns} (${m.trialsWithTruncation}t)${m.infraDropped > 0 ? ` !${m.infraDropped}infra` : ""}`;
+    const bonCol =
+      m.bestOfN > 1 && m.avgAttemptsUsed !== undefined
+        ? ` BoN${m.bestOfN}@${m.avgAttemptsUsed.toFixed(1)}`
+        : "";
+    const truncCol = `${m.thinkOnlyTurns} (${m.trialsWithTruncation}t)${m.infraDropped > 0 ? ` !${m.infraDropped}infra` : ""}${bonCol}`;
     const p1 = fmtPK(m.passAtK[1], m.passAtKCI[1]);
     const pK = fmtPK(m.passAtK[bigK], m.passAtKCI[bigK]);
     console.log(
@@ -426,6 +445,11 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
   console.log(
     "\nCI = 95% bootstrap over n trials. Two results differ significantly only when their CIs do NOT overlap. n<8 → treat CI as indicative only; raise SMALLCODE_EVAL_N to tighten.",
   );
+  if (bonActive) {
+    console.log(
+      "BoN<N>@<a> = run-level Best-of-N: each trial = up to N temp-swept attempts, first deterministic-green wins; <a> = mean attempts spent (cost). pass@1 here IS the empirical pass@N(any) — compare its CI against a SMALLCODE_BEST_OF_N=1 baseline run.",
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -506,6 +530,11 @@ async function main(): Promise<void> {
     // SMALLCODE_REPORT_KS) with 95% bootstrap CIs.
     // -----------------------------------------------------------------------
     console.log(`[run-baseline] n=${EVAL_N} samples/task, reporting pass@{${REPORT_KS.join(",")}} with 95% CI`);
+    if (BEST_OF_N > 1) {
+      console.log(
+        `[run-baseline] run-level Best-of-N=${BEST_OF_N} ON (temps ${defaultTemperatures(BEST_OF_N).join(",")}) — pass@1 = empirical pass@${BEST_OF_N}(any); compare vs a SMALLCODE_BEST_OF_N=1 run.`,
+      );
+    }
     const allMetrics: LiveTaskMetrics[] = [];
     let passCount = 0;
 
@@ -572,6 +601,14 @@ async function main(): Promise<void> {
       thinkOnlyTotal: allMetrics.reduce((s, m) => s + m.thinkOnlyTurns, 0),
       trialsWithTruncationTotal: allMetrics.reduce((s, m) => s + m.trialsWithTruncation, 0),
       sampling: { temp: TEMP_OVERRIDE, maxTokens: MAX_TOKENS_OVERRIDE },
+      ...(BEST_OF_N > 1
+        ? {
+            bestOfN: BEST_OF_N,
+            avgAttemptsUsed:
+              allMetrics.reduce((s, m) => s + (m.avgAttemptsUsed ?? 0), 0) /
+              Math.max(allMetrics.length, 1),
+          }
+        : {}),
     };
     await appendMetricsSnapshot(snapshot);
 

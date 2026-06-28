@@ -1033,6 +1033,9 @@
 <span class="comment"># Trustworthy measurement: n samples/task, pass@k with 95% bootstrap CIs</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability SMALLCODE_EVAL_N=15 SMALLCODE_REPORT_KS=1,2,3,5 bun scripts/run-baseline.ts</span>
 
+<span class="comment"># Run-level oracle-verified Best-of-N — reported pass@1 IS the empirical pass@N(any)</span>
+<span class="cmd">SMALLCODE_SUITE=edit-reliability SMALLCODE_BEST_OF_N=3 SMALLCODE_EVAL_N=10 bun scripts/run-baseline.ts</span>
+
 <span class="comment"># Code a task in any repo</span>
 <span class="cmd">bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo .</span>
         </div>
@@ -1160,7 +1163,7 @@
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Updated 2026-06-27</span>
+    <span class="sc-footer__meta">Updated 2026-06-28</span>
   </div>
 </footer>
 
