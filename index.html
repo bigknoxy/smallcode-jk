@@ -1095,6 +1095,10 @@
 <span class="comment"># Run-level oracle-verified Best-of-N — reported pass@1 IS the empirical pass@N(any)</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability SMALLCODE_BEST_OF_N=3 SMALLCODE_EVAL_N=10 bun scripts/run-baseline.ts</span>
 
+<span class="comment"># Focused A/B on a subset (TASK_FILTER = id substrings), and forensic turn-dump of one hard task</span>
+<span class="cmd">SMALLCODE_SUITE=realrepo SMALLCODE_TASK_FILTER=mri,dequal bun scripts/run-baseline.ts</span>
+<span class="cmd">FORENSIC_TASK=mri FORENSIC_N=5 SMALLCODE_MODEL=qwen2.5-coder:3b bun scripts/forensic-task.ts</span>
+
 <span class="comment"># Code a task in any repo</span>
 <span class="cmd">bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo .</span>
         </div>
