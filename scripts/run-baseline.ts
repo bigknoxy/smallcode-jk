@@ -103,6 +103,12 @@ const CI_SEED = process.env.SMALLCODE_CI_SEED ? Number(process.env.SMALLCODE_CI_
 // the shipped BoN mechanism, and avg_attempts shows the cost (≤ N via early
 // stop). Default 1 = plain single-shot, identical to prior behaviour.
 const BEST_OF_N = Math.max(1, Number(process.env.SMALLCODE_BEST_OF_N ?? "1"));
+// Optional substring filter for a focused subset of a suite (comma-separated;
+// a task matches if its id contains ANY term). Unset = whole suite.
+const TASK_FILTER = (process.env.SMALLCODE_TASK_FILTER ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter((s) => s.length > 0);
 
 // ---------------------------------------------------------------------------
 // Grader dispatch (same as validate-e1)
@@ -471,6 +477,13 @@ async function main(): Promise<void> {
   console.log(`[run-baseline] Loading suite "${SUITE_NAME}" from ${SUITE_DIR}...`);
 
   const suite = await loadSuite(SUITE_DIR);
+  // Optional substring filter (SMALLCODE_TASK_FILTER) — run a focused subset of a
+  // suite (e.g. the localization-hard tasks) without authoring a temp suite dir.
+  if (TASK_FILTER.length > 0) {
+    const before = suite.tasks.length;
+    suite.tasks = suite.tasks.filter((t) => TASK_FILTER.some((f) => t.id.includes(f)));
+    console.log(`[run-baseline] TASK_FILTER [${TASK_FILTER.join(",")}] → ${suite.tasks.length}/${before} tasks`);
+  }
   console.log(`[run-baseline] Found ${suite.tasks.length} tasks in suite "${suite.id}"\n`);
 
   await mkdir(TMP_BASE, { recursive: true });
