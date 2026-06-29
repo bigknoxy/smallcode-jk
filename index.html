@@ -762,7 +762,7 @@
           <li>GEPA prompt-optimization seam — evolve better prompts automatically</li>
           <li>Offline skill distillation — mine passing sessions into a seed skill block injected alongside the system prompt</li>
           <li>Real-repo eval layer — evaluated on vendored real libraries (lukeed/klona, lukeed/dequal) with authored bun:test oracles, not only synthetic fixtures</li>
-          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.52 / 0.73 overall (mri/dequal 0/10 both = honest bug-localization ceiling)</li>
+          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.52 / 0.73 overall (mri-flags 0/10 = honest bug-localization ceiling; dequal 0.10&#8594;0.30 under BoN=3)</li>
         </ul>
       </div>
     </div>
@@ -900,6 +900,37 @@
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <h3 style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-10); letter-spacing: 0.02em;">
+      Run-level Best-of-N — realrepo A/B (qwen2.5-coder:3b, n=10/task × 7 real-library tasks, 2026-06-28)
+    </h3>
+
+    <div class="sc-table-wrap">
+      <table class="sc-table" aria-label="Best-of-N realrepo A/B results">
+        <thead>
+          <tr>
+            <th scope="col">Config</th>
+            <th scope="col">pooled pass@1 [95% CI]</th>
+            <th scope="col">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">Single-shot (BoN=1)</td>
+            <td class="td-warn">0.66 [.54–.76]</td>
+            <td>Baseline on real vendored-library bugs (klona, mri, dequal, tinycalc)</td>
+          </tr>
+          <tr>
+            <td class="td-name">Best-of-N=3 (oracle-verified)</td>
+            <td class="td-warn">0.76 [.66–.86]</td>
+            <td><strong>ns pooled</strong> (CIs overlap at n=10). One task <code>klona-regexp</code> 0.60&#8594;1.00 <strong>significant</strong>; <code>mri-flags</code> 0.00&#8594;0.00 unmovable (zero sampling diversity = harness bug-localization gap, not a sampler problem)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size: var(--text-xs); color: var(--text-tertiary); margin-top: var(--space-2);">
+        Honest read: BoN amplifies only where iid diversity exists. On this harder, partly-saturated suite the pooled 0.10 gain doesn&#8217;t resolve at n=10, and BoN spends the most compute (~3 attempts/trial) on the dead tasks it can&#8217;t help. Contrast with the edit-reliability suite above, where the pooled lift is significant.
+      </p>
     </div>
 
     <h3 style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-10); letter-spacing: 0.02em;">

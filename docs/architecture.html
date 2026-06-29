@@ -680,6 +680,18 @@ flowchart TD
         already ≈ 1.00, so BoN doesn't beat the diversity ceiling — it OPERATIONALIZES it into a
         delivered, oracle-verified green.
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">Measured on the harder realrepo suite
+        (2026-06-28, qwen2.5-coder:3b, n=10/task × 7):</strong> pooled pass@1
+        <code>0.66 [.54-.76]</code> → BoN=3 <code>0.76 [.66-.86]</code> — CIs OVERLAP, <code>ns</code>
+        at n=10. Only one task is CI-significant: <code>klona-regexp</code> 0.60 → 1.00. <code>dequal</code>
+        (0.10 → 0.30) and <code>tinycalc</code> (0.90 → 1.00) trend up but don't resolve;
+        <code>mri-flags</code> stays 0.00 → 0.00 — pass@N(any) is 0, so there is no sampling diversity
+        for BoN to amplify (a harness bug-localization gap, not a sampler problem). The cost profile
+        inverts versus edit-reliability: BoN burns ~2.7–3.0 attempts/trial on exactly the dead/noisy
+        tasks it helps least. Takeaway: BoN is a diversity amplifier, not a capability adder — its
+        payoff scales with how much un-delivered iid headroom a suite actually has.
+      </p>
     </section>
 
     <!-- ===== GEPA EVOLUTION LOOP ===== -->
