@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-dequal-object_1",
+  "desc": "In the real dequal deep-equal library (src/index.js), the plain-object branch uses `Object.keys(bar).length >= len` for its final key-count check, so an object with EXTRA keys is wrongly reported equal — dequal({a:1}, {a:1,b:2}) returns true instead of false. Fix the single comparison operator on that return line so that tests/dequal.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-dequal-object_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/dequal.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "dequal", "deep-equal", "wrong-comparison"],
+  "reference_solution": "realrepo-dequal-object_1-solution/"
+}

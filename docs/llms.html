@@ -485,6 +485,7 @@
             <tr><td><code>show-transcript.ts</code></td><td>Pretty-print a saved eval transcript from <code>evals/transcripts/</code>.</td></tr>
             <tr><td><code>show-metrics.ts</code></td><td>Print the <code>metrics-history.jsonl</code> table: timestamp, model, pass@1 per run.</td></tr>
             <tr><td><code>compare-runs.ts</code></td><td>Auto-judge an A/B between two live runs (snapshots in <code>metrics-history.jsonl</code>): for pass@k overall + per task, prints A vs B with 95% CIs and a verdict — <strong>SIGNIFICANT</strong> when the CIs don't overlap, <strong>ns (raise n)</strong> when they do. Labels arms by their <code>sampling</code> overrides; diffs think-only totals. Usage: <code>bun scripts/compare-runs.ts</code> (last two live runs), <code>… &lt;runIdA&gt; &lt;runIdB&gt;</code>, or <code>--file a.json b.json</code>. Turns experiment-reading into one command.</td></tr>
+            <tr><td><code>validate-realrepo-tasks.ts</code></td><td>Idempotent integrity guard for realrepo-style tasks (any suite whose tasks ship a <code>referenceSolution</code>). For each task asserts three properties the built-in <code>SMALLCODE_DRY_RUN</code> does not all cover: <strong>bug is real</strong> (BASE fixture alone FAILS its grader — catches a no-op task that scores pass@1=1.0 for free), <strong>fix is real</strong> (BASE + solution overlay PASSES), and <strong>target is real</strong> (<code>pickTargetFunction</code> on every overlaid buggy source file returns a defined symbol — catches the mri-<code>toVal</code> confound where the bug sits where retrieval can't aim). No model invoked — pure fixture + oracle + static analysis. Prints a per-task table; exit 0 iff all pass. <code>SMALLCODE_SUITE</code> selects the suite (default <code>realrepo</code>).</td></tr>
             <tr><td><code>triage-transcripts.ts</code></td><td>Scan transcripts for failed trials; group by failure mode (max_turns, tool errors, parse errors).</td></tr>
             <tr><td><code>validate-capability.ts</code></td><td>Quick smoke test — run a subset of capability tasks and assert pass@1 ≥ threshold.</td></tr>
             <tr><td><code>validate-e1.ts</code></td><td>Validate the E1 eval suite fixtures against their reference solutions.</td></tr>
@@ -996,10 +997,13 @@ function add(a: number, b: number): number { return a + b; }
 <span class="comment"># wrong-direction findLast) — reserved for measuring generalization (GEPA); never used for tuning</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability-heldout bun scripts/run-baseline.ts</span>
 
-<span class="comment"># realrepo = vendored real libraries (lukeed/klona deep-clone + lukeed/dequal deep-equal,</span>
-<span class="comment"># both MIT, zero-dep) with seeded bugs and authored bun:test oracles — tests real-world</span>
-<span class="comment"># coding (multi-file retrieval, library internals) beyond the synthetic textkit fixtures</span>
+<span class="comment"># realrepo = 12 vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam,</span>
+<span class="comment"># tinycalc — all MIT, zero-dep) with one seeded bug each + authored bun:test oracles — tests</span>
+<span class="comment"># real-world coding (multi-file retrieval, library internals) beyond the synthetic textkit fixtures</span>
 <span class="cmd">SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</span>
+<span class="comment"># Validate every realrepo task is sound: BASE fails (bug real), BASE+solution passes (fix real),</span>
+<span class="comment"># pickTargetFunction aims at a real fn in each buggy file. No model — fast, deterministic, CI-safe.</span>
+<span class="cmd">bun scripts/validate-realrepo-tasks.ts</span>
       </div>
 
       <h3 class="doc-section__subheading">Evolve the system prompt with GEPA</h3>

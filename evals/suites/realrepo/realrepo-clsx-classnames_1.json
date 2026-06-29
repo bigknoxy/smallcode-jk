@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-clsx-classnames_1",
+  "desc": "In the real clsx className-builder library (src/index.js), the object-form branch includes EVERY key regardless of its value — clsx({ a: 1, b: 0 }) wrongly yields 'a b' instead of 'a'. The truthiness check on the value was dropped. Fix the single condition in the object branch so that tests/clsx.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-clsx-classnames_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/clsx.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "clsx", "classnames", "wrong-condition"],
+  "reference_solution": "realrepo-clsx-classnames_1-solution/"
+}

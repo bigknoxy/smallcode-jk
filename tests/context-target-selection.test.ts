@@ -75,6 +75,33 @@ function syms_(src: string) {
   return extractSymbols("src/x.ts", src, "typescript");
 }
 
+// ---------------------------------------------------------------------------
+// Real-fixture guards. The inline MRI_LIKE shape above proves the LOGIC; these
+// assert the ACTUAL realrepo fixtures still target the bug-containing function,
+// so fixture drift (a regenerated source, a renamed helper) can't silently
+// re-open the mri `toVal` mis-target or the dequal decoy-file confusion. Pure
+// selection — no model. Idempotent: reads the committed fixture sources.
+// ---------------------------------------------------------------------------
+const FIXTURES = `${import.meta.dir}/../evals/fixtures`;
+
+describe("pickTargetFunction on real realrepo fixtures", () => {
+  it("mri-flags: targets the dominant `default` parser, not the toVal helper", async () => {
+    const src = await Bun.file(`${FIXTURES}/realrepo-mri-flags_1/src/index.js`).text();
+    const syms = extractSymbols("src/index.js", src, "javascript");
+    const query =
+      "the next-arg lookahead check is inverted; fix the single comparison on the val= line in the arg parser";
+    expect(pickTargetFunction(syms, src, query)).toBe("default");
+  });
+
+  it("dequal: targets the dominant `dequal` fn in the test-imported index.js", async () => {
+    const src = await Bun.file(`${FIXTURES}/realrepo-dequal-multifile_1/src/index.js`).text();
+    const syms = extractSymbols("src/index.js", src, "javascript");
+    const query =
+      "deep-equal wrongly reports arrays of different lengths as equal when shorter is a prefix; fix the array-comparison length check";
+    expect(pickTargetFunction(syms, src, query)).toBe("dequal");
+  });
+});
+
 describe("findDefinitionLines default anchor", () => {
   it("anchors the 'default' target on the `export default function` line", () => {
     const lines = MRI_LIKE.split("\n");

@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-regexparam-route_1",
+  "desc": "In the real regexparam route-pattern compiler (src/index.js), static path segments are appended WITHOUT their leading slash, so parse('/foo/bar') builds the regex /^foobar\\/?$/ which fails to match '/foo/bar'. Fix the single string concatenation in the static-segment branch of parse() so that tests/regexparam.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-regexparam-route_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/regexparam.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "regexparam", "router", "missing-prefix"],
+  "reference_solution": "realrepo-regexparam-route_1-solution/"
+}

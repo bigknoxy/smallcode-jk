@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-klona-map_1",
+  "desc": "In the real klona deep-clone library (src/index.js), the Map branch copies each entry's VALUE by reference instead of recursively cloning it: klona(new Map([['a', {n:1}]])) returns a Map whose value is the SAME object as the original, so mutating the clone mutates the source. Fix the single call in the Map branch so the value is deep-cloned and tests/klona.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-klona-map_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/klona.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "klona", "deep-clone", "missing-recursion"],
+  "reference_solution": "realrepo-klona-map_1-solution/"
+}

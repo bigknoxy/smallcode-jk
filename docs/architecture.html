@@ -609,18 +609,27 @@ flowchart TD
         </div>
       </div>
       <p>
-        The <code>realrepo</code> suite (7 tasks) evaluates the harness on REAL vendored libraries —
+        The <code>realrepo</code> suite (12 tasks) evaluates the harness on REAL vendored libraries —
         <a href="https://github.com/lukeed/klona" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/klona</a>
-        (deep-clone, 4 tasks),
+        (deep-clone, 5 tasks incl. Map deep-clone),
         <a href="https://github.com/lukeed/dequal" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/dequal</a>
-        (deep-equal),
+        (deep-equal, array + object branches),
         <a href="https://github.com/lukeed/mri" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/mri</a>
-        (arg parser), all MIT, zero-dep — plus a hand-built two-file <code>tinycalc</code> arithmetic
+        (arg parser),
+        <a href="https://github.com/lukeed/clsx" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/clsx</a>
+        (classNames),
+        <a href="https://github.com/lukeed/dset" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/dset</a>
+        (deep-set),
+        <a href="https://github.com/lukeed/regexparam" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/regexparam</a>
+        (route compiler), all MIT, zero-dep — plus a hand-built two-file <code>tinycalc</code> arithmetic
         library (<code>realrepo-tinycalc-tokenfield_1</code>) whose fix requires a genuine
         <strong>cross-file edit</strong>: the parser reads the wrong token field, and the correct
-        name is defined only by the lexer's token contract in a sibling file. Bugs are real and seeded,
-        graded by authored <code>bun:test</code> oracles. Tasks require genuine multi-file retrieval and
-        correct reasoning about library internals, beyond the synthetic textkit fixtures.
+        name is defined only by the lexer's token contract in a sibling file. Each task seeds one real,
+        localized bug across varied archetypes (operator inversion, off-by-one, missing guard, dropped
+        recursion, missing prefix), graded by authored <code>bun:test</code> oracles. Every task is
+        integrity-checked by <code>scripts/validate-realrepo-tasks.ts</code> (base fails, fix passes,
+        retrieval targets a real fn). Tasks require genuine multi-file retrieval and correct reasoning
+        about library internals, beyond the synthetic textkit fixtures.
         Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code> and swap models with
         <code>SMALLCODE_MODEL=qwen2.5-coder:3b</code> (or <code>:7b</code>). Honest framing: the Qwen
         coders ace several real-lib bugs (klona) where the reasoning model scored 0/10; the remaining
@@ -1202,7 +1211,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-28</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-29</span>
   </div>
 </footer>
 

@@ -761,7 +761,7 @@
           <li>Best-of-N + strategy-seeded diversity — closes variance gap</li>
           <li>GEPA prompt-optimization seam — evolve better prompts automatically</li>
           <li>Offline skill distillation — mine passing sessions into a seed skill block injected alongside the system prompt</li>
-          <li>Real-repo eval layer — evaluated on vendored real libraries (lukeed/klona, lukeed/dequal) with authored bun:test oracles, not only synthetic fixtures</li>
+          <li>Real-repo eval layer — 12 tasks on vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + a 2-file tinycalc) with authored bun:test oracles, not only synthetic fixtures; every task integrity-checked by scripts/validate-realrepo-tasks.ts</li>
           <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.52 / 0.73 overall (mri-flags 0/10 = honest bug-localization ceiling; dequal 0.10&#8594;0.30 under BoN=3)</li>
         </ul>
       </div>
