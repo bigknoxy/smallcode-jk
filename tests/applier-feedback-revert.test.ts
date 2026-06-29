@@ -428,10 +428,14 @@ describe("FIX2 regressed flag + synthetic newFailures (real oracle, no model)", 
 
     const verdict = await runTieredOracle(dir, { baseline });
     expect(verdict.outcome).toBe("failing");
-    // No parseable new (fail) line, yet regressed is TRUE via the count guard.
+    // No parseable new (fail) line, yet regressed is TRUE. This crash is a missing
+    // import → R4 classifies it as an introduced load error (a hard regression even
+    // though the red-count did not rise), surfacing the build-error entry.
     expect(verdict.regressed).toBe(true);
     // A synthetic informative entry is surfaced for the model + revert warning.
-    expect(verdict.newFailures?.some((f) => f.includes("unparseable failure"))).toBe(true);
+    expect(
+      verdict.newFailures?.some((f) => f.includes("build error") || f.includes("unparseable failure")),
+    ).toBe(true);
     // The loop's revert gate fires (assuming an applied edit captured an original).
     expect(revertGate(verdict, 1)).toBe(true);
   }, 60_000);

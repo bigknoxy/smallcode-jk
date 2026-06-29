@@ -429,7 +429,7 @@ flowchart TD
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
     EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
-    ORACLE --> REGRESSED{verdict.regressed?\nnewFailures present OR\ntotal red > baseline red}
+    ORACLE --> REGRESSED{verdict.regressed?\nnewFailures present OR\ntotal red > baseline red OR\nR4: introduced load/compile error\n(SMALLCODE_VALIDATE_EDIT, default on)}
     REGRESSED -- yes --> REVERT[revertFiles\nrestore pre-turn content\nvia ApplyResult.effectivePath\n+ originalContent\nfold stall signature onto prior turn]
     REVERT --> WARNMODEL[feed revert notice to next turn\nYour edit was REVERTED — broke\ntests that were passing before]
     WARNMODEL --> GOAL
