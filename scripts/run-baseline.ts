@@ -619,7 +619,15 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  console.error("[run-baseline] ERROR:", err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // All work is awaited and flushed by here (metrics appended, tmp removed).
+    // Force exit: the Ollama HTTP client keeps a keep-alive socket open, which
+    // otherwise leaves the event loop alive and hangs the process indefinitely
+    // (blocking any driver that pipes/waits on this script, e.g. A/B runners).
+    process.exit(0);
+  })
+  .catch((err: unknown) => {
+    console.error("[run-baseline] ERROR:", err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
