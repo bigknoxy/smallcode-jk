@@ -88,22 +88,39 @@ export function buildTurnPrompt(
   const renderFailure = failingTurn?.diagnostic && !opts?.answerNow;
   if (renderFailure) {
     const d = failingTurn!.diagnostic!;
-    parts.push("\n## FAILING TEST — fix exactly this");
-    parts.push("**Failure (fix THIS):**");
-    const hasValues = d.expected !== undefined || d.actual !== undefined;
-    if (hasValues) {
-      // Lead with a stark one-line mismatch — the localization anchor — BEFORE any
-      // prose, so it is the first concrete thing the model reads. The arrow form
-      // is intentionally distinct from renderDiagnostic's two-line Expected:/
-      // Received: pair below, so the fact is reinforced, not duplicated verbatim.
-      const exp = d.expected ?? "(no value)";
-      const act = d.actual ?? "(no value)";
-      parts.push(`The test wants \`${exp}\` but the code produces \`${act}\`.`);
+    // R4: a load/compile error (missing module, parse error) means the code never
+    // ran — there is no expected/received to localize. Lead with an unambiguous
+    // BUILD ERROR directive so the model fixes the import/syntax instead of
+    // re-emitting the same hallucinated module (the dogfood `std/strings` loop).
+    const isBuildError =
+      d.errorType === "module-load" ||
+      d.errorType === "SyntaxError" ||
+      (d.errorType?.startsWith("TS") ?? false) ||
+      /Cannot find (?:module|package)|SyntaxError|Transpilation failed/i.test(d.message);
+    if (isBuildError) {
+      parts.push("\n## BUILD ERROR — your code does not compile/load");
       parts.push(
-        "The bug is the single line whose value produces `Received` where the test wants `Expected`. Find and change ONLY that line so it yields `Expected`. Do not touch correct lines.",
+        "Your last edit did NOT run — the file failed to compile or an import could not be resolved, so NO test executed. Fix this first. Do NOT import modules that don't exist; use built-in JavaScript/TypeScript APIs (e.g. `String.prototype.replace`, `RegExp`). Re-check every `import` line.",
       );
+      parts.push(renderDiagnostic(d));
+    } else {
+      parts.push("\n## FAILING TEST — fix exactly this");
+      parts.push("**Failure (fix THIS):**");
+      const hasValues = d.expected !== undefined || d.actual !== undefined;
+      if (hasValues) {
+        // Lead with a stark one-line mismatch — the localization anchor — BEFORE any
+        // prose, so it is the first concrete thing the model reads. The arrow form
+        // is intentionally distinct from renderDiagnostic's two-line Expected:/
+        // Received: pair below, so the fact is reinforced, not duplicated verbatim.
+        const exp = d.expected ?? "(no value)";
+        const act = d.actual ?? "(no value)";
+        parts.push(`The test wants \`${exp}\` but the code produces \`${act}\`.`);
+        parts.push(
+          "The bug is the single line whose value produces `Received` where the test wants `Expected`. Find and change ONLY that line so it yields `Expected`. Do not touch correct lines.",
+        );
+      }
+      parts.push(renderDiagnostic(d));
     }
-    parts.push(renderDiagnostic(d));
   }
 
   // Deterministic edit-format directive. The harness — not the model — decides

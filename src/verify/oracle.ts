@@ -88,12 +88,43 @@ export interface TestBaseline {
    * so a new crash can never be mistaken for "solved".
    */
   redCount: number;
+  /**
+   * R4: did the suite already fail to LOAD/COMPILE at baseline? If so, an edit
+   * that also fails to load is NOT a new regression (the repo was broken before
+   * the agent touched it), so the load-error guard must not fire.
+   */
+  loadError: boolean;
 }
 
 /** Parse bun's summary red count: `N fail` + `N error`. Exported for testing. */
 export function parseRedCount(output: string): number {
   return num(output.match(/(\d+)\s+fail/i)) + num(output.match(/(\d+)\s+error/i));
 }
+
+/**
+ * R4 validate-before-commit. True when the suite failed to LOAD/COMPILE rather
+ * than merely failing assertions — a missing module, a transpile/parse error, an
+ * unhandled error before any test ran. These matter because a non-loading suite
+ * runs FEWER tests, so its red-count DROPS below baseline and the count-regression
+ * guard mistakes a broken edit for progress (the dogfood `std/strings` failure:
+ * baseline 4 red → broken 2 red → "improved", edit kept, repo left non-loading).
+ * Detecting it lets the loop treat an introduced load error as a hard regression
+ * regardless of count. Conservative signatures only — never a normal assertion.
+ * Exported for testing.
+ */
+export function hasLoadError(output: string): boolean {
+  const cleaned = output.replace(/\x1b\[[0-9;]*m/g, "");
+  return /Cannot find (?:module|package)|error: Cannot find|SyntaxError|Transpilation failed|Parse error|Unhandled error between tests|error: Expected (?:";"|expression|"\)")/i.test(
+    cleaned,
+  );
+}
+
+/**
+ * R4 master switch. ON by default — keeping a non-compiling edit is never correct.
+ * Set SMALLCODE_VALIDATE_EDIT=0 to restore the old count-only behaviour (used as
+ * the baseline arm of the R4 A/B).
+ */
+const VALIDATE_EDIT = process.env["SMALLCODE_VALIDATE_EDIT"] !== "0";
 
 export type TestState = "green" | "red" | "absent";
 
@@ -134,6 +165,7 @@ export function captureTestBaseline(repoRoot: string): TestBaseline {
     failingIds: parseFailingTestIds(result.output),
     hadAnyTests: state !== "absent",
     redCount: parseRedCount(result.output),
+    loadError: hasLoadError(result.output),
   };
 }
 
@@ -211,18 +243,30 @@ export async function runTieredOracle(
     // parseable `(fail)` lines (a crash/module-load error shows only in bun's
     // summary counts). Surface a synthetic newFailures entry in the latter case so
     // the model-facing list — and the loop's ⚠ revert warning — is informative.
+    // R4: an INTRODUCED load/compile error is a hard regression even when the
+    // red-count fell (a non-loading suite runs fewer tests). Without this the
+    // count guard reads "fewer reds = progress" and keeps a broken edit.
+    const introducedLoadError =
+      VALIDATE_EDIT && hasLoadError(test.result.output) && opts.baseline?.loadError !== true;
+
     const reportedFailures = [...newFailures];
-    if (countRegression && newFailures.length === 0) {
+    if (introducedLoadError && newFailures.length === 0) {
+      reportedFailures.push("<build error: your last edit does not compile/load — the suite never ran>");
+    } else if (countRegression && newFailures.length === 0) {
       reportedFailures.push(
         `<unparseable failure: ${currentRed - baselineRed} more test(s) red than baseline>`,
       );
     }
-    const regressed = newFailures.length > 0 || countRegression;
+    const regressed = newFailures.length > 0 || countRegression || introducedLoadError;
 
-    // Build focused feedback: lead with new failures, then pre-existing reds.
-    const stalledOnBaseline = newFailures.length === 0 && !countRegression;
-    const feedbackBody =
-      newFailures.length > 0
+    // Build focused feedback: lead with build errors, then new failures, then
+    // pre-existing reds. R4 build error is checked FIRST — it's the most
+    // actionable signal and a non-loading suite makes the count-based messages
+    // misleading.
+    const stalledOnBaseline = newFailures.length === 0 && !countRegression && !introducedLoadError;
+    const feedbackBody = introducedLoadError
+      ? `BUILD ERROR — your last edit does not compile/load, so the test suite never ran. Fix the import/syntax (do NOT import modules that don't exist; use built-in JS/TS APIs):\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+      : newFailures.length > 0
         ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
         : countRegression
           ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}`
