@@ -880,15 +880,15 @@ flowchart TD
           <tbody>
             <tr>
               <td class="td-name">qwen2.5-coder:3b</td>
-              <td>realrepo</td>
-              <td><span class="badge badge-green">0.52</span></td>
-              <td>Recommended production model. Aces klona tasks (10/10 1-turn) where VibeThinker was 0/10.</td>
+              <td>realrepo (12 tasks, n=10)</td>
+              <td><span class="badge badge-green">0.70</span></td>
+              <td>Recommended production model. Aces klona tasks (10/10 1-turn) where VibeThinker was 0/10. 11/12 nonzero.</td>
             </tr>
             <tr>
               <td class="td-name">qwen2.5-coder:7b</td>
-              <td>realrepo</td>
-              <td><span class="badge badge-green">0.73</span></td>
-              <td>Larger arm. Same harness, no code changes.</td>
+              <td>realrepo (12 tasks, n=10)</td>
+              <td><span class="badge badge-green">0.88</span></td>
+              <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs). Cracks dset/regexparam; mri-flags still 0.10 (localization ceiling).</td>
             </tr>
             <tr>
               <td class="td-name">qwen-3b / qwen-7b</td>
@@ -1091,7 +1091,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.52. Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.70 (12 tasks, n=10). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder:7b</code></td>
@@ -1102,7 +1102,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.73. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.88 (12 tasks, n=10) — SIGNIFICANT over 3b. top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>vibethinker-3b</code></td>

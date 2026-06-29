@@ -674,7 +674,7 @@
         <div class="hero__stat-callout__value">0.828</div>
         <div class="hero__stat-callout__text">
           <strong>HumanEval-TS pass@1</strong>
-          Full 159 problems, k=3 (VibeThinker-3B origin baseline); qwen-3b/-7b realrepo: 0.52 / 0.73
+          Full 159 problems, k=3 (VibeThinker-3B origin baseline); qwen-3b/-7b realrepo (12 tasks, n=10): 0.70 / 0.88
         </div>
       </div>
 
@@ -737,7 +737,7 @@
           <strong style="color: var(--text-primary);">0.828 HumanEval-TS pass@1</strong> baseline and revealed a
           "think-only" reasoning spiral (model burns its generation budget inside &lt;think&gt;, emits no code, 0/10 on some real-lib bugs).
           We confirmed the HARNESS, not the model, does the work by swapping to qwen2.5-coder:3b — same size, no think-only, 30-60x faster —
-          and rerunning the realrepo suite: <strong style="color: var(--text-primary);">qwen-3b 0.52, qwen-7b 0.73</strong>.
+          and rerunning the realrepo suite (12 tasks, n=10): <strong style="color: var(--text-primary);">qwen-3b 0.70, qwen-7b 0.88</strong>.
           VibeThinker still supported via <code>SMALLCODE_MODEL=vibethinker-3b</code>.
         </p>
         <p>
@@ -762,7 +762,7 @@
           <li>GEPA prompt-optimization seam — evolve better prompts automatically</li>
           <li>Offline skill distillation — mine passing sessions into a seed skill block injected alongside the system prompt</li>
           <li>Real-repo eval layer — 12 tasks on vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + a 2-file tinycalc) with authored bun:test oracles, not only synthetic fixtures; every task integrity-checked by scripts/validate-realrepo-tasks.ts</li>
-          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.52 / 0.73 overall (mri-flags 0/10 = honest bug-localization ceiling; dequal 0.10&#8594;0.30 under BoN=3)</li>
+          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.70 / 0.88 overall (12 tasks, n=10; 7b SIGNIFICANT over 3b — the new dset/regexparam tasks are the CI-significant discriminators; mri-flags still ~0/10 = honest bug-localization ceiling even at 7b)</li>
         </ul>
       </div>
     </div>
@@ -993,15 +993,15 @@
         <tbody>
           <tr>
             <td class="td-name">qwen2.5-coder:3b</td>
-            <td>realrepo</td>
-            <td class="td-pass">0.52</td>
-            <td>Vendored real libraries (lukeed/klona, lukeed/dequal) with authored bun:test oracles</td>
+            <td>realrepo (12 tasks, n=10)</td>
+            <td class="td-pass">0.70</td>
+            <td>Vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + tinycalc) with authored bun:test oracles. 11/12 nonzero.</td>
           </tr>
           <tr>
             <td class="td-name">qwen2.5-coder:7b</td>
-            <td>realrepo</td>
-            <td class="td-pass">0.73</td>
-            <td>Larger model arm; same harness, no code changes</td>
+            <td>realrepo (12 tasks, n=10)</td>
+            <td class="td-pass">0.88</td>
+            <td>Larger arm, same harness, no code changes — SIGNIFICANT over 3b (non-overlapping CIs); cracks dset/regexparam. mri-flags still 0.10 (localization ceiling).</td>
           </tr>
           <tr>
             <td class="td-name">qwen-3b / qwen-7b</td>
