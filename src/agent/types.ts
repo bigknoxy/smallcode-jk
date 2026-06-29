@@ -60,6 +60,14 @@ export interface TurnRecord {
   /** Structured diagnostic for this turn's failure, if any. */
   diagnostic?: FailureDiagnostic;
   /**
+   * R2 externalize-localization. When a failure's stack trace reached a source
+   * line (a runtime throw), the loop reads a tight window around it and stores it
+   * here so the next prompt can show the model the EXACT line that failed — the
+   * `where` a small model cannot localize itself. Only set when
+   * SMALLCODE_LOCALIZE is enabled and a source frame was present.
+   */
+  failureLocation?: { file: string; line: number; window: string };
+  /**
    * Set when this turn's applied edit was ROLLED BACK because it regressed
    * previously-green tests. `newFailures` lists the tests that flipped red. The
    * edited files have been restored to their pre-turn content, so the next

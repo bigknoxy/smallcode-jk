@@ -121,6 +121,18 @@ export function buildTurnPrompt(
       }
       parts.push(renderDiagnostic(d));
     }
+    // R2 externalize-localization: when the stack trace reached a source line, show
+    // the exact failing line + a tight window. This hands the small model the
+    // `where` it cannot localize itself — only set for runtime throws (a value
+    // mismatch's trace stops at the test line and carries no location).
+    if (failingTurn!.failureLocation) {
+      const loc = failingTurn!.failureLocation;
+      parts.push(`\n## FAILURE LOCATION — the error was thrown at \`${loc.file}:${loc.line}\``);
+      parts.push("Fix the marked line (or what feeds it). Edit ONLY this region:");
+      parts.push("```");
+      parts.push(loc.window);
+      parts.push("```");
+    }
   }
 
   // Deterministic edit-format directive. The harness — not the model — decides

@@ -16,6 +16,46 @@ export interface FailureDiagnostic {
   errorType?: string;
   /** Trimmed span of the failure block, capped ~600 chars */
   raw: string;
+  /**
+   * R2 externalize-localization. Absolute path of the first SOURCE stack frame
+   * (a runtime throw points here, e.g. `at risky (/repo/src/calc.ts:5:35)`).
+   * Populated ONLY when the trace reaches a non-test, non-node_modules source
+   * file — a pure assertion mismatch's trace stops at the test line, so this stays
+   * undefined and no (wrong) location is surfaced. The loop maps it to a pinned
+   * window so the small model gets the WHERE it cannot itself localize.
+   */
+  sourceFile?: string;
+  /** 1-based line of the source frame above. */
+  sourceLine?: number;
+}
+
+/**
+ * R2: pull the first SOURCE stack frame from `bun test` output. Stack lines look
+ * like `      at <name> (/abs/path/file.ts:LINE:COL)` or `      at /abs/file.ts:L:C`.
+ * We return the FIRST frame whose file is real source — skipping test/spec files
+ * (a value-assertion trace stops there and is NOT the bug), node_modules, and
+ * bun/node internals. Returns null when no source frame exists (the common case
+ * for pure assertion mismatches — deliberately so, to avoid surfacing the test
+ * line as a false bug location). Pure; exported for testing.
+ */
+export function extractSourceFrame(output: string): { file: string; line: number } | null {
+  const cleaned = output.replace(/\x1b\[[0-9;]*m/g, "");
+  // `at [name ](path:line:col)` OR `at path:line:col`
+  const frameRe = /^\s*at\s+(?:.*?\()?((?:\/|[A-Za-z]:\\)[^()\n]+?):(\d+):(\d+)\)?\s*$/gm;
+  for (const m of cleaned.matchAll(frameRe)) {
+    const file = m[1] ?? "";
+    if (!file) continue;
+    if (/node_modules|[/\\]bun:|^bun:|node:internal/.test(file)) continue;
+    if (isTestSpecPath(file)) continue;
+    const line = parseInt(m[2] ?? "0", 10);
+    if (line > 0) return { file, line };
+  }
+  return null;
+}
+
+/** Test/spec file heuristic, kept local to avoid a cross-module import. */
+function isTestSpecPath(p: string): boolean {
+  return /\.(test|spec)\.[cm]?[jt]sx?$|[/\\]__tests__[/\\]|[/\\]tests?[/\\]/.test(p);
 }
 
 /** Strip ANSI escape sequences from output (insurance against colored output). */
@@ -33,6 +73,11 @@ export function extractFirstFailure(output: string): FailureDiagnostic | null {
 
   // Fix 5: strip ANSI at entry point (latent insurance)
   output = stripAnsi(output);
+
+  // R2: first source stack frame, if the trace reaches one (runtime throws do;
+  // pure assertion mismatches do not). Spread into the throw/fail returns below.
+  const frame = extractSourceFrame(output);
+  const frameFields = frame ? { sourceFile: frame.file, sourceLine: frame.line } : {};
 
   // -------------------------------------------------------------------------
   // TypeScript diagnostic path (Tier-2 typecheck output):
@@ -91,6 +136,7 @@ export function extractFirstFailure(output: string): FailureDiagnostic | null {
         message: errLine,
         errorType,
         raw,
+        ...frameFields,
       };
     }
 
@@ -253,6 +299,10 @@ export function extractFirstFailure(output: string): FailureDiagnostic | null {
     message,
     errorType,
     raw,
+    // Only attach a location when this failure has NO expected/actual (a runtime
+    // throw, not a value mismatch). A value-mismatch trace points at the test
+    // line, not the bug — surfacing it would mislead, so suppress it there.
+    ...(expected === undefined && actual === undefined ? frameFields : {}),
   };
 }
 

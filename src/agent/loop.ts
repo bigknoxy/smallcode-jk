@@ -18,6 +18,40 @@ import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./
 const STALL_LIMIT = 2;
 const MAX_REDRAFTS = 2;
 
+// R2 externalize-localization (A/B-gated). When a failure's stack trace reached a
+// source line (a runtime throw), surface a tight window around that exact line in
+// the next prompt — the `where` a small model can't localize itself. Off by
+// default → byte-identical to the prior loop, so the A/B baseline arm is clean.
+const LOCALIZE = process.env["SMALLCODE_LOCALIZE"] === "1";
+
+/**
+ * Read a tight window around a 1-based source line, marking the failing line.
+ * Returns null on any read error or an out-of-range line. Pure-ish (one read).
+ */
+async function readFailureWindow(
+  absFile: string,
+  line: number,
+  repoRoot: string,
+  radius = 6,
+): Promise<{ file: string; line: number; window: string } | null> {
+  try {
+    const text = await Bun.file(absFile).text();
+    const lines = text.split("\n");
+    if (line < 1 || line > lines.length) return null;
+    const lo = Math.max(1, line - radius);
+    const hi = Math.min(lines.length, line + radius);
+    const rel = path.relative(repoRoot, absFile);
+    const body = [];
+    for (let n = lo; n <= hi; n++) {
+      const marker = n === line ? "  ⟵ FAILED HERE" : "";
+      body.push(`${n}: ${lines[n - 1]}${marker}`);
+    }
+    return { file: rel, line, window: body.join("\n") };
+  } catch {
+    return null;
+  }
+}
+
 export interface LoopDependencies {
   provider: Provider;
   profile: ModelProfile;
@@ -528,6 +562,20 @@ export async function runLoop(
       state.lastFailureSignature = undefined;
     }
 
+    // R2: when the failure reached a source line (a runtime throw), read a tight
+    // window around it so the next prompt shows the model exactly where to look.
+    let failureLocation: { file: string; line: number; window: string } | undefined;
+    if (LOCALIZE && verdict?.diagnostic?.sourceFile && verdict.diagnostic.sourceLine) {
+      const abs = path.isAbsolute(verdict.diagnostic.sourceFile)
+        ? verdict.diagnostic.sourceFile
+        : path.resolve(state.repoRoot, verdict.diagnostic.sourceFile);
+      // Only surface locations inside the repo — never a node_modules/bun frame.
+      if (abs.startsWith(path.resolve(state.repoRoot) + sep)) {
+        failureLocation =
+          (await readFailureWindow(abs, verdict.diagnostic.sourceLine, state.repoRoot)) ?? undefined;
+      }
+    }
+
     const turn: TurnRecord = {
       turn: state.turns.length + 1,
       goalId: goal.id,
@@ -546,6 +594,7 @@ export async function runLoop(
       ...(turnRedrafted && { redrafted: true }),
       ...(turnAnswerNow && { answerNow: true }),
       ...(verdict?.diagnostic && { diagnostic: verdict.diagnostic }),
+      ...(failureLocation && { failureLocation }),
       ...(revertedNewFailures && { reverted: { newFailures: revertedNewFailures } }),
     };
 
