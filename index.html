@@ -875,6 +875,34 @@
     </div>
 
     <h3 style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-10); letter-spacing: 0.02em;">
+      Run-level Best-of-N — edit-reliability A/B (qwen2.5-coder:3b, n=15/task × 12 tasks, 2026-06-28)
+    </h3>
+
+    <div class="sc-table-wrap">
+      <table class="sc-table" aria-label="Best-of-N A/B results">
+        <thead>
+          <tr>
+            <th scope="col">Config</th>
+            <th scope="col">pass@1 [95% CI]</th>
+            <th scope="col">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">Single-shot (BoN=1)</td>
+            <td class="td-warn">0.84 [.78–.89]</td>
+            <td>Baseline; one full agent-loop attempt per trial</td>
+          </tr>
+          <tr>
+            <td class="td-name">Best-of-N=3 (oracle-verified)</td>
+            <td class="td-pass">0.97 [.94–.99]</td>
+            <td><strong>Significant</strong> (non-overlapping CI). Temp sweep [0.7,1.0,1.3], first deterministic-green wins. ~1.0–1.8 attempts spent/trial</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-10); letter-spacing: 0.02em;">
       HumanEval-TS — full 159 problems, k=3 (2026-06-24)
     </h3>
 
@@ -1086,8 +1114,9 @@
         <div class="feature-card__title">Best-of-N sampling</div>
         <p class="feature-card__body">
           Oracle-verified BoN wraps the agent loop with N outer samples and a temperature sweep
-          [0.7, 1.0, 1.3]. First solution to go green wins. Closes the variance gap that comes
-          with temp=1.0 sampling.
+          [0.7, 1.0, 1.3]. First solution to go green wins. Measured: edit-reliability pass@1
+          <strong>0.84 → 0.97</strong> at N=3 (significant), spending ~1.0–1.8 attempts/trial — it
+          closes the variance gap from temp=1.0 sampling.
         </p>
       </div>
 

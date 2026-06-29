@@ -671,6 +671,14 @@ flowchart TD
         rate. Wired through the same <code>runBestOfNLoop</code> the CLI ships, so the eval measures
         production behaviour. Distinct from the per-TURN candidate selection (<code>bestofn.ts</code>),
         which is off by default.
+        <strong style="color: var(--text-primary);">Measured (2026-06-28, qwen2.5-coder:3b,
+        edit-reliability, n=15/task × 12):</strong> single-shot pass@1 <code>0.84 [.78-.89]</code> →
+        BoN=3 <code>0.97 [.94-.99]</code> — non-overlapping CIs, SIGNIFICANT. The lift came from two
+        noisy tasks (<code>breakword</code> 0.53→1.00, <code>wrongreturn</code> 0.47→0.93); the ~9
+        already-saturated tasks stayed 1.00. Cost was ~1.0–1.1 attempts on saturated tasks (near-free
+        short-circuit) and 1.8 on the hardest. Honest framing: single-shot's own iid pass@3 estimate
+        already ≈ 1.00, so BoN doesn't beat the diversity ceiling — it OPERATIONALIZES it into a
+        delivered, oracle-verified green.
       </p>
     </section>
 
