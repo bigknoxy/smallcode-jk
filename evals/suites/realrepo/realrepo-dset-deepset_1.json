@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-dset-deepset_1",
+  "desc": "In the real dset deep-property-setter library (src/index.js), an off-by-one in the terminal-key check writes the value one level too shallow: dset(o, 'a.b.c', 5) produces { a: { b: 5 } } instead of { a: { b: { c: 5 } } }. Fix the single index comparison that decides when the final key is reached so that tests/dset.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-dset-deepset_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/dset.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "dset", "deep-set", "off-by-one"],
+  "reference_solution": "realrepo-dset-deepset_1-solution/"
+}
