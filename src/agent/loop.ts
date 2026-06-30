@@ -7,7 +7,7 @@ import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
-import { captureTestBaseline, runTieredOracle } from "@/verify/oracle.ts";
+import { captureTestBaseline, escalateBrokenClean, runTieredOracle } from "@/verify/oracle.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
@@ -441,6 +441,14 @@ export async function runLoop(
     let verdict: Awaited<ReturnType<typeof runTieredOracle>> | undefined;
     try {
       verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
+      // Oracle-free safety: a no-test "clean" turn whose static confidence is
+      // "broken" means THIS edit does not parse — accepting it would leave the
+      // repo non-compiling even though no test flagged it. escalateBrokenClean
+      // converts it to a failing+regressed verdict so the existing
+      // revert-on-regression, BUILD ERROR prompt, and stall detection all fire —
+      // exactly as R4 does for the test-backed load-error case, generalized to
+      // untested repos. No-op when confidence is absent or not "broken".
+      verdict = escalateBrokenClean(verdict);
       toolResults.push({
         name: "run_tests",
         success: verdict.outcome === "solved",

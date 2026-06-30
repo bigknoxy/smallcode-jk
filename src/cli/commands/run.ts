@@ -323,27 +323,28 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     }
   }
 
-  // 12. Show completion or error — honest verdict only
+  // 12. Show completion or error — honest verdict only.
   const classification = classifyCompletion(finalState, statePath);
   if (classification.ok) {
     progress.showComplete(finalState);
-  } else if (classification.tone === "warn") {
-    // Oracle-free honesty: an unverified finish often means no test covered the
-    // change (not that tests failed). Surface the deterministic static-confidence
-    // — what WAS checked — so the user gets a graded signal, not a bare warning.
-    let msg = classification.message;
-    try {
-      const verdict = await runTieredOracle(repoRoot, {});
-      if (verdict.outcome === "clean" && verdict.confidence) {
-        msg = `No test covers this change — ${renderConfidence(verdict.confidence)}. Review ${statePath}`;
-      }
-    } catch {
-      // fall back to the plain warning
-    }
-    progress.showWarn(msg);
-    process.exit(1);
-  } else {
-    progress.showError(classification.message);
-    process.exit(1);
+    return;
   }
+
+  // Oracle-free honesty: a non-verified end (unverified finish OR max_turns) often
+  // just means NO TEST covered the change — not that anything failed. Run one final
+  // check; if there is no test oracle, report the deterministic static-confidence
+  // (what WAS checked) instead of a bare "without solving". Applies to both the
+  // warn (model finished) and error (max_turns) cases.
+  let msg = classification.message;
+  try {
+    const verdict = await runTieredOracle(repoRoot, {});
+    if (verdict.outcome === "clean" && verdict.confidence) {
+      msg = `No test covers this change — ${renderConfidence(verdict.confidence)}. Review ${statePath}`;
+    }
+  } catch {
+    // keep the plain message
+  }
+  if (classification.tone === "warn") progress.showWarn(msg);
+  else progress.showError(msg);
+  process.exit(1);
 }
