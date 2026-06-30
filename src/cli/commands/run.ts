@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
+import { workingChanges } from "./review.ts";
 import { renderConfidence } from "../../verify/confidence.ts";
 import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import { planTask } from "../../agent/planner.ts";
@@ -325,6 +326,18 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
 
   // 12. Show completion or error — honest verdict only.
   const classification = classifyCompletion(finalState, statePath);
+
+  // R9 dev-UX: end every run with a review/undo summary so the agent is never a
+  // black box — the user sees what changed and how to take it back.
+  const changes = workingChanges(repoRoot);
+  if (changes.hasChanges) {
+    process.stderr.write(
+      `[smallcode] Changed:\n${changes.stat ? `${changes.stat}\n` : ""}` +
+        (changes.untracked.length ? `  new: ${changes.untracked.join(", ")}\n` : "") +
+        "[smallcode] Review: smallcode diff --repo <repo>  ·  Undo: smallcode undo --repo <repo>\n",
+    );
+  }
+
   if (classification.ok) {
     progress.showComplete(finalState);
     return;
