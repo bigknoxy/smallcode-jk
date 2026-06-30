@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
+import { renderConfidence } from "../../verify/confidence.ts";
 import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
@@ -327,7 +328,19 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   if (classification.ok) {
     progress.showComplete(finalState);
   } else if (classification.tone === "warn") {
-    progress.showWarn(classification.message);
+    // Oracle-free honesty: an unverified finish often means no test covered the
+    // change (not that tests failed). Surface the deterministic static-confidence
+    // — what WAS checked — so the user gets a graded signal, not a bare warning.
+    let msg = classification.message;
+    try {
+      const verdict = await runTieredOracle(repoRoot, {});
+      if (verdict.outcome === "clean" && verdict.confidence) {
+        msg = `No test covers this change — ${renderConfidence(verdict.confidence)}. Review ${statePath}`;
+      }
+    } catch {
+      // fall back to the plain warning
+    }
+    progress.showWarn(msg);
     process.exit(1);
   } else {
     progress.showError(classification.message);
