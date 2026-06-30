@@ -4,11 +4,17 @@ export function collectMetrics(transcript: Transcript): TrialMetrics {
   let nToolCalls = 0;
   let nPromptTokens = 0;
   let nCompletionTokens = 0;
-
+  // editFormatOk = did the model produce, on ANY turn, an edit block that PARSED
+  // and APPLIED cleanly? This is the Aider-leaderboard "correct edit format" axis
+  // — averaged across trials it gives the edit-format-success %, the metric that
+  // most directly tracks smallcode's harness thesis (a weak model fails on edit
+  // format, not reasoning). Independent of whether the tests ultimately passed.
+  let editFormatOk = 0;
   for (const turn of transcript.turns) {
     nToolCalls += turn.toolCalls.length;
     nPromptTokens += turn.promptTokens;
     nCompletionTokens += turn.completionTokens;
+    if (turn.applyResults.some((ar) => ar.status === "applied")) editFormatOk = 1;
   }
 
   return {
@@ -18,6 +24,7 @@ export function collectMetrics(transcript: Transcript): TrialMetrics {
     nPromptTokens,
     nCompletionTokens,
     latencyMs: transcript.finishedAt - transcript.startedAt,
+    editFormatOk,
   };
 }
 

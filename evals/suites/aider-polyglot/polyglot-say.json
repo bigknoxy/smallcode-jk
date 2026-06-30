@@ -1,0 +1,27 @@
+{
+  "id": "polyglot-say",
+  "desc": "# Instructions\n\nGiven a number from 0 to 999,999,999,999, spell out that number in English.\n\n## Step 1\n\nHandle the basic case of 0 through 99.\n\nIf the input to the program is `22`, then the output should be `'twenty-two'`.\n\nYour program should complain loudly if given a number outside the blessed range.\n\nSome good test cases for this program are:\n\n- 0\n- 14\n- 50\n- 98\n- -1\n- 100\n\n### Extension\n\nIf you're on a Mac, shell out to Mac OS X's `say` program to talk out loud.\nIf you're on Linux or Windows, eSpeakNG may be available with the command `espeak`.\n\n## Step 2\n\nImplement breaking a number up into chunks of thousands.\n\nSo `1234567890` should yield a list like 1, 234, 567, and 890, while the far simpler `1000` should yield just 1 and 0.\n\n## Step 3\n\nNow handle inserting the appropriate scale word between those chunks.\n\nSo `1234567890` should yield `'1 billion 234 million 567 thousand 890'`\n\nThe program must also report any values that are out of range.\nIt's fine to stop at \"trillion\".\n\n## Step 4\n\nPut it all together to get nothing but plain English.\n\n`12345` should give `twelve thousand three hundred forty-five`.\n\nThe program must also report any values that are out of range.\n\nImplement the solution in say.js so that say.spec.js passes. Do not modify the test file.",
+  "setup": {
+    "repoFixture": "polyglot-say"
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": [],
+      "command": "bun test say.spec.js"
+    }
+  ],
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1",
+    "editFormatOk"
+  ],
+  "tags": [
+    "aider-polyglot",
+    "javascript",
+    "say"
+  ],
+  "reference_solution": "polyglot-say-solution/"
+}

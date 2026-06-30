@@ -252,6 +252,10 @@ interface LiveTaskMetrics {
   passedFlags: boolean[];
   avgTurns: number;
   avgTokens: number;
+  /** Fraction of trials that produced ≥1 cleanly-applied edit (Aider-style
+   * "correct edit format %"). The harness-thesis metric: a weak model fails on
+   * edit format, not reasoning. */
+  editFormatPct: number;
   /** Total think-only (truncated mid-reasoning) turns across all trials. */
   thinkOnlyTurns: number;
   /** Number of trials that hit ≥1 think-only truncation. */
@@ -391,6 +395,7 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
       : result.trials.reduce((sum, t) => sum + sel(t), 0) / result.trials.length;
   const avgTurns = avgOf((t) => t.metrics.nTurns);
   const avgTokens = avgOf((t) => t.metrics.nTotalTokens);
+  const editFormatPct = avgOf((t) => t.metrics.editFormatOk ?? 0);
 
   // Think-only truncation incidence — the premise check. How often does the
   // model burn its budget mid-reasoning and emit nothing? Per-trial counts from
@@ -408,6 +413,7 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     passedFlags,
     avgTurns,
     avgTokens,
+    editFormatPct,
     thinkOnlyTurns,
     trialsWithTruncation,
     infraDropped,
@@ -434,7 +440,7 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
   const bigK = Math.max(...metrics.flatMap((m) => Object.keys(m.passAtK).map(Number)), 1);
   const sep = `${"-".repeat(COL1)}-+-${"-".repeat(COL2)}-+-${"-".repeat(COL3)}-+-${"-".repeat(COL4)}-+-${"-".repeat(COL5)}-+-${"-".repeat(COL6)}`;
   console.log(
-    `\n${padEnd("task-id", COL1)} | ${padEnd("pass@1 [95% CI]", COL2)} | ${padEnd(`pass@${bigK} [95% CI]`, COL3)} | ${padEnd("n", COL4)} | ${padEnd("avg_turns", COL5)} | ${"think-only"}`,
+    `\n${padEnd("task-id", COL1)} | ${padEnd("pass@1 [95% CI]", COL2)} | ${padEnd(`pass@${bigK} [95% CI]`, COL3)} | ${padEnd("n", COL4)} | ${padEnd("avg_turns", COL5)} | ${padEnd("edit-fmt", 8)} | ${"think-only"}`,
   );
   console.log(sep);
   const bonActive = metrics.some((m) => m.bestOfN > 1);
@@ -446,8 +452,9 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
     const truncCol = `${m.thinkOnlyTurns} (${m.trialsWithTruncation}t)${m.infraDropped > 0 ? ` !${m.infraDropped}infra` : ""}${bonCol}`;
     const p1 = fmtPK(m.passAtK[1], m.passAtKCI[1]);
     const pK = fmtPK(m.passAtK[bigK], m.passAtKCI[bigK]);
+    const editFmt = `${(m.editFormatPct * 100).toFixed(0)}%`;
     console.log(
-      `${padEnd(m.taskId, COL1)} | ${padEnd(p1, COL2)} | ${padEnd(pK, COL3)} | ${padEnd(String(m.n), COL4)} | ${padEnd(m.avgTurns.toFixed(1), COL5)} | ${truncCol}`,
+      `${padEnd(m.taskId, COL1)} | ${padEnd(p1, COL2)} | ${padEnd(pK, COL3)} | ${padEnd(String(m.n), COL4)} | ${padEnd(m.avgTurns.toFixed(1), COL5)} | ${padEnd(editFmt, 8)} | ${truncCol}`,
     );
   }
   console.log(sep);
@@ -459,8 +466,12 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
     p: passAtKFromFlags(pooled, bigK),
     ci: bootstrapCI(pooled, bigK, { seed: CI_SEED }),
   };
+  const pooledEditFmt =
+    pooled.length > 0
+      ? metrics.reduce((s, m) => s + m.editFormatPct * m.n, 0) / metrics.reduce((s, m) => s + m.n, 0)
+      : 0;
   console.log(
-    `${padEnd("OVERALL (pooled)", COL1)} | ${padEnd(fmtPK(overall1.p, overall1.ci), COL2)} | ${padEnd(fmtPK(overallK.p, overallK.ci), COL3)} | ${padEnd(String(pooled.length), COL4)} | ${padEnd("", COL5)} |`,
+    `${padEnd("OVERALL (pooled)", COL1)} | ${padEnd(fmtPK(overall1.p, overall1.ci), COL2)} | ${padEnd(fmtPK(overallK.p, overallK.ci), COL3)} | ${padEnd(String(pooled.length), COL4)} | ${padEnd("", COL5)} | ${padEnd(`${(pooledEditFmt * 100).toFixed(0)}%`, 8)} |`,
   );
   console.log(
     "\nCI = 95% bootstrap over n trials. Two results differ significantly only when their CIs do NOT overlap. n<8 → treat CI as indicative only; raise SMALLCODE_EVAL_N to tighten.",

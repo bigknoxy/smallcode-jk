@@ -1,0 +1,27 @@
+{
+  "id": "polyglot-complex-numbers",
+  "desc": "# Instructions\n\nA complex number is a number in the form `a + b * i` where `a` and `b` are real and `i` satisfies `i^2 = -1`.\n\n`a` is called the real part and `b` is called the imaginary part of `z`.\nThe conjugate of the number `a + b * i` is the number `a - b * i`.\nThe absolute value of a complex number `z = a + b * i` is a real number `|z| = sqrt(a^2 + b^2)`. The square of the absolute value `|z|^2` is the result of multiplication of `z` by its complex conjugate.\n\nThe sum/difference of two complex numbers involves adding/subtracting their real and imaginary parts separately:\n`(a + i * b) + (c + i * d) = (a + c) + (b + d) * i`,\n`(a + i * b) - (c + i * d) = (a - c) + (b - d) * i`.\n\nMultiplication result is by definition\n`(a + i * b) * (c + i * d) = (a * c - b * d) + (b * c + a * d) * i`.\n\nThe reciprocal of a non-zero complex number is\n`1 / (a + i * b) = a/(a^2 + b^2) - b/(a^2 + b^2) * i`.\n\nDividing a complex number `a + i * b` by another `c + i * d` gives:\n`(a + i * b) / (c + i * d) = (a * c + b * d)/(c^2 + d^2) + (b * c - a * d)/(c^2 + d^2) * i`.\n\nRaising e to a complex exponent can be expressed as `e^(a + i * b) = e^a * e^(i * b)`, the last term of which is given by Euler's formula `e^(i * b) = cos(b) + i * sin(b)`.\n\nImplement the following operations:\n\n- addition, subtraction, multiplication and division of two complex numbers,\n- conjugate, absolute value, exponent of a given complex number.\n\nAssume the programming language you are using does not have an implementation of complex numbers.\n\nImplement the solution in complex-numbers.js so that complex-numbers.spec.js passes. Do not modify the test file.",
+  "setup": {
+    "repoFixture": "polyglot-complex-numbers"
+  },
+  "graders": [
+    {
+      "type": "deterministic_tests",
+      "required": [],
+      "command": "bun test complex-numbers.spec.js"
+    }
+  ],
+  "tracked_metrics": [
+    "n_turns",
+    "n_toolcalls",
+    "n_total_tokens",
+    "pass_at_1",
+    "editFormatOk"
+  ],
+  "tags": [
+    "aider-polyglot",
+    "javascript",
+    "complex-numbers"
+  ],
+  "reference_solution": "polyglot-complex-numbers-solution/"
+}
