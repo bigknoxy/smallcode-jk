@@ -237,6 +237,7 @@ All commands are invoked via `bun run index.ts <command>` (or a compiled `smallc
 | Command | Flags | Description |
 |---|---|---|
 | `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` | Run the agent on a coding task inside the given repo directory. Ends with a diff summary + how to review/undo. |
+| `chat` | `--repo <path>` `--model <id>` `--config <path>` | Interactive multi-task session — keeps the repo index + model warm across tasks. Slash-commands: `/add` `/drop` `/files` (pin context), `/diff` `/undo` (review/revert), `/model` `/clear` `/help` `/exit`. Any other line is a coding task. |
 | `diff` | `--repo <path>` | Show what the agent changed (unified diff + any new files). |
 | `undo` | `--repo <path>` `--yes` | Revert the agent's changes (restore tracked files + delete its new files). **Dry-run without `--yes`** — prints what it would discard; committed history is never touched. |
 | `eval run` | `--suite <path>` `--model <id>` `--config <path>` `--trials <n>` `--transcripts-dir <path>` `--fixtures-root <path>` `--output json\|text` | Run an eval suite and report pass@1, pass@k, and partial scores. Exits 1 if any tasks fail. |

@@ -107,6 +107,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     return { command: "uninstall", positionals: rest, flags };
   }
 
+  if (cmd === "chat") {
+    return { command: "chat", positionals: rest, flags };
+  }
+
   if (cmd === "diff") {
     return { command: "diff", positionals: rest, flags };
   }
