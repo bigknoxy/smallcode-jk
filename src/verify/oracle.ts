@@ -167,6 +167,28 @@ export function tscHasRealErrors(output: string): boolean {
   return diagnostics.some((code) => !configCodes.has(code));
 }
 
+/**
+ * Oracle-free safety guard. A "clean" verdict (no test covered the change) whose
+ * static confidence is "broken" means the edit does not even PARSE — accepting it
+ * leaves the repo non-compiling though no test flagged it. Promote it to a
+ * failing+regressed verdict so the loop's revert-on-regression + BUILD ERROR
+ * prompt + stall machinery fire (the R4 load-error treatment, generalized to
+ * untested repos). Pure; a no-op for any other verdict. Exported for testing.
+ */
+export function escalateBrokenClean(verdict: OracleVerdict): OracleVerdict {
+  if (verdict.outcome !== "clean" || verdict.confidence?.level !== "broken") return verdict;
+  const parseErr =
+    verdict.confidence.signals.find((s) => s.startsWith("parse error")) ?? "a source file does not parse";
+  return {
+    ...verdict,
+    outcome: "failing",
+    regressed: true,
+    feedback: `BUILD ERROR — your edit does not parse, so nothing ran. ${parseErr}. Fix the syntax: balance brackets/quotes and remove stray tokens.`,
+    newFailures: ["<parse error: your edit does not compile>"],
+    diagnostic: { assertionId: "<parse-error>", message: parseErr, errorType: "SyntaxError", raw: parseErr },
+  };
+}
+
 export function captureTestBaseline(repoRoot: string): TestBaseline {
   const { state, result } = runBunTest(repoRoot);
   return {
