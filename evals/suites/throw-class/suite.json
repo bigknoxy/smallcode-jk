@@ -1,0 +1,1 @@
+{ "id": "throw-class-v1", "kind": "capability", "description": "Runtime-throw bug-fix tasks — the bug raises an exception at a source line (TypeError/off-by-one), so the stack trace localizes it. Measures R2 externalize-localization (SMALLCODE_LOCALIZE) and R4 validate-before-commit.", "defaultTrials": 1 }

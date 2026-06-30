@@ -1,0 +1,9 @@
+{
+  "id": "throw-deepget_1",
+  "desc": "deepGet() in src/deepget.ts throws a TypeError when a middle path segment is missing instead of returning undefined. Fix the reducer so tests/deepget.test.ts passes.",
+  "setup": { "repoFixture": "throw-deepget_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/deepget.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["throw-class"],
+  "reference_solution": "throw-deepget_1-solution/"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "throw-stackpeek_1",
+  "desc": "Stack.peek() in src/stack.ts throws a TypeError due to an off-by-one index into items. Fix the single index so tests/stack.test.ts passes.",
+  "setup": { "repoFixture": "throw-stackpeek_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/stack.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["throw-class"],
+  "reference_solution": "throw-stackpeek_1-solution/"
+}
