@@ -1,3 +1,4 @@
+import { computeStaticConfidence, type StaticConfidence } from "./confidence.ts";
 import { extractFirstFailure, type FailureDiagnostic } from "./failure-extract.ts";
 import { runChecker } from "./runner.ts";
 import type { CheckerConfig, CheckResult } from "./types.ts";
@@ -48,6 +49,13 @@ export interface OracleVerdict {
   baselineFailures?: string[];
   /** Structured diagnostic for the first failing assertion (set on failing paths). */
   diagnostic?: FailureDiagnostic;
+  /**
+   * Oracle-free path only: when the outcome is "clean" (no test covered the
+   * change), a deterministic static-confidence grade (typecheck + lint) so the
+   * caller can report honestly what WAS checked instead of a bare "unverified".
+   * A safety signal, not a correctness one — never set when tests verified.
+   */
+  confidence?: StaticConfidence;
 }
 
 /**
@@ -298,12 +306,14 @@ export async function runTieredOracle(
         }
       : opts.typecheck;
 
+  let tcResult: CheckResult | undefined;
   if (typecheck) {
     const tsc = await runChecker(typecheck, repoRoot);
     const real = tsc.status === "failed" && tscHasRealErrors(tsc.output);
     // Demote config/setup noise and tool-missing errors to "skipped".
     if (!real) tsc.status = tsc.status === "passed" ? "passed" : "skipped";
     checks.push(tsc);
+    tcResult = tsc;
     if (real) {
       return {
         outcome: "failing",
@@ -314,6 +324,14 @@ export async function runTieredOracle(
     }
   }
 
-  // No tests covered the change and nothing concrete failed.
-  return { outcome: "clean", checks, feedback: "" };
+  // Oracle-free path: no test covered the change and nothing concrete failed. We
+  // cannot claim correctness, so instead of a bare "clean" we attach a
+  // deterministic static-confidence (typecheck + lint) the caller can report
+  // honestly. Gate the (extra lint) work behind an env flag, default ON — it only
+  // fires when tests are ABSENT, never on a test-backed turn.
+  const confidence =
+    process.env["SMALLCODE_STATIC_CONFIDENCE"] === "0"
+      ? undefined
+      : await computeStaticConfidence(repoRoot, tcResult);
+  return { outcome: "clean", checks, feedback: "", confidence };
 }

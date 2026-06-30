@@ -83,7 +83,9 @@ export interface TrialMetrics {
   nPromptTokens: number;
   nCompletionTokens: number;
   latencyMs: number;
-  [key: string]: number;
+  /** R5: 1 if any turn applied a parseable edit cleanly, else 0 (edit-format-%). */
+  editFormatOk?: number;
+  [key: string]: number | undefined;
 }
 
 export interface TrialResult {
