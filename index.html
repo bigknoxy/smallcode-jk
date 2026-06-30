@@ -1101,6 +1101,11 @@
 
 <span class="comment"># Code a task in any repo</span>
 <span class="cmd">bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo .</span>
+
+<span class="comment"># Escalation: try 3b a few times, climb to bigger LOCAL models only on the residual.</span>
+<span class="comment"># Low-resource? Drop --escalation and run the 3b alone. Bigger box? add 7b / gemma4:12b / 32b.</span>
+<span class="comment"># (Run-level Best-of-N needs a git repo with a clean working tree — losing attempts roll back.)</span>
+<span class="cmd">smallcode run "fix the failing test" --best-of-n 3 --escalation qwen2.5-coder:3b,qwen2.5-coder:7b,gemma4:12b</span>
         </div>
       </div>
     </div>

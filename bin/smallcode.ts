@@ -26,7 +26,7 @@ function printUsage(): void {
   process.stdout.write(`smallcode v${version}
 
 Usage:
-  smallcode run <task description>
+  smallcode run <task description> [--model <id>] [--best-of-n <N>] [--escalation <m1,m2,..>]
   smallcode eval run <suite-dir> [--model <id>] [--trials <n>] [--output json|text]
   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>] [--force]
