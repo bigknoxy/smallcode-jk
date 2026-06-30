@@ -1,3 +1,4 @@
+import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import type { EditBlock } from "../../edit/types.ts";
 import type { ParsedArgs } from "../args.ts";
@@ -63,6 +64,88 @@ export function workingChanges(repo: string): { stat: string; untracked: string[
   return { stat, untracked, hasChanges: stat.length > 0 || untracked.length > 0 };
 }
 
+// --- Agent-change manifest -------------------------------------------------
+// `undo` must NOT blanket-`git restore .`/`git clean -fd` — that would discard the
+// USER's own uncommitted edits + untracked files, not just the agent's. So a run
+// records exactly which paths IT changed (relative to the pre-run dirty set) into
+// .smallcode/agent-changes.json, and undo reverts only those.
+
+interface AgentManifest {
+  tracked: string[]; // tracked files the agent modified → git restore
+  untracked: string[]; // files the agent created → delete
+}
+
+function manifestPath(repo: string): string {
+  return `${repo}/.smallcode/agent-changes.json`;
+}
+
+function gitLines(args: string[], repo: string): string[] {
+  return git(args, repo).out.split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
+/** {tracked modified, untracked} sets right now. */
+export function changedSets(repo: string): { tracked: Set<string>; untracked: Set<string> } {
+  return {
+    tracked: new Set(gitLines(["diff", "--name-only"], repo)),
+    untracked: new Set(gitLines(["ls-files", "--others", "--exclude-standard"], repo)),
+  };
+}
+
+/**
+ * After a run, record the paths the agent changed = current dirty set MINUS the
+ * `before` snapshot (so a file the USER had already dirtied is never claimed).
+ * Merges with any existing manifest so a multi-task chat session accumulates.
+ */
+export async function recordAgentChanges(
+  repo: string,
+  before: { tracked: Set<string>; untracked: Set<string> },
+): Promise<void> {
+  const now = changedSets(repo);
+  const newTracked = [...now.tracked].filter((p) => !before.tracked.has(p));
+  const newUntracked = [...now.untracked].filter((p) => !before.untracked.has(p));
+  let prev: AgentManifest = { tracked: [], untracked: [] };
+  try {
+    prev = JSON.parse(await Bun.file(manifestPath(repo)).text());
+  } catch {
+    // no prior manifest
+  }
+  const merged: AgentManifest = {
+    tracked: [...new Set([...prev.tracked, ...newTracked])],
+    untracked: [...new Set([...prev.untracked, ...newUntracked])],
+  };
+  await Bun.write(manifestPath(repo), JSON.stringify(merged));
+}
+
+export function readManifest(repo: string): AgentManifest | null {
+  try {
+    const m = JSON.parse(readFileSync(manifestPath(repo), "utf-8")) as AgentManifest;
+    if ((m.tracked?.length ?? 0) + (m.untracked?.length ?? 0) === 0) return null;
+    return m;
+  } catch {
+    return null;
+  }
+}
+
+/** Revert ONLY the agent's recorded paths. Returns what it reverted, or null. */
+export function revertAgentChanges(repo: string): AgentManifest | null {
+  const m = readManifest(repo);
+  if (!m) return null;
+  if (m.tracked.length > 0) git(["restore", "--", ...m.tracked], repo);
+  for (const p of m.untracked) {
+    try {
+      rmSync(`${repo}/${p}`, { force: true });
+    } catch {
+      // best-effort
+    }
+  }
+  try {
+    rmSync(manifestPath(repo), { force: true });
+  } catch {
+    // manifest already gone
+  }
+  return m;
+}
+
 /** `smallcode diff` — show the unified diff of what the agent changed. */
 export async function diffCommand(args: ParsedArgs): Promise<void> {
   const repo = resolve(flagString(args.flags, "repo") ?? process.cwd());
@@ -82,10 +165,11 @@ export async function diffCommand(args: ParsedArgs): Promise<void> {
 }
 
 /**
- * `smallcode undo` — revert the agent's working-tree changes. DESTRUCTIVE, so it
- * is DRY-RUN by default (prints what it would do); pass --yes to actually revert.
- * Restores tracked files (`git restore`) and deletes untracked files the agent
- * created (`git clean -fd`). Never touches committed history.
+ * `smallcode undo` — revert ONLY the files a smallcode run recorded as its own
+ * (the `.smallcode/agent-changes.json` manifest), so the user's own uncommitted
+ * edits + untracked files are NEVER touched. DRY-RUN by default; --yes applies.
+ * Restores the agent's tracked edits + deletes the agent's new files; committed
+ * history is untouched.
  */
 export async function undoCommand(args: ParsedArgs): Promise<void> {
   const repo = resolve(flagString(args.flags, "repo") ?? process.cwd());
@@ -93,27 +177,31 @@ export async function undoCommand(args: ParsedArgs): Promise<void> {
     process.stderr.write(`[smallcode] ${repo} is not a git repository — cannot undo.\n`);
     process.exit(1);
   }
-  const { stat, untracked, hasChanges } = workingChanges(repo);
-  if (!hasChanges) {
-    process.stdout.write("[smallcode] Nothing to undo — working tree is clean.\n");
+  const m = readManifest(repo);
+  if (!m) {
+    process.stdout.write(
+      "[smallcode] Nothing recorded to undo — no smallcode run changed files in this repo.\n" +
+        "(undo only reverts what a smallcode run wrote; use git to review/revert anything else.)\n",
+    );
     return;
   }
 
   if (!flagBool(args.flags, "yes")) {
     process.stdout.write(
-      "[smallcode] undo (dry-run) — this would DISCARD the following working-tree changes:\n\n" +
-        (stat ? `${stat}\n` : "") +
-        (untracked.length ? `\nUntracked files to delete:\n  ${untracked.join("\n  ")}\n` : "") +
-        "\nRe-run with --yes to apply. (Restores tracked files + deletes the agent's new files; committed history is untouched.)\n",
+      "[smallcode] undo (dry-run) — would revert ONLY these agent-changed paths (your own edits are left alone):\n" +
+        (m.tracked.length ? `\nRestore (agent-modified):\n  ${m.tracked.join("\n  ")}\n` : "") +
+        (m.untracked.length ? `\nDelete (agent-created):\n  ${m.untracked.join("\n  ")}\n` : "") +
+        "\nRe-run with --yes to apply. Committed history is untouched.\n",
     );
     return;
   }
 
-  const restore = git(["restore", "--", "."], repo);
-  const clean = git(["clean", "-fd"], repo);
-  if (!restore.ok || !clean.ok) {
-    process.stderr.write(`[smallcode] undo failed: ${(restore.out + clean.out).trim()}\n`);
-    process.exit(1);
+  const reverted = revertAgentChanges(repo);
+  if (!reverted) {
+    process.stdout.write("[smallcode] Nothing to undo.\n");
+    return;
   }
-  process.stdout.write("[smallcode] ✓ Reverted the agent's changes — working tree restored.\n");
+  process.stdout.write(
+    `[smallcode] ✓ Reverted ${reverted.tracked.length} agent edit(s) + removed ${reverted.untracked.length} agent file(s). Your own changes untouched.\n`,
+  );
 }

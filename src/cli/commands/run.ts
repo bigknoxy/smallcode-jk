@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
-import { makeInteractiveApprover, workingChanges } from "./review.ts";
+import { changedSets, makeInteractiveApprover, recordAgentChanges, workingChanges } from "./review.ts";
 import { renderConfidence } from "../../verify/confidence.ts";
 import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import { planTask } from "../../agent/planner.ts";
@@ -107,6 +107,10 @@ function git(args: string[], cwd: string): { ok: boolean; out: string } {
     (p.stdout instanceof Uint8Array ? new TextDecoder().decode(p.stdout) : "") +
     (p.stderr instanceof Uint8Array ? new TextDecoder().decode(p.stderr) : "");
   return { ok: (p.exitCode ?? 1) === 0, out };
+}
+
+function isGitRepo(repoRoot: string): boolean {
+  return git(["rev-parse", "--git-dir"], repoRoot).ok;
 }
 
 /**
@@ -270,6 +274,12 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     ...(approveEdit ? { approveEdit } : {}),
   };
 
+  // Snapshot the pre-run dirty set so we can record EXACTLY what the agent
+  // changes (vs the user's own pre-existing edits) for a safe, scoped `undo`.
+  const preRunDirty = isGitRepo(repoRoot)
+    ? changedSets(repoRoot)
+    : { tracked: new Set<string>(), untracked: new Set<string>() };
+
   // 11. Run loop — single-shot, or run-level Best-of-N (optionally with the R1
   // model-escalation ladder) when bestOfN > 1.
   let finalState: typeof state;
@@ -330,6 +340,15 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
 
   // 12. Show completion or error — honest verdict only.
   const classification = classifyCompletion(finalState, statePath);
+
+  // Record what the agent changed (vs preRunDirty) so `undo` reverts only that.
+  if (isGitRepo(repoRoot)) {
+    try {
+      await recordAgentChanges(repoRoot, preRunDirty);
+    } catch {
+      // non-fatal: undo just won't have a manifest
+    }
+  }
 
   // R9 dev-UX: end every run with a review/undo summary so the agent is never a
   // black box — the user sees what changed and how to take it back.

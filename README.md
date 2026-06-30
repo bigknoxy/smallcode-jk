@@ -38,7 +38,7 @@ If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to
 ### Verify, update, uninstall
 
 ```bash
-smallcode --version   # prints: smallcode v1.3.0
+smallcode --version   # prints: smallcode v1.4.0
 smallcode update      # re-downloads latest release (or SMALLCODE_TARBALL) and reinstalls
 smallcode uninstall   # dry-run: shows what would be removed
 smallcode uninstall --yes   # actually removes ~/.smallcode and the wrapper
@@ -239,7 +239,7 @@ All commands are invoked via `bun run index.ts <command>` (or a compiled `smallc
 | `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` | Run the agent on a coding task inside the given repo directory. Ends with a diff summary + how to review/undo. |
 | `chat` | `--repo <path>` `--model <id>` `--config <path>` | Interactive multi-task session — keeps the repo index + model warm across tasks. Slash-commands: `/add` `/drop` `/files` (pin context), `/diff` `/undo` (review/revert), `/model` `/clear` `/help` `/exit`. Any other line is a coding task. |
 | `diff` | `--repo <path>` | Show what the agent changed (unified diff + any new files). |
-| `undo` | `--repo <path>` `--yes` | Revert the agent's changes (restore tracked files + delete its new files). **Dry-run without `--yes`** — prints what it would discard; committed history is never touched. |
+| `undo` | `--repo <path>` `--yes` | Revert **only** what the agent changed — a run records its own edits to `.smallcode/agent-changes.json`, so undo restores those tracked files + deletes those new files and **never touches your own uncommitted work**. **Dry-run without `--yes`**; committed history is never touched. |
 | `eval run` | `--suite <path>` `--model <id>` `--config <path>` `--trials <n>` `--transcripts-dir <path>` `--fixtures-root <path>` `--output json\|text` | Run an eval suite and report pass@1, pass@k, and partial scores. Exits 1 if any tasks fail. |
 | `eval gate` | `--suite <path>` `--baseline <path>` `--model <id>` `--threshold <0-1>` | Regression gate: fail if pass@1 drops below `threshold` versus baseline snapshot. For use in CI. |
 | `config init` | `--out <path>` | Write a starter `smallcode.config.json` to the given path. |
@@ -383,11 +383,14 @@ smallcode's default is a single small local model (e.g. `qwen2.5-coder:3b`) — 
 It rides the Best-of-N seam: each attempt is independent and the run stops on the first oracle-green result, so a ladder spends the small model first and climbs only on failure.
 
 ```jsonc
-// smallcode.config.json
+// smallcode.config.json — escalation/bestOfN/activeModel live under the "config" key
 {
-  "activeModel": "qwen2.5-coder:3b",
-  "bestOfN": 3,
-  "escalation": ["qwen2.5-coder:3b", "qwen2.5-coder:7b", "gemma4:12b"]
+  "config": {
+    "provider": { "baseUrl": "http://localhost:11434/v1", "apiKey": "none", "timeoutMs": 120000 },
+    "activeModel": "qwen2.5-coder:3b",
+    "bestOfN": 3,
+    "escalation": ["qwen2.5-coder:3b", "qwen2.5-coder:7b", "gemma4:12b"]
+  }
 }
 ```
 ```bash
