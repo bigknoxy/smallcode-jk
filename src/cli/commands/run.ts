@@ -1,5 +1,8 @@
 import { resolve } from "node:path";
+import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
+import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
+import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
 import type { AgentConfig, AgentState } from "../../agent/types.ts";
@@ -96,6 +99,32 @@ function flagNumber(flags: Record<string, string | boolean>, key: string): numbe
   return undefined;
 }
 
+function git(args: string[], cwd: string): { ok: boolean; out: string } {
+  const p = Bun.spawnSync(["git", ...args], { cwd });
+  const out =
+    (p.stdout instanceof Uint8Array ? new TextDecoder().decode(p.stdout) : "") +
+    (p.stderr instanceof Uint8Array ? new TextDecoder().decode(p.stderr) : "");
+  return { ok: (p.exitCode ?? 1) === 0, out };
+}
+
+/**
+ * Run-level Best-of-N on a LIVE user repo needs a clean per-attempt rollback so a
+ * losing attempt's edits never leak into the next (or survive at the end). We use
+ * `git reset --hard` + `git clean -fd` between attempts — which is only safe when
+ * the repo is a git checkout with NO uncommitted work to clobber. Returns an error
+ * string to print (and abort) when the preconditions aren't met, or null when OK.
+ */
+function checkBonGitPreconditions(repoRoot: string): string | null {
+  if (!git(["rev-parse", "--git-dir"], repoRoot).ok) {
+    return "run-level Best-of-N (best-of-n > 1) needs a git repository so each attempt can roll back cleanly. Run `git init && git add -A && git commit -m init`, or use --best-of-n 1.";
+  }
+  const status = git(["status", "--porcelain"], repoRoot);
+  if (status.out.trim().length > 0) {
+    return "run-level Best-of-N needs a CLEAN git working tree — it resets the tree between attempts and would discard uncommitted work. Commit or stash your changes (`git add -A && git commit` or `git stash`), then retry. Or use --best-of-n 1.";
+  }
+  return null;
+}
+
 export async function runCommand(args: ParsedArgs): Promise<void> {
   const progress = new ProgressDisplay();
 
@@ -143,6 +172,15 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   const repoRoot = resolve(flagString(args.flags, "repo") ?? process.cwd());
   const maxTurns = flagNumber(args.flags, "max-turns") ?? config.maxTurns;
   const bestOfN = flagNumber(args.flags, "best-of-n") ?? config.bestOfN;
+  // R1 escalation ladder: --escalation overrides config.escalation; comma-separated
+  // model ids, cheapest first. Only meaningful with bestOfN > 1.
+  const escalationFlag = flagString(args.flags, "escalation");
+  const escalationSpec = escalationFlag
+    ? escalationFlag
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    : (config.escalation ?? []);
 
   const agentConfig: AgentConfig = {
     repoRoot,
@@ -226,13 +264,62 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     config: agentConfig,
   };
 
-  // 11. Run loop
+  // 11. Run loop — single-shot, or run-level Best-of-N (optionally with the R1
+  // model-escalation ladder) when bestOfN > 1.
   let finalState: typeof state;
-  try {
-    finalState = await runLoop(state, statePath, deps, getContext);
-  } catch (err) {
-    progress.showError(`agent loop failed: ${String(err)}`);
-    process.exit(1);
+  if (bestOfN > 1) {
+    // Guard: BoN rolls the working tree back between attempts, so it needs a git
+    // repo with nothing uncommitted to clobber.
+    const gitErr = checkBonGitPreconditions(repoRoot);
+    if (gitErr) {
+      progress.showError(gitErr);
+      process.exit(1);
+    }
+    // Build the escalation ladder (if any); rungs share this run's provider.
+    const escalationLadder =
+      escalationSpec.length > 0
+        ? buildEscalationLadder({ spec: escalationSpec.join(","), registry, provider })
+        : undefined;
+    const baseline = captureTestBaseline(repoRoot);
+    process.stderr.write(
+      `[smallcode] run-level Best-of-N=${bestOfN}${escalationLadder ? ` with escalation [${escalationSpec.join(" → ")}]` : ""} — clean git tree required; losing attempts are rolled back.\n`,
+    );
+    try {
+      const bon = await runBestOfNLoop({
+        n: bestOfN,
+        models: escalationLadder,
+        deps,
+        setup: async (attempt) => {
+          // Roll the tree back to its pre-run state before every attempt after the
+          // first (attempt 0 starts from the already-clean tree).
+          if (attempt > 0) {
+            git(["reset", "--hard", "HEAD"], repoRoot);
+            git(["clean", "-fd"], repoRoot);
+          }
+          const aState = createState(agentConfig, task);
+          aState.goals = goals.map((g) => ({ ...g }));
+          return { state: aState, statePath: getStatePath(agentConfig), getContext };
+        },
+        verify: async () => (await runTieredOracle(repoRoot, { baseline })).outcome === "solved",
+      });
+      finalState =
+        bon.states[bon.winningAttempt ?? bon.states.length - 1] ?? state;
+      if (bon.winningModelId) {
+        process.stderr.write(
+          `[smallcode] Best-of-N resolved on attempt ${(bon.winningAttempt ?? 0) + 1}/${bon.attemptsUsed} via ${bon.winningModelId}.\n`,
+        );
+      }
+    } catch (err) {
+      progress.showError(`agent loop failed: ${String(err)}`);
+      process.exit(1);
+    }
+  } else {
+    try {
+      finalState = await runLoop(state, statePath, deps, getContext);
+    } catch (err) {
+      progress.showError(`agent loop failed: ${String(err)}`);
+      process.exit(1);
+    }
   }
 
   // 12. Show completion or error — honest verdict only

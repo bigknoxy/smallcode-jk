@@ -98,6 +98,26 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
     supportsGrammar: true,
     supportsJsonSchema: true,
   },
+  {
+    // A non-Qwen escalation rung for users with bigger hardware: the R1 ladder is
+    // model-agnostic, so any registered local model is a valid top rung (the
+    // offline thesis holds — still one Ollama endpoint). id = the Ollama model
+    // name. Gemma is a non-reasoning instruct model (no <think>), large window.
+    id: "gemma4:12b",
+    label: "Google/Gemma-12B-Instruct",
+    contextWindow: 131_072,
+    samplingDefaults: {
+      temperature: 0.7,
+      top_p: 0.9,
+      top_k: 40,
+      max_tokens: 4_096,
+    },
+    supportsGrammar: false,
+    supportsJsonSchema: true,
+    ollamaOptions: { num_ctx: 8_192 },
+    notes:
+      "Gemma 12B instruct (non-reasoning), via Ollama. Optional higher escalation rung for users with bigger hardware — the R1 ladder accepts any registered local model.",
+  },
 ];
 
 export class ModelRegistry {

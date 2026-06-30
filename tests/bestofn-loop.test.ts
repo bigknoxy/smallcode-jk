@@ -3,7 +3,7 @@ import { mock, test, expect, beforeEach } from "bun:test";
 // Mock the agent loop so we can drive Best-of-N control flow without a model.
 // Each fake runLoop records the temperature it was handed and returns the state.
 const tempsSeen: number[] = [];
-const modelIdsSeen: string[] = [];
+const modelIdsSeen: (string | undefined)[] = [];
 const profileIdsSeen: (string | undefined)[] = [];
 mock.module("../src/agent/loop.ts", () => ({
   runLoop: async (state: any, _sp: string, deps: any) => {

@@ -363,8 +363,32 @@ MIT
 - `SMALLCODE_GEPA_REFLECT_TIMEOUT`: per-request timeout (ms) for the reflection model only (defaults to the executor provider timeout, 180000). Raise it for a slow strong reflector (e.g. a 32B rewriting a full prompt from many transcripts) — otherwise the call times out and the mutator silently no-ops to the parent, degrading GEPA to noise.
 - `SMALLCODE_BEST_OF_N`: run-level oracle-verified Best-of-N (default `1` = single-shot). When `>1`, each trial runs up to N independent full agent-loop attempts in a fresh env, temperature-swept around 1.0 in `[0.7, 1.3]` for diversity, and resolves on the FIRST attempt whose deterministic test grader goes green. The grader is a sound oracle, so any-attempt-green == solved with zero selection error — the reported `pass@1` IS the empirical `pass@N(any)`. The live table shows `BoN<N>@<avgAttemptsUsed>` (mean attempts spent per trial = cost) and the snapshot records `bestOfN` + `avgAttemptsUsed`.
 - `SMALLCODE_TASK_FILTER`: comma-separated substrings; `run-baseline.ts` runs only suite tasks whose id contains ANY term (unset = whole suite). Lets you A/B a focused subset (e.g. the localization-hard realrepo tasks) without authoring a temp suite dir.
-- `SMALLCODE_ESCALATION`: R1 model-escalation ladder (default OFF). Comma-separated model ids, cheapest first (e.g. `qwen2.5-coder:3b,qwen2.5-coder:3b,qwen2.5-coder:7b`). With `SMALLCODE_BEST_OF_N>1`, Best-of-N attempt `i` runs with `ladder[min(i, len-1)]` instead of the base model — and since BoN resolves on the FIRST oracle-green attempt, a run only pays for the bigger model on the residual the small model couldn't solve (zero selection error). All rungs share the local Ollama endpoint, so escalation stays fully offline — cap the ladder at the largest LOCAL model. The winning rung is recorded per trial. Ignored when BoN ≤ 1.
+- `SMALLCODE_ESCALATION`: R1 model-escalation ladder for the **eval harness** (default OFF). Comma-separated model ids, cheapest first (e.g. `qwen2.5-coder:3b,qwen2.5-coder:3b,qwen2.5-coder:7b`). With `SMALLCODE_BEST_OF_N>1`, Best-of-N attempt `i` runs with `ladder[min(i, len-1)]` instead of the base model — and since BoN resolves on the FIRST oracle-green attempt, a run only pays for the bigger model on the residual the small model couldn't solve (zero selection error). All rungs share the local Ollama endpoint, so escalation stays fully offline — cap the ladder at the largest LOCAL model. The winning rung is recorded per trial. Ignored when BoN ≤ 1. The same ladder is available to the **CLI** — see *Escalation* below.
 - `SMALLCODE_LOCALIZE`: R2 externalize-localization (experimental, default OFF). When `=1`, a failure whose stack trace reaches a SOURCE line (a runtime throw — not a value-mismatch, whose trace stops at the test line) surfaces a tight `## FAILURE LOCATION` window around that exact line, marked `⟵ FAILED HERE`, in the next prompt — handing the small model the `where` it cannot localize itself. Off → loop is byte-identical (clean A/B baseline). Pass-rate lift pending a throw-class A/B suite.
 - `SMALLCODE_VALIDATE_EDIT`: R4 validate-before-commit guard, **ON by default**. Treats an edit that makes the test suite fail to LOAD/COMPILE (missing module, parse error) as a hard regression — even when the red-count drops because fewer tests ran — so the broken edit is reverted and the next prompt shows an actionable BUILD ERROR instead of a misleading "fewer failures = progress". Set `=0` to restore the old count-only behaviour (the A/B baseline arm).
-- `SMALLCODE_ESCALATION`: _(add description)_
 <!-- agent-skills:doc-keeper:end -->
+
+## Escalation — scale to your hardware
+
+smallcode's default is a single small local model (e.g. `qwen2.5-coder:3b`) — runs on modest hardware, fully offline. With more hardware you can let a run **escalate** to bigger local models only when the small one can't crack a task, paying for the big model just on the residual.
+
+It rides the Best-of-N seam: each attempt is independent and the run stops on the first oracle-green result, so a ladder spends the small model first and climbs only on failure.
+
+```jsonc
+// smallcode.config.json
+{
+  "activeModel": "qwen2.5-coder:3b",
+  "bestOfN": 3,
+  "escalation": ["qwen2.5-coder:3b", "qwen2.5-coder:7b", "gemma4:12b"]
+}
+```
+```bash
+# or per run
+smallcode run "fix the failing test" --best-of-n 3 \
+  --escalation qwen2.5-coder:3b,qwen2.5-coder:7b,gemma4:12b
+```
+
+- **Low-resource:** leave `escalation` empty (or `bestOfN: 1`) → just the 3b.
+- **Bigger hardware:** add rungs as high as your box allows — `7b`, `gemma4:12b`, `qwen2.5-coder:32b`, anything in `smallcode config list-models` (the ladder is model-agnostic; every rung is local, one Ollama endpoint).
+- Attempt `i` uses `ladder[min(i, len-1)]`, so a 3-rung ladder over `bestOfN: 5` reuses the top rung for the last attempts.
+- **Safety:** CLI run-level Best-of-N resets the working tree between attempts, so it requires a **git repo with a clean working tree** — it refuses (with guidance) rather than risk clobbering uncommitted work. Losing attempts are rolled back; the winning attempt's edits stay.
