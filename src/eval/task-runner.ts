@@ -49,6 +49,11 @@ export interface TaskRunnerOptions {
   /** Per-attempt temperatures for Best-of-N. Defaults to defaultTemperatures(N),
    * a sweep around 1.0 in [0.7, 1.3]. Ignored when bestOfN ≤ 1. */
   bonTemperatures?: number[];
+  /** R1 model-escalation ladder: per-attempt model rungs (cheapest first). When
+   * set, Best-of-N attempt i runs with escalationLadder[min(i, len-1)] instead of
+   * loopDeps' base model — so a run escalates 3b→7b→14b on the residual the small
+   * model can't solve. Ignored when bestOfN ≤ 1 or unset. */
+  escalationLadder?: import("../agent/bestofn-loop.ts").EscalationRung[];
 }
 
 // Map an AgentState's terminal status to a transcript outcome. Shared by the
@@ -131,6 +136,7 @@ async function runBonTrial(
   const bon = await runBestOfNLoop({
     n: bestOfN,
     temperatures: temps,
+    models: opts.escalationLadder,
     deps: { ...loopDeps, config: agentConfig },
     setup: async (attempt) => {
       const env = await createTrialEnv(task, fixturesRoot);
@@ -197,6 +203,7 @@ async function runBonTrial(
     transcript,
     metrics: collectMetrics(transcript),
     attemptsUsed: bon.attemptsUsed,
+    ...(bon.winningModelId ? { winningModelId: bon.winningModelId } : {}),
   };
 }
 

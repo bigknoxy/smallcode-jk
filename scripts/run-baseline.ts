@@ -28,6 +28,7 @@ import { runStaticGrader } from "../src/eval/graders/static.ts";
 import type { EvalTask, GraderConfig, GraderResult, TaskEvalResult } from "../src/eval/types.ts";
 import { defaultRegistry } from "../src/models/registry.ts";
 import { createProvider } from "../src/provider/factory.ts";
+import { buildEscalationLadder } from "../src/agent/escalation.ts";
 import { ReasoningHandler } from "../src/reasoning/handler.ts";
 import type { MetricsSnapshot } from "../src/improve/types.ts";
 
@@ -103,6 +104,10 @@ const CI_SEED = process.env.SMALLCODE_CI_SEED ? Number(process.env.SMALLCODE_CI_
 // the shipped BoN mechanism, and avg_attempts shows the cost (≤ N via early
 // stop). Default 1 = plain single-shot, identical to prior behaviour.
 const BEST_OF_N = Math.max(1, Number(process.env.SMALLCODE_BEST_OF_N ?? "1"));
+// R1 escalation ladder: comma-separated model ids, cheapest first, applied across
+// Best-of-N attempts (e.g. "qwen2.5-coder:3b,qwen2.5-coder:3b,qwen2.5-coder:7b").
+// Unset = no escalation. Only meaningful with SMALLCODE_BEST_OF_N>1.
+const ESCALATION = process.env.SMALLCODE_ESCALATION;
 // Optional substring filter for a focused subset of a suite (comma-separated;
 // a task matches if its id contains ANY term). Unset = whole suite.
 const TASK_FILTER = (process.env.SMALLCODE_TASK_FILTER ?? "")
@@ -341,6 +346,14 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     config: agentConfig,
   };
 
+  // R1 escalation ladder (SMALLCODE_ESCALATION). Only meaningful with BoN>1; the
+  // base provider is reused (all local models share the Ollama endpoint).
+  const escalationLadder = buildEscalationLadder({
+    spec: ESCALATION,
+    registry: defaultRegistry,
+    provider,
+  });
+
   const result: TaskEvalResult = await runTask(task, {
     trialsPerTask: EVAL_N,
     reportKs: REPORT_KS,
@@ -349,6 +362,7 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     agentConfig,
     loopDeps,
     bestOfN: BEST_OF_N,
+    ...(escalationLadder ? { escalationLadder } : {}),
     trialTimeoutMs: 20 * 60 * 1000, // 20 min per trial (VibeThinker-3B ~100-300s/call)
   });
 
@@ -546,6 +560,12 @@ async function main(): Promise<void> {
     if (BEST_OF_N > 1) {
       console.log(
         `[run-baseline] run-level Best-of-N=${BEST_OF_N} ON (temps ${defaultTemperatures(BEST_OF_N).join(",")}) — pass@1 = empirical pass@${BEST_OF_N}(any); compare vs a SMALLCODE_BEST_OF_N=1 run.`,
+      );
+    }
+    if (ESCALATION) {
+      const rungs = ESCALATION.split(",").map((s) => s.trim()).filter(Boolean);
+      console.log(
+        `[run-baseline] R1 escalation ladder ON: attempt models = [${rungs.join(" → ")}] (clamped to last rung past ${rungs.length} attempts). Winning rung recorded per trial.`,
       );
     }
     const allMetrics: LiveTaskMetrics[] = [];

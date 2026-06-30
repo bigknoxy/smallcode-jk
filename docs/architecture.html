@@ -684,6 +684,13 @@ flowchart TD
         rate. Wired through the same <code>runBestOfNLoop</code> the CLI ships, so the eval measures
         production behaviour. Distinct from the per-TURN candidate selection (<code>bestofn.ts</code>),
         which is off by default.
+        <strong style="color: var(--text-primary);">R1 model-escalation ladder</strong>
+        (<code>SMALLCODE_ESCALATION</code>, default off): a comma-separated model list (cheapest first,
+        e.g. <code>3b,3b,7b</code>) makes the MODEL the per-attempt axis — attempt <code>i</code> runs with
+        rung <code>min(i, len-1)</code>. Because BoN resolves on the first oracle-green attempt, a run only
+        pays for a bigger model on the residual the small one can't solve (zero selection error). All rungs
+        share the local Ollama endpoint, so escalation stays fully offline — cap at the largest LOCAL model.
+        The winning rung is recorded per trial.
         <strong style="color: var(--text-primary);">Measured (2026-06-28, qwen2.5-coder:3b,
         edit-reliability, n=15/task × 12):</strong> single-shot pass@1 <code>0.84 [.78-.89]</code> →
         BoN=3 <code>0.97 [.94-.99]</code> — non-overlapping CIs, SIGNIFICANT. The lift came from two
@@ -1215,7 +1222,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-06-29</span>
+    <span class="sc-footer__meta">Last updated: 2026-06-30</span>
   </div>
 </footer>
 
