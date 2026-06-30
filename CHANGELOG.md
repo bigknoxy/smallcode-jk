@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.4.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.3.0...v1.4.0) (2026-06-30)
+
+
+### Features
+
+* **agent:** R1 model-escalation ladder on the Best-of-N seam ([#56](https://github.com/bigknoxy/smallcode-jk/issues/56)) ([af752b6](https://github.com/bigknoxy/smallcode-jk/commit/af752b62830c65d275575b374fd1589ad0c57a2b))
+* **cli:** R1 escalation UX — config ladder + CLI flags + run-level Best-of-N on live repos ([#57](https://github.com/bigknoxy/smallcode-jk/issues/57)) ([81b30e2](https://github.com/bigknoxy/smallcode-jk/commit/81b30e2d05db6142ba6d94a19d3654a921a1dc3e))
+* **cli:** R9 dev-UX — smallcode chat interactive multi-task REPL ([#66](https://github.com/bigknoxy/smallcode-jk/issues/66)) ([0bf6aaa](https://github.com/bigknoxy/smallcode-jk/commit/0bf6aaac426d0ce02a8251e51ba66a190cbd01d4))
+* **cli:** R9 dev-UX — smallcode diff / undo + post-run change summary ([#65](https://github.com/bigknoxy/smallcode-jk/issues/65)) ([7268470](https://github.com/bigknoxy/smallcode-jk/commit/7268470dce369815edfe46f34281d1e2905f091d))
+* **cli:** R9 diff-review-before-write — approve each edit when requireApproval is on ([#67](https://github.com/bigknoxy/smallcode-jk/issues/67)) ([36b06c3](https://github.com/bigknoxy/smallcode-jk/commit/36b06c3e362ff9d00526a804dc325a7de4a3e05b))
+* **edit:** reject test-file edits (anti-fake-green) + docs drift fixes ([#44](https://github.com/bigknoxy/smallcode-jk/issues/44)) ([c3f4f50](https://github.com/bigknoxy/smallcode-jk/commit/c3f4f507e1ed7e17af24a39c5d899c30d1171aeb))
+* **edit:** revert-on-regression + format-consistent not-applied feedback ([#40](https://github.com/bigknoxy/smallcode-jk/issues/40)) ([61619f9](https://github.com/bigknoxy/smallcode-jk/commit/61619f9a22c1b563443ba06c9a5aa622a1198372))
+* **eval:** expand realrepo suite 7→12 + idempotent task-integrity validator ([#50](https://github.com/bigknoxy/smallcode-jk/issues/50)) ([434c9ac](https://github.com/bigknoxy/smallcode-jk/commit/434c9ac3b45ca719ccbc36d4bd1d858c4899fc8d))
+* **eval:** R5 Aider polyglot-benchmark harness (JS) + edit-format-% metric ([#59](https://github.com/bigknoxy/smallcode-jk/issues/59)) ([63aa2ef](https://github.com/bigknoxy/smallcode-jk/commit/63aa2ef414291e95d00fedb0a19242b54fa5a55a))
+* **eval:** SMALLCODE_TASK_FILTER + scripts/forensic-task.ts (test-source feedback refuted) ([#52](https://github.com/bigknoxy/smallcode-jk/issues/52)) ([67229ae](https://github.com/bigknoxy/smallcode-jk/commit/67229aeb1741131d1564ecfa187c41b790925f28))
+* **eval:** SWE-bench-Lite ingestion harness + honest runner (no fabricated number) ([#64](https://github.com/bigknoxy/smallcode-jk/issues/64)) ([cf5c4cf](https://github.com/bigknoxy/smallcode-jk/commit/cf5c4cf92848209a95b5e2b05cf3b95cd7010f28))
+* **eval:** wire run-level oracle-verified Best-of-N into the eval harness ([#46](https://github.com/bigknoxy/smallcode-jk/issues/46)) ([effdd78](https://github.com/bigknoxy/smallcode-jk/commit/effdd78b3feaf18a382e7e5576056078078292be))
+* **gepa:** live reflective mutator — frontier reflector evolves qwen's prompts ([#38](https://github.com/bigknoxy/smallcode-jk/issues/38)) ([d7f2dd8](https://github.com/bigknoxy/smallcode-jk/commit/d7f2dd8bd085040fb04d5904f079d6230cb42921))
+* **gepa:** register qwen2.5-coder:32b reflector + SMALLCODE_PROMPTSET held-out A/B knob ([#41](https://github.com/bigknoxy/smallcode-jk/issues/41)) ([468f3ed](https://github.com/bigknoxy/smallcode-jk/commit/468f3ed2fa0185e2e6c24a324710a82ebdd06726))
+* **verify:** extend static confidence into the loop — revert a broken edit even with no tests ([#63](https://github.com/bigknoxy/smallcode-jk/issues/63)) ([9dc9e24](https://github.com/bigknoxy/smallcode-jk/commit/9dc9e2466e8d35a47943cc74b73c89d7859e1147))
+* **verify:** oracle-free static-confidence ladder — honest grade when no test covers a change ([#61](https://github.com/bigknoxy/smallcode-jk/issues/61)) ([bd654a6](https://github.com/bigknoxy/smallcode-jk/commit/bd654a68c27541c692bfe26bdaa6997e552b6ed9))
+* **verify:** R2 externalize-localization — surface the source line of runtime throws ([#54](https://github.com/bigknoxy/smallcode-jk/issues/54)) ([22d85a2](https://github.com/bigknoxy/smallcode-jk/commit/22d85a207a521254e12b938c47777f923f52cf78))
+* **verify:** R4 validate-before-commit — introduced load/compile error = hard regression ([#53](https://github.com/bigknoxy/smallcode-jk/issues/53)) ([1f13c90](https://github.com/bigknoxy/smallcode-jk/commit/1f13c90e61ef9b1b1316d6552e3ba4d2a5b7b587))
+
+
+### Bug Fixes
+
+* **cli:** scope undo to the agent's changes — never discard the user's own work ([#68](https://github.com/bigknoxy/smallcode-jk/issues/68)) ([17b81f1](https://github.com/bigknoxy/smallcode-jk/commit/17b81f186ac659c4ff00cdf491e6799d187b498a))
+* **context:** exact symbol-name match dominates retrieval ranking (21/22 → 22/22) ([#58](https://github.com/bigknoxy/smallcode-jk/issues/58)) ([cfea46e](https://github.com/bigknoxy/smallcode-jk/commit/cfea46ea9ef6ae701fb210ef7aad1b83f540d31b))
+* **eval:** force clean process exit in run-baseline (Ollama keep-alive hang) ([#49](https://github.com/bigknoxy/smallcode-jk/issues/49)) ([1f301ad](https://github.com/bigknoxy/smallcode-jk/commit/1f301ad53e9343e9162346f675104b4657dd9716))
+* **gepa:** SMALLCODE_GEPA_REFLECT_TIMEOUT — stop reflector silent no-op ([#45](https://github.com/bigknoxy/smallcode-jk/issues/45)) ([4e61897](https://github.com/bigknoxy/smallcode-jk/commit/4e618971a23afcc4610d737f5c6721c3ee21df04))
+* **prompt:** human-readable label for anonymous export-default edit targets ([#43](https://github.com/bigknoxy/smallcode-jk/issues/43)) ([980ddbf](https://github.com/bigknoxy/smallcode-jk/commit/980ddbfb2336f87248e565e85d246b6b4ef192ec))
+
 ## [1.3.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.2.2...v1.3.0) (2026-06-26)
 
 
