@@ -1,0 +1,6 @@
+{
+  "id": "aider-polyglot-js-v1",
+  "kind": "capability",
+  "description": "Aider polyglot-benchmark JavaScript exercises (Exercism, MIT). Stub→implement; bun test exit-0 oracle. Reports pass@1 + edit-format-correctness.",
+  "defaultTrials": 1
+}
