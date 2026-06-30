@@ -1,0 +1,9 @@
+{
+  "id": "throw-initials_1",
+  "desc": "initials() in src/initials.ts crashes with a TypeError on names containing consecutive spaces (an empty word has no first character). Fix it so all tests in tests/initials.test.ts pass.",
+  "setup": { "repoFixture": "throw-initials_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/initials.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["throw-class"],
+  "reference_solution": "throw-initials_1-solution/"
+}

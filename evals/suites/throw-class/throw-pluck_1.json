@@ -1,0 +1,9 @@
+{
+  "id": "throw-pluck_1",
+  "desc": "emails() in src/pluck.ts throws a TypeError when a user has no profile. Fix it so it returns only the emails of users that have a profile and tests/pluck.test.ts passes.",
+  "setup": { "repoFixture": "throw-pluck_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/pluck.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["throw-class"],
+  "reference_solution": "throw-pluck_1-solution/"
+}
