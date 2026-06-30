@@ -12,7 +12,14 @@ import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
 import type { ParsedArgs } from "../args.ts";
 import { classifyCompletion } from "./run.ts";
-import { makeInteractiveApprover, workingChanges } from "./review.ts";
+import {
+  changedSets,
+  makeInteractiveApprover,
+  readManifest,
+  recordAgentChanges,
+  revertAgentChanges,
+  workingChanges,
+} from "./review.ts";
 
 // R9 dev-UX: an interactive multi-task session. Unlike `smallcode run` (one task,
 // cold start, exit), `chat` keeps the repo index + model + a pinned-file set warm
@@ -103,6 +110,9 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
       return;
     }
     let final: typeof state;
+    const beforeDirty = isGit
+      ? changedSets(repoRoot)
+      : { tracked: new Set<string>(), untracked: new Set<string>() };
     try {
       const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval);
       final = await runLoop(
@@ -115,6 +125,7 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
       process.stderr.write(`[smallcode] agent loop failed: ${String(err)}\n`);
       return;
     }
+    if (isGit) await recordAgentChanges(repoRoot, beforeDirty).catch(() => {});
     const c = classifyCompletion(final, getStatePath(agentConfig));
     process.stdout.write(`${c.ok ? "✓" : c.tone === "warn" ? "⚠" : "✗"} ${c.message}\n`);
     if (isGit) {
@@ -149,12 +160,20 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
       }
     } else if (cmd === "/undo" || cmd === "/undo!") {
       if (!isGit) process.stdout.write("not a git repo — /undo unavailable\n");
-      else if (!workingChanges(repoRoot).hasChanges) process.stdout.write("nothing to undo\n");
-      else if (cmd !== "/undo!") process.stdout.write("This DISCARDS the agent's changes. Type /undo! to confirm.\n");
       else {
-        git(["restore", "--", "."], repoRoot);
-        git(["clean", "-fd"], repoRoot);
-        process.stdout.write("✓ reverted\n");
+        const m = readManifest(repoRoot);
+        if (!m) process.stdout.write("nothing recorded to undo (only reverts what the agent wrote)\n");
+        else if (cmd !== "/undo!")
+          process.stdout.write(
+            `This reverts ONLY the agent's changes (your edits untouched):\n` +
+              (m.tracked.length ? `  restore: ${m.tracked.join(", ")}\n` : "") +
+              (m.untracked.length ? `  delete: ${m.untracked.join(", ")}\n` : "") +
+              "Type /undo! to confirm.\n",
+          );
+        else {
+          const r = revertAgentChanges(repoRoot);
+          process.stdout.write(`✓ reverted ${r?.tracked.length ?? 0} edit(s) + removed ${r?.untracked.length ?? 0} file(s)\n`);
+        }
       }
     } else if (cmd?.startsWith("/")) process.stdout.write(`unknown command ${cmd} — /help\n`);
     else await runTask(line);
