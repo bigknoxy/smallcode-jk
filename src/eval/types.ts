@@ -98,6 +98,9 @@ export interface TrialResult {
   /** Best-of-N only: independent attempts run before this trial resolved (≤ N,
    * stops on first deterministic-green). 1 (or undefined) for a plain trial. */
   attemptsUsed?: number;
+  /** R1 escalation only: model id that produced the resolving (or final) attempt
+   * — which ladder rung actually solved it. Undefined when no ladder was used. */
+  winningModelId?: string;
 }
 
 // ---------------------------------------------------------------------------

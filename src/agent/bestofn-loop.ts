@@ -1,6 +1,15 @@
 import { runLoop, type LoopDependencies } from "./loop.ts";
 import type { AgentState } from "./types.ts";
 import type { ContextBundle } from "@/context/types.ts";
+import type { Provider } from "@/provider/types.ts";
+import type { ModelProfile } from "@/models/types.ts";
+
+/** One rung of the R1 escalation ladder: the model to run a given attempt with. */
+export interface EscalationRung {
+  id: string;
+  provider: Provider;
+  profile: ModelProfile;
+}
 
 /**
  * Run-level oracle-verified Best-of-N.
@@ -37,6 +46,14 @@ export interface BestOfNLoopOptions {
   verify: (attempt: number) => Promise<boolean>;
   /** Loop deps minus the per-attempt sampling override (added internally). */
   deps: Omit<LoopDependencies, "samplingOverride">;
+  /**
+   * R1 model-escalation ladder. When set, attempt `i` runs with `models[i]`'s
+   * provider+profile instead of `deps`' — letting a run escalate 3b→7b→14b as
+   * cheaper attempts fail. Index is clamped to the last rung, so a 3-rung ladder
+   * with n=5 reuses the top rung for attempts 3-4. Omit → every attempt uses
+   * `deps` (plain temperature-swept Best-of-N, unchanged).
+   */
+  models?: EscalationRung[];
 }
 
 export interface BestOfNLoopResult {
@@ -49,6 +66,10 @@ export interface BestOfNLoopResult {
   temperatures: number[];
   /** Final state of each attempt run. */
   states: AgentState[];
+  /** R1: model id used per attempt (base model id when no ladder), in order. */
+  modelsUsed: string[];
+  /** R1: model id of the winning attempt, or null if none passed. */
+  winningModelId: string | null;
 }
 
 /**
@@ -67,13 +88,22 @@ export function defaultTemperatures(n: number): number[] {
 export async function runBestOfNLoop(opts: BestOfNLoopOptions): Promise<BestOfNLoopResult> {
   const temps = opts.temperatures ?? defaultTemperatures(opts.n);
   const states: AgentState[] = [];
+  const modelsUsed: string[] = [];
 
   for (let i = 0; i < opts.n; i++) {
     const { state, statePath, getContext } = await opts.setup(i);
+    // R1: pick this attempt's rung (clamped to the last). When no ladder is set,
+    // rung is undefined and deps keeps the base provider/profile.
+    const rung = opts.models ? opts.models[Math.min(i, opts.models.length - 1)] : undefined;
+    // The loop sends `state.modelId` as the request model, so escalation must
+    // retarget BOTH the request model id AND the profile (sampling + window).
+    if (rung) state.modelId = rung.id;
     const deps: LoopDependencies = {
       ...opts.deps,
+      ...(rung ? { provider: rung.provider, profile: rung.profile } : {}),
       samplingOverride: { temperature: temps[i] ?? temps[temps.length - 1] },
     };
+    modelsUsed.push(rung?.id ?? opts.deps.profile?.id ?? "base");
 
     const final = await runLoop(state, statePath, deps, getContext);
     states.push(final);
@@ -85,6 +115,8 @@ export async function runBestOfNLoop(opts: BestOfNLoopOptions): Promise<BestOfNL
         winningAttempt: i,
         temperatures: temps.slice(0, i + 1),
         states,
+        modelsUsed,
+        winningModelId: modelsUsed[i] ?? null,
       };
     }
   }
@@ -95,5 +127,7 @@ export async function runBestOfNLoop(opts: BestOfNLoopOptions): Promise<BestOfNL
     winningAttempt: null,
     temperatures: temps.slice(0, opts.n),
     states,
+    modelsUsed,
+    winningModelId: null,
   };
 }
