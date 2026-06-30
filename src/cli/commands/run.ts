@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
-import { workingChanges } from "./review.ts";
+import { makeInteractiveApprover, workingChanges } from "./review.ts";
 import { renderConfidence } from "../../verify/confidence.ts";
 import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import { planTask } from "../../agent/planner.ts";
@@ -259,11 +259,15 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     return buildBundle(goal);
   }
 
+  // Diff-review-before-write: when sandbox.requireApproval is on, the loop asks
+  // the user to approve each proposed edit before it is written.
+  const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval);
   const deps = {
     provider,
     profile,
     reasoningHandler,
     config: agentConfig,
+    ...(approveEdit ? { approveEdit } : {}),
   };
 
   // 11. Run loop — single-shot, or run-level Best-of-N (optionally with the R1

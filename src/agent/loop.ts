@@ -63,6 +63,14 @@ export interface LoopDependencies {
    * of re-drawing the same one. Falls back to the model profile defaults.
    */
   samplingOverride?: { temperature?: number; top_p?: number };
+  /**
+   * Diff-review-before-write hook. When set (interactive runs with
+   * sandbox.requireApproval), it is called with the proposed edit blocks BEFORE
+   * they are written to disk; returning false skips applying them this turn. The
+   * eval/non-interactive paths leave it unset → edits apply unconditionally, so
+   * automated runs are unchanged.
+   */
+  approveEdit?: (blocks: import("@/edit/types.ts").EditBlock[]) => Promise<boolean>;
 }
 
 interface ParsedToolCall {
@@ -389,14 +397,29 @@ export async function runLoop(
     const parseResult = parse(answer);
     const editBlocks = parseResult.blocks;
 
-    // Apply edits
+    // Apply edits — diff-review gate first. When an approveEdit hook is present
+    // (interactive run with requireApproval), the user sees the proposed edits and
+    // can reject them; a rejected turn writes nothing and tells the model so.
     let applyResults: import("@/edit/types.ts").ApplyResult[] = [];
+    let editRejected = false;
     if (editBlocks.length > 0) {
-      try {
-        const batchResult = await applyBatch(editBlocks, readFileFn, writeFileFn);
-        applyResults = batchResult.results;
-      } catch {
-        applyResults = [];
+      let approved = true;
+      if (deps.approveEdit) {
+        try {
+          approved = await deps.approveEdit(editBlocks);
+        } catch {
+          approved = false;
+        }
+      }
+      if (!approved) {
+        editRejected = true;
+      } else {
+        try {
+          const batchResult = await applyBatch(editBlocks, readFileFn, writeFileFn);
+          applyResults = batchResult.results;
+        } catch {
+          applyResults = [];
+        }
       }
     }
 
@@ -415,6 +438,17 @@ export async function runLoop(
         output: "",
         error: tc.error,
       }));
+
+    // Diff-review: a user-rejected edit applied nothing — tell the model so it can
+    // revise (or stop) rather than assume its change landed.
+    if (editRejected) {
+      toolResults.push({
+        name: "write_file",
+        success: false,
+        output: "",
+        error: "The proposed edit was REJECTED by the user and NOT written. Revise the approach or stop.",
+      });
+    }
 
     // Execute model-emitted side-effecting tool calls (read_file, run_command,
     // run_tests) so their real output feeds back into the next turn. think/finish

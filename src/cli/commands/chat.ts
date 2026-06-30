@@ -12,7 +12,7 @@ import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
 import type { ParsedArgs } from "../args.ts";
 import { classifyCompletion } from "./run.ts";
-import { workingChanges } from "./review.ts";
+import { makeInteractiveApprover, workingChanges } from "./review.ts";
 
 // R9 dev-UX: an interactive multi-task session. Unlike `smallcode run` (one task,
 // cold start, exit), `chat` keeps the repo index + model + a pinned-file set warm
@@ -104,7 +104,13 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
     }
     let final: typeof state;
     try {
-      final = await runLoop(state, getStatePath(agentConfig), { provider, profile, reasoningHandler, config: agentConfig }, (g) => buildBundle(g));
+      const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval);
+      final = await runLoop(
+        state,
+        getStatePath(agentConfig),
+        { provider, profile, reasoningHandler, config: agentConfig, ...(approveEdit ? { approveEdit } : {}) },
+        (g) => buildBundle(g),
+      );
     } catch (err) {
       process.stderr.write(`[smallcode] agent loop failed: ${String(err)}\n`);
       return;

@@ -211,7 +211,7 @@ All three expose an OpenAI-compatible `/v1/chat/completions` endpoint. Point `pr
 | `config.provider.timeoutMs` | number | `120000` | Per-request timeout in milliseconds. |
 | `config.activeModel` | string | — | Model profile ID to use. Must match a built-in profile or a custom entry in `models`. **Required.** |
 | `config.sandbox.enabled` | boolean | `true` | Enable the command sandbox. Disable only for trusted environments. |
-| `config.sandbox.requireApproval` | boolean | `true` | Gate destructive file writes behind an approval prompt. |
+| `config.sandbox.requireApproval` | boolean | `true` | **Diff-review-before-write**: in interactive runs (`run` / `chat`), the agent shows each proposed edit (path + format + new content) and asks `Apply this edit? [y/N]` before writing — default **N**, so nothing lands without your OK. A rejected edit writes nothing and the model is told so. Non-interactive/eval runs ignore it (no hook) and apply unconditionally. |
 | `config.sandbox.allowedCommands` | string[] | `["bun","tsc","biome","git"]` | Allowlist of command basenames the agent may execute. |
 | `config.sandbox.networkAccess` | boolean | `false` | Whether agent-run commands may make network requests. |
 | `config.eval.suitesDir` | string | `"evals/suites"` | Directory where eval suite YAML/JSON files live. |

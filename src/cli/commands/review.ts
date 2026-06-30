@@ -1,5 +1,31 @@
 import { resolve } from "node:path";
+import type { EditBlock } from "../../edit/types.ts";
 import type { ParsedArgs } from "../args.ts";
+
+/**
+ * Diff-review-before-write approver (R9). Returns an `approveEdit` hook for the
+ * loop when `requireApproval` is on: it prints the proposed edit blocks (path +
+ * format + a truncated preview of the new content) and reads a y/N from the
+ * terminal — default N, so the user must opt IN to each write. Returns undefined
+ * when approval isn't required → the loop applies edits unconditionally.
+ */
+export function makeInteractiveApprover(
+  requireApproval: boolean | undefined,
+): ((blocks: EditBlock[]) => Promise<boolean>) | undefined {
+  if (!requireApproval) return undefined;
+  return (blocks: EditBlock[]) => {
+    process.stderr.write(`\n[smallcode] Review ${blocks.length} proposed edit(s) before writing:\n`);
+    for (const b of blocks) {
+      const whole = b.search === "";
+      process.stderr.write(`  ── ${b.filePath} [${b.format}${whole ? ", full file" : ""}]\n`);
+      const lines = b.replace.split("\n");
+      process.stderr.write(`${lines.slice(0, 24).map((l) => `   | ${l}`).join("\n")}\n`);
+      if (lines.length > 24) process.stderr.write(`   | …(${lines.length - 24} more lines)\n`);
+    }
+    const ans = (prompt("[smallcode] Apply this edit? [y/N] ") ?? "").trim();
+    return Promise.resolve(/^y(es)?$/i.test(ans));
+  };
+}
 
 // R9 dev-UX: review + undo what the agent did. `smallcode run` edits files in
 // place; these give the user the "see what changed / take it back" loop that turns
