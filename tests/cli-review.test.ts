@@ -2,7 +2,7 @@ import { test, expect, describe, afterEach } from "bun:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { workingChanges } from "../src/cli/commands/review.ts";
+import { workingChanges, makeInteractiveApprover } from "../src/cli/commands/review.ts";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -46,6 +46,12 @@ describe("workingChanges (R9 diff/undo core)", () => {
     const c = workingChanges(dir);
     expect(c.hasChanges).toBe(true);
     expect(c.untracked).toContain("new.txt");
+  });
+
+  test("makeInteractiveApprover only arms when approval is required", () => {
+    expect(makeInteractiveApprover(false)).toBeUndefined();
+    expect(makeInteractiveApprover(undefined)).toBeUndefined();
+    expect(typeof makeInteractiveApprover(true)).toBe("function"); // diff-review hook armed
   });
 
   test("after git restore + clean, tree is reported clean again", async () => {
