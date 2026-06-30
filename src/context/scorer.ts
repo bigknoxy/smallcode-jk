@@ -14,6 +14,17 @@ function tokenizeQuery(query: string): string[] {
     .map((t) => t.toLowerCase());
 }
 
+/**
+ * Exact symbol-name match weight. A file that DEFINES the exact identifier the
+ * task names (e.g. the query says "fix `toKebab`" and this file exports `toKebab`)
+ * is the single strongest target signal. Set high enough that ONE exact match
+ * beats the partial-substring noise a big decoy accumulates — without it, a query
+ * that merely mentions a decoy's filename ("…src/table.ts already passes") lets
+ * "table" substring-match that file's own `renderTable`/`renderTableWith` symbols
+ * and outrank the real target. One exact ≈ five partials.
+ */
+const EXACT_NAME_WEIGHT = 15;
+
 export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
   const tokens = tokenizeQuery(query);
 
@@ -36,8 +47,8 @@ export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
 
       for (const token of tokens) {
         if (nameLower === token) {
-          // Signal 1: exact symbol name match (+10)
-          symScore += 10;
+          // Signal 1: exact symbol name match — dominant target signal.
+          symScore += EXACT_NAME_WEIGHT;
         } else if (nameLower.includes(token)) {
           // Signal 2: partial symbol name match (+3)
           symScore += 3;
