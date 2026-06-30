@@ -993,6 +993,12 @@
         <tbody>
           <tr>
             <td class="td-name">qwen2.5-coder:3b</td>
+            <td>Aider polyglot-JS (20 exercises, n=5)</td>
+            <td class="td-pass">0.03</td>
+            <td><strong>edit-format 100%</strong>, pass@1 0.03 / pass@5 0.14. The thesis by inversion: the 3B <em>always</em> emits a parseable, cleanly-applied edit — edit-format is solved — so the low pass-rate on hard implement-from-scratch Exercism is pure model capability, not a harness gap. The 100%→3% gap is what the escalation ladder (3b→7b→…) closes.</td>
+          </tr>
+          <tr>
+            <td class="td-name">qwen2.5-coder:3b</td>
             <td>realrepo (12 tasks, n=10)</td>
             <td class="td-pass">0.70</td>
             <td>Vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + tinycalc) with authored bun:test oracles. 11/12 nonzero.</td>
