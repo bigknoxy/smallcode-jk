@@ -1,0 +1,6 @@
+{
+  "id": "swebench-lite-v1",
+  "kind": "capability",
+  "description": "SWE-bench-Lite real GitHub-issue tasks (princeton-nlp/SWE-bench_Lite). INGESTION ONLY — execution needs a prepared per-instance env / the official Docker harness; see scripts/run-swebench.ts. No fabricated pass-rate.",
+  "defaultTrials": 1
+}
