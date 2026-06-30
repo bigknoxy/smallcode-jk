@@ -4,6 +4,7 @@ import { runCommand } from "../src/cli/commands/run.ts";
 import { configInitCommand } from "../src/cli/commands/config-init.ts";
 import { configModelsCommand } from "../src/cli/commands/config-models.ts";
 import { updateCommand, uninstallCommand } from "../src/cli/commands/selfmanage.ts";
+import { diffCommand, undoCommand } from "../src/cli/commands/review.ts";
 import { evalRunCommand } from "../src/eval/cli.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
@@ -27,6 +28,8 @@ function printUsage(): void {
 
 Usage:
   smallcode run <task description> [--model <id>] [--best-of-n <N>] [--escalation <m1,m2,..>]
+  smallcode diff [--repo <path>]            # show what the agent changed
+  smallcode undo [--repo <path>] [--yes]    # revert the agent's changes (dry-run without --yes)
   smallcode eval run <suite-dir> [--model <id>] [--trials <n>] [--output json|text]
   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>] [--force]
@@ -53,6 +56,14 @@ try {
 
     case "run":
       await runCommand(parsed);
+      break;
+
+    case "diff":
+      await diffCommand(parsed);
+      break;
+
+    case "undo":
+      await undoCommand(parsed);
       break;
 
     case "config":

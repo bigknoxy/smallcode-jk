@@ -236,7 +236,9 @@ All commands are invoked via `bun run index.ts <command>` (or a compiled `smallc
 
 | Command | Flags | Description |
 |---|---|---|
-| `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` | Run the agent on a coding task inside the given repo directory. |
+| `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` | Run the agent on a coding task inside the given repo directory. Ends with a diff summary + how to review/undo. |
+| `diff` | `--repo <path>` | Show what the agent changed (unified diff + any new files). |
+| `undo` | `--repo <path>` `--yes` | Revert the agent's changes (restore tracked files + delete its new files). **Dry-run without `--yes`** — prints what it would discard; committed history is never touched. |
 | `eval run` | `--suite <path>` `--model <id>` `--config <path>` `--trials <n>` `--transcripts-dir <path>` `--fixtures-root <path>` `--output json\|text` | Run an eval suite and report pass@1, pass@k, and partial scores. Exits 1 if any tasks fail. |
 | `eval gate` | `--suite <path>` `--baseline <path>` `--model <id>` `--threshold <0-1>` | Regression gate: fail if pass@1 drops below `threshold` versus baseline snapshot. For use in CI. |
 | `config init` | `--out <path>` | Write a starter `smallcode.config.json` to the given path. |
