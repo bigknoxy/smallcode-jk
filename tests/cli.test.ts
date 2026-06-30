@@ -17,6 +17,14 @@ describe("parseArgs", () => {
     expect(result.positionals).toEqual(["fix", "the", "bug"]);
   });
 
+  it("R9 chat / diff / undo commands parse with flags", () => {
+    expect(parseArgs(["chat", "--repo", "/p", "--model", "qwen2.5-coder:3b"]).command).toBe("chat");
+    expect(parseArgs(["diff", "--repo", "/p"]).command).toBe("diff");
+    const undo = parseArgs(["undo", "--repo", "/p", "--yes"]);
+    expect(undo.command).toBe("undo");
+    expect(undo.flags["yes"]).toBe(true);
+  });
+
   it("eval run with flags", () => {
     const result = parseArgs(["eval", "run", "./suite", "--model", "vibethinker-3b"]);
     expect(result.command).toBe("eval");
