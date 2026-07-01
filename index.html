@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="smallcode — an agentic coding harness that makes a 3B local model produce real, shippable code. Fully offline. No API keys. HumanEval-TS pass@1 0.828." />
+  <meta name="description" content="smallcode — a fully-offline agentic coding harness for local 3B–7B models (qwen2.5-coder via Ollama). Review every edit before it's written, undo exactly what the agent changed, escalate to a bigger local model only when needed. No API keys, no cloud." />
   <title>smallcode — harness design, not model size</title>
   <link rel="stylesheet" href="docs/assets/site.css" />
 
@@ -655,18 +655,20 @@
         <span class="badge badge-violet">open source</span>
         <span class="badge badge-green">fully local</span>
         <span class="badge badge-blue">no API keys</span>
+        <span class="badge badge-amber">review · undo · approve</span>
       </div>
 
       <h1 class="hero__headline">
-        A <em>3B model</em> that writes<br>
-        <span class="underline-accent">shippable code</span>.<br>
+        A local coding agent you can <em>actually let touch your repo</em>.<br>
+        <span class="underline-accent">Review every edit. Undo anything.</span><br>
         The harness, not the model size.
       </h1>
 
       <p class="hero__sub">
-        smallcode wraps local 3B-7B models (qwen2.5-coder, VibeThinker) in scaffolding that compensates for
-        small-model weaknesses and amplifies verifiable reasoning.
-        Fully offline. No cloud APIs. Runs on a laptop.
+        smallcode wraps local 3B-7B models (qwen2.5-coder) in a harness that constrains their output and
+        verifies it deterministically — and lets you review each proposed edit before it's written to disk,
+        undo exactly what the agent changed (never your own uncommitted work), and escalate to a bigger
+        <em>local</em> model only when the small one stalls. Fully offline. No cloud APIs, no API keys.
       </p>
 
       <!-- Headline stat callout -->
@@ -1193,6 +1195,51 @@
           and a regression gate for CI. HumanEval-TS runner and multi-model bake-off scripts included.
         </p>
       </div>
+
+      <div class="feature-card fade-up">
+        <div class="feature-card__icon" aria-hidden="true">&#x2705;</div>
+        <div class="feature-card__title">Review before write</div>
+        <p class="feature-card__body">
+          With <code>sandbox.requireApproval</code> on, the agent shows you each proposed edit and asks
+          <code>y/N</code> before writing it. Nothing lands in your repo without your OK.
+        </p>
+      </div>
+
+      <div class="feature-card fade-up">
+        <div class="feature-card__icon" aria-hidden="true">&#x21A9;&#xFE0F;</div>
+        <div class="feature-card__title">diff / undo, scoped</div>
+        <p class="feature-card__body">
+          <code>smallcode diff</code> shows exactly what the agent changed. <code>smallcode undo</code>
+          reverts only the agent's edits — recorded per run — and never touches your own uncommitted work.
+        </p>
+      </div>
+
+      <div class="feature-card fade-up">
+        <div class="feature-card__icon" aria-hidden="true">&#x1F4AC;</div>
+        <div class="feature-card__title">Interactive chat</div>
+        <p class="feature-card__body">
+          <code>smallcode chat</code> keeps the repo index and model warm across multiple tasks in one
+          session. <code>/add</code> to focus context, <code>/diff</code> and <code>/undo</code> inline.
+        </p>
+      </div>
+
+      <div class="feature-card fade-up">
+        <div class="feature-card__icon" aria-hidden="true">&#x1FA9C;</div>
+        <div class="feature-card__title">Escalate to your hardware</div>
+        <p class="feature-card__body">
+          A model ladder (3b → 7b → gemma4:12b) runs the small model first and climbs to a bigger
+          <em>local</em> model only on the residual it can't solve — no cloud fallback required.
+        </p>
+      </div>
+
+      <div class="feature-card fade-up">
+        <div class="feature-card__icon" aria-hidden="true">&#x1F6E1;&#xFE0F;</div>
+        <div class="feature-card__title">Won't leave your repo broken</div>
+        <p class="feature-card__body">
+          On untested code, a static-confidence check reverts an edit that doesn't even parse and reports
+          what it could verify — a safety signal, not a correctness claim.
+        </p>
+      </div>
     </div>
   </div>
 </section>
@@ -1245,7 +1292,7 @@
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Updated 2026-06-30</span>
+    <span class="sc-footer__meta">Updated 2026-07-01</span>
   </div>
 </footer>
 
