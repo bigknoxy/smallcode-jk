@@ -269,14 +269,18 @@ describe("target-lock — write_file TOOL path", () => {
     // Reproduces the #80 follow-up dogfood bug: turn 1 establishes the lock on
     // the confidently-pinned target (src/calc.ts). Turns 2+ simulate retrieval
     // DRIFT — `getContext` re-pins `context.targetFile` onto a DIFFERENT file
-    // (src/other.ts), exactly like the live dogfood where an off-target edit
+    // each turn, exactly like the live dogfood where an off-target edit
     // entering recent-history/context caused retrieval to re-pin onto it. The
     // buggy version bound `lockTargetPath` to the live per-turn
     // `context.targetFile`, so it would "follow" the drift and reject nothing.
     // The fix binds to `state.lockedTargetPath`, captured ONCE on turn 1 and
     // never overwritten, so every off-target write in turns 2+ must still be
     // REJECTED against the ORIGINAL target even though `context.targetFile`
-    // itself has drifted.
+    // itself has drifted. This is genuine RANDOM drift — a DIFFERENT
+    // off-target file each turn (src/other.ts, then src/another.ts) — which
+    // must never retarget the lock (that's the mis-pin self-correction guard
+    // in loop-target-lock-retarget.test.ts: it only fires on a PERSISTENT
+    // streak at the SAME off-target path).
     const config: AgentConfig = { repoRoot: testDir, modelId: "test-model", maxTurns: 3, bestOfN: 1 };
     const state = createState(config, "Fix add() in src/calc.ts so the failing test passes");
     state.goals = [{ id: "goal-1", description: "Fix add in src/calc.ts", status: "pending" }];
@@ -288,8 +292,9 @@ describe("target-lock — write_file TOOL path", () => {
       // Turn 2: wanders to an UNRELATED file while retrieval has (per the mock
       // below) re-pinned context.targetFile onto that SAME unrelated file.
       `TOOL: write_file {"path": "src/other.ts", "content": "export const x = 1;\\n"}`,
-      // Turn 3: wanders again — the lock must still hold from turn 1.
-      `TOOL: write_file {"path": "src/other.ts", "content": "export const x = 2;\\n"}`,
+      // Turn 3: wanders to a DIFFERENT unrelated file (not the same one as
+      // turn 2) — the streak resets, so the lock must still hold from turn 1.
+      `TOOL: write_file {"path": "src/another.ts", "content": "export const x = 2;\\n"}`,
     ];
     const provider = makeSequentialProvider(responses);
     const profile = makeProfile();
@@ -309,7 +314,7 @@ describe("target-lock — write_file TOOL path", () => {
         tokenBudget: 4096,
         truncated: false,
         query: "fix add",
-        targetFile: { path: "src/other.ts", lineCount: 1, format: "full" },
+        targetFile: { path: calls === 2 ? "src/other.ts" : "src/another.ts", lineCount: 1, format: "full" },
       };
     };
 
@@ -321,7 +326,8 @@ describe("target-lock — write_file TOOL path", () => {
     );
 
     expect(calls).toBeGreaterThanOrEqual(3);
-    // The lock captured on turn 1 and never overwritten.
+    // The lock captured on turn 1 and never overwritten — random drift across
+    // DIFFERENT off-target files never crosses the same-path retarget streak.
     expect(finalState.lockedTargetPath).toBe(TARGET_PATH);
 
     // Turn 1: on-target write_file was NOT rejected.
@@ -329,18 +335,24 @@ describe("target-lock — write_file TOOL path", () => {
     expect(turn1Result?.success).toBe(true);
 
     // Turns 2 and 3: off-target writes REJECTED against the STABLE original
-    // target, even though context.targetFile drifted onto src/other.ts.
-    for (const turn of [finalState.turns[1]!, finalState.turns[2]!]) {
-      const result = turn.toolResults.find((r) => r.name === "write_file");
-      expect(result?.success).toBe(false);
-      expect(result?.error).toContain(TARGET_PATH);
-      expect(result?.error).toContain("src/other.ts");
-      expect(result?.error).toContain("REJECTED");
-    }
+    // target, even though context.targetFile drifted each turn.
+    const turn2Result = finalState.turns[1]!.toolResults.find((r) => r.name === "write_file");
+    expect(turn2Result?.success).toBe(false);
+    expect(turn2Result?.error).toContain(TARGET_PATH);
+    expect(turn2Result?.error).toContain("src/other.ts");
+    expect(turn2Result?.error).toContain("REJECTED");
 
-    // The off-target file was never actually written to disk across any turn.
+    const turn3Result = finalState.turns[2]!.toolResults.find((r) => r.name === "write_file");
+    expect(turn3Result?.success).toBe(false);
+    expect(turn3Result?.error).toContain(TARGET_PATH);
+    expect(turn3Result?.error).toContain("src/another.ts");
+    expect(turn3Result?.error).toContain("REJECTED");
+
+    // Neither off-target file was ever actually written to disk.
     const other = Bun.file(join(testDir, "src", "other.ts"));
     expect(await other.exists()).toBe(false);
+    const another = Bun.file(join(testDir, "src", "another.ts"));
+    expect(await another.exists()).toBe(false);
   });
 
   it("no confident targetFile -> nothing is blocked", async () => {

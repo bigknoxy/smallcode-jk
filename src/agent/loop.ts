@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path, { sep } from "node:path";
 import { env } from "@/config/env.ts";
 import type { ContextBundle } from "@/context/types.ts";
-import { applyBatch, isOnTargetPath, parse } from "@/edit/index.ts";
+import { applyBatch, isOnTargetPath, isTestFilePath, parse } from "@/edit/index.ts";
 import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
@@ -18,6 +18,55 @@ import type { AgentConfig, AgentState, ToolCall, ToolName, TurnRecord } from "./
 
 const STALL_LIMIT = 2;
 const MAX_REDRAFTS = 2;
+
+// Target-lock retarget (mis-pin self-correction, dogfood follow-up): how many
+// CONSECUTIVE rejected attempts on the SAME off-target source file it takes
+// before the lock gives up and retargets to that file. 2 was chosen so a
+// mis-pinned retrieval self-corrects within one extra turn instead of
+// dead-locking every remaining turn to max_turns, while still requiring more
+// than a single accidental off-target edit (random drift touches a
+// DIFFERENT file each turn and never reaches this streak).
+const OFF_TARGET_RETARGET_THRESHOLD = 2;
+
+/**
+ * Target-lock retarget guard: decides whether an edit attempt at `attemptedPath`
+ * (while `currentTarget` is the currently-enforced lock) should keep being
+ * rejected, or whether the lock should GIVE UP on `currentTarget` and retarget
+ * to `attemptedPath` instead. Mutates `state.offTargetStreak` (and, on
+ * retarget, `state.lockedTargetPath`) and returns the path that should be
+ * enforced for THIS attempt (unchanged, or the new retargeted path).
+ *
+ * On-target attempts and test-file attempts always reset the streak and never
+ * retarget — the anti-fake-green guard (tests are the oracle) must never be
+ * weakened by this. Only a persistent streak of attempts at the same
+ * non-test, non-target SOURCE file can move the lock — a different
+ * off-target file each turn (genuine drift) keeps resetting the streak to 1
+ * and is rejected forever, same as before this fix.
+ */
+function trackOffTargetAttempt(state: AgentState, attemptedPath: string, currentTarget: string): string {
+  if (isOnTargetPath(attemptedPath, currentTarget)) {
+    state.offTargetStreak = undefined;
+    return currentTarget;
+  }
+  if (isTestFilePath(attemptedPath)) {
+    // Tests are never a retarget candidate — leave any in-progress streak on a
+    // different (source) path untouched, but this attempt itself doesn't build
+    // toward a retarget.
+    return currentTarget;
+  }
+  const prior = state.offTargetStreak;
+  const count = prior !== undefined && isOnTargetPath(prior.path, attemptedPath) ? prior.count + 1 : 1;
+  if (count >= OFF_TARGET_RETARGET_THRESHOLD) {
+    process.stderr.write(
+      `[smallcode] retargeting lock: model persistently edits \`${attemptedPath}\` ≠ pinned \`${currentTarget}\` — retrieval likely mis-pinned; retargeting lock to \`${attemptedPath}\`\n`,
+    );
+    state.lockedTargetPath = attemptedPath;
+    state.offTargetStreak = undefined;
+    return attemptedPath;
+  }
+  state.offTargetStreak = { path: attemptedPath, count };
+  return currentTarget;
+}
 
 // R2 externalize-localization (A/B-gated). When a failure's stack trace reached a
 // source line (a runtime throw), surface a tight window around that exact line in
@@ -317,6 +366,12 @@ export async function runLoop(
       env.targetLock && fixModeBaseline && state.lockedTargetPath !== undefined
         ? state.lockedTargetPath
         : undefined;
+    // Mutable per-turn view of the enforced target: `trackOffTargetAttempt`
+    // (mis-pin retarget guard, below) can move it mid-turn when a persistent
+    // off-target streak crosses the threshold, so the SAME turn's remaining
+    // write attempts (edit blocks, then write_file tool calls) enforce
+    // against the NEW target rather than waiting for the next turn.
+    let lockTargetPathForTurn = lockTargetPath;
 
     // Build turn prompt. Answer-now recovery (think-only truncation last turn)
     // takes precedence over a stall redraft — getting ANY answer out beats trying
@@ -443,12 +498,22 @@ export async function runLoop(
       if (!approved) {
         editRejected = true;
       } else {
+        // Mis-pin retarget guard: before enforcing, let each block's attempted
+        // path push the streak — a persistent same-file off-target streak
+        // retargets `lockTargetPathForTurn` (and `state.lockedTargetPath`) so
+        // THIS batch's write is enforced against the corrected target instead
+        // of being rejected forever. On-target/test-file blocks are no-ops.
+        if (lockTargetPathForTurn !== undefined) {
+          for (const block of editBlocks) {
+            lockTargetPathForTurn = trackOffTargetAttempt(state, block.filePath, lockTargetPathForTurn);
+          }
+        }
         try {
           const batchResult = await applyBatch(
             editBlocks,
             readFileFn,
             writeFileFn,
-            lockTargetPath !== undefined ? { targetPath: lockTargetPath } : undefined,
+            lockTargetPathForTurn !== undefined ? { targetPath: lockTargetPathForTurn } : undefined,
           );
           applyResults = batchResult.results;
         } catch {
@@ -512,14 +577,21 @@ export async function runLoop(
       // the OTHER write path — `TOOL: write_file` bypasses applyBatch entirely
       // and writes straight to disk in tools.ts, so it needs its own guard.
       // Skipped with feedback, never executed — no write, nothing to revert.
-      if (call.name === "write_file" && lockTargetPath !== undefined) {
+      // Same mis-pin retarget guard as the applyBatch path above: a persistent
+      // same-file streak can move `lockTargetPathForTurn` (and the stable
+      // `state.lockedTargetPath`) so this write_file is allowed through
+      // instead of rejected forever.
+      if (call.name === "write_file" && lockTargetPathForTurn !== undefined) {
         const p = call.args["path"];
-        if (typeof p === "string" && !isOnTargetPath(p, lockTargetPath)) {
+        if (typeof p === "string") {
+          lockTargetPathForTurn = trackOffTargetAttempt(state, p, lockTargetPathForTurn);
+        }
+        if (typeof p === "string" && !isOnTargetPath(p, lockTargetPathForTurn)) {
           toolResults.push({
             name: "write_file",
             success: false,
             output: "",
-            error: `Edit REJECTED — this task fixes only \`${lockTargetPath}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPath}\`.`,
+            error: `Edit REJECTED — this task fixes only \`${lockTargetPathForTurn}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPathForTurn}\`.`,
           });
           continue;
         }

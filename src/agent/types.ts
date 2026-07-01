@@ -115,6 +115,21 @@ export interface AgentState {
    * established (multi-file tasks stay unlocked, as before).
    */
   lockedTargetPath?: string;
+  /**
+   * Retarget tracking (mis-pin self-correction follow-up): the CURRENT
+   * consecutive streak of REJECTED off-target edit attempts, keyed to a
+   * single path. When the model keeps attempting the SAME non-locked source
+   * file turn after turn, that's usually a sign retrieval pinned the WRONG
+   * file — the model is (correctly) trying to fix the real target and the
+   * lock is blocking it forever. `count` reaching `OFF_TARGET_RETARGET_THRESHOLD`
+   * (loop.ts) retargets `lockedTargetPath` to `path` instead of rejecting
+   * again. Reset to undefined whenever the model targets the (current)
+   * locked file, or replaced with a fresh `{ path, count: 1 }` when it
+   * attempts a DIFFERENT off-target file — only a persistent single-file
+   * streak can retarget, so genuine random drift (a different off-target
+   * file each turn) keeps getting rejected forever, same as before.
+   */
+  offTargetStreak?: { path: string; count: number };
 }
 
 export interface Candidate {

@@ -524,6 +524,27 @@ flowchart TD
         (<code>prompt.ts</code>) names <code>state.lockedTargetPath ?? context.targetFile.path</code> too,
         so the prompt and the enforcement always agree on which file is "the target".
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">Retarget on persistent mis-pin (dogfood
+        follow-up)</strong> — a hard lock on a WRONGLY-pinned target is a dead end: dogfooding hit a task
+        to fix <code>effectiveContextWindow</code> in <code>context-budget.ts</code>, but retrieval pinned
+        <code>types.ts</code> (it merely <em>defines</em> the fields — <code>contextWindow</code>,
+        <code>num_ctx</code> — the query mentioned). The model correctly tried the real file every turn and
+        was rejected all 4 turns to <code>max_turns</code> — unsolvable regardless of model size. The fix
+        distinguishes random drift (a different off-target file each turn — keep rejecting) from a
+        persistent mis-pin (the SAME off-target file, turn after turn — retarget). <code>loop.ts</code>'s
+        <code>trackOffTargetAttempt</code> tracks <code>AgentState.offTargetStreak: { path, count }</code>,
+        a consecutive-same-path counter over rejected attempts; when the streak reaches
+        <code>OFF_TARGET_RETARGET_THRESHOLD</code> (2), the lock gives up on the stale pin, sets
+        <code>state.lockedTargetPath</code> to the persistently-attempted path, and lets that same turn's
+        write through — so a mis-pin self-corrects within one extra turn instead of dead-locking to
+        <code>max_turns</code>. An on-target attempt or a switch to a DIFFERENT off-target path resets the
+        streak, so genuine drift is rejected forever exactly as before; test files
+        (<code>isTestFilePath</code>) are never a retarget candidate — the anti-fake-green guard is
+        untouched. Both write paths (<code>applyBatch</code> and the <code>TOOL: write_file</code> guard)
+        share one per-turn <code>lockTargetPathForTurn</code>, so a retarget triggered by one write path
+        also applies to the other write inside the same turn.
+      </p>
     </section>
 
     <!-- ===== EDIT-FORMAT PARSE PIPELINE ===== -->
