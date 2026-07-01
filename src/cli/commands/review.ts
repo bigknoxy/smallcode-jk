@@ -1,5 +1,6 @@
 import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+import { git, isGitRepo } from "@/util/git.ts";
 import type { EditBlock } from "../../edit/types.ts";
 import type { ParsedArgs } from "../args.ts";
 
@@ -40,18 +41,6 @@ function flagString(flags: Record<string, string | boolean>, key: string): strin
 }
 function flagBool(flags: Record<string, string | boolean>, key: string): boolean {
   return flags[key] === true || flags[key] === "true";
-}
-
-function git(args: string[], cwd: string): { ok: boolean; out: string } {
-  const p = Bun.spawnSync(["git", ...args], { cwd });
-  const out =
-    (p.stdout instanceof Uint8Array ? new TextDecoder().decode(p.stdout) : "") +
-    (p.stderr instanceof Uint8Array ? new TextDecoder().decode(p.stderr) : "");
-  return { ok: (p.exitCode ?? 1) === 0, out };
-}
-
-function isGitRepo(repo: string): boolean {
-  return git(["rev-parse", "--git-dir"], repo).ok;
 }
 
 /** Working-tree changes: tracked diff stat + untracked files the agent created. */

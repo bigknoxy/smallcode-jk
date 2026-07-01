@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { git } from "@/util/git.ts";
 import { runLoop } from "../../agent/loop.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
@@ -30,14 +31,6 @@ import {
 function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
   const v = flags[key];
   return typeof v === "string" ? v : undefined;
-}
-
-function git(args: string[], cwd: string): { ok: boolean; out: string } {
-  const p = Bun.spawnSync(["git", ...args], { cwd });
-  const out =
-    (p.stdout instanceof Uint8Array ? new TextDecoder().decode(p.stdout) : "") +
-    (p.stderr instanceof Uint8Array ? new TextDecoder().decode(p.stderr) : "");
-  return { ok: (p.exitCode ?? 1) === 0, out };
 }
 
 const HELP = `Commands:

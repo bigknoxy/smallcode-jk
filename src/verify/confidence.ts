@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { runChecker } from "./runner.ts";
 import type { CheckResult } from "./types.ts";
 
 /**
@@ -11,12 +10,11 @@ import type { CheckResult } from "./types.ts";
  * The honest middle ground between a false "verified" and a bare "unverified".
  *
  * IMPORTANT (and stated in the report): a SAFETY signal, not a CORRECTNESS one. A
- * wrong operator / off-by-one / inverted condition parses, typechecks and lints
+ * wrong operator / off-by-one / inverted condition parses and typechecks
  * clean — only a test catches those. The ladder, weakest→strongest:
  *   broken      → a source file does not even PARSE (a structural break we caught)
  *   parses      → every source file parses, but no typecheck ran (no tsconfig)
  *   type-clean  → parses AND `tsc` ran with no real type errors
- * Lint adds a signal line but never lifts the level (it is style, not soundness).
  * `unknown` = nothing checkable at all.
  */
 export type ConfidenceLevel = "verified" | "type-clean" | "parses" | "broken" | "unknown";
@@ -95,15 +93,6 @@ export async function computeStaticConfidence(
   const tcRan = typecheck?.status === "passed";
   if (tcRan) signals.push("typescript: no errors");
   else if (typecheck) signals.push("typescript: skipped (no/invalid tsconfig)");
-
-  // 3. Lint (advisory signal only).
-  const lint = await runChecker(
-    { kind: "lint", name: "biome", command: ["bunx", "biome", "check", "."], cwd: repoRoot, timeoutMs: 30_000 },
-    repoRoot,
-  );
-  if (lint.status === "passed") signals.push("lint: clean");
-  else if (lint.status === "failed") signals.push("lint: issues found (style)");
-  else signals.push("lint: skipped (tool unavailable)");
 
   const level: ConfidenceLevel = files.length === 0 ? "unknown" : tcRan ? "type-clean" : "parses";
   return { level, signals };

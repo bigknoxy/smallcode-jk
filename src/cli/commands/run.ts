@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { git, isGitRepo } from "@/util/git.ts";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
@@ -99,18 +100,6 @@ function flagNumber(flags: Record<string, string | boolean>, key: string): numbe
     return Number.isFinite(n) ? n : undefined;
   }
   return undefined;
-}
-
-function git(args: string[], cwd: string): { ok: boolean; out: string } {
-  const p = Bun.spawnSync(["git", ...args], { cwd });
-  const out =
-    (p.stdout instanceof Uint8Array ? new TextDecoder().decode(p.stdout) : "") +
-    (p.stderr instanceof Uint8Array ? new TextDecoder().decode(p.stderr) : "");
-  return { ok: (p.exitCode ?? 1) === 0, out };
-}
-
-function isGitRepo(repoRoot: string): boolean {
-  return git(["rev-parse", "--git-dir"], repoRoot).ok;
 }
 
 /**
