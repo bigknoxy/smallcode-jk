@@ -16,12 +16,19 @@ export function makeInteractiveApprover(
 ): ((blocks: EditBlock[]) => Promise<boolean>) | undefined {
   if (!requireApproval) return undefined;
   return (blocks: EditBlock[]) => {
-    process.stderr.write(`\n[smallcode] Review ${blocks.length} proposed edit(s) before writing:\n`);
+    process.stderr.write(
+      `\n[smallcode] Review ${blocks.length} proposed edit(s) before writing:\n`,
+    );
     for (const b of blocks) {
       const whole = b.search === "";
       process.stderr.write(`  ── ${b.filePath} [${b.format}${whole ? ", full file" : ""}]\n`);
       const lines = b.replace.split("\n");
-      process.stderr.write(`${lines.slice(0, 24).map((l) => `   | ${l}`).join("\n")}\n`);
+      process.stderr.write(
+        `${lines
+          .slice(0, 24)
+          .map((l) => `   | ${l}`)
+          .join("\n")}\n`,
+      );
       if (lines.length > 24) process.stderr.write(`   | …(${lines.length - 24} more lines)\n`);
     }
     const ans = (prompt("[smallcode] Apply this edit? [y/N] ") ?? "").trim();
@@ -44,13 +51,50 @@ function flagBool(flags: Record<string, string | boolean>, key: string): boolean
 }
 
 /** Working-tree changes: tracked diff stat + untracked files the agent created. */
-export function workingChanges(repo: string): { stat: string; untracked: string[]; hasChanges: boolean } {
+export function workingChanges(repo: string): {
+  stat: string;
+  untracked: string[];
+  hasChanges: boolean;
+} {
   const stat = git(["diff", "--stat"], repo).out.trim();
   const untracked = git(["ls-files", "--others", "--exclude-standard"], repo)
     .out.split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
   return { stat, untracked, hasChanges: stat.length > 0 || untracked.length > 0 };
+}
+
+/**
+ * Machine-readable working-tree change summary for `--json` output (run.ts).
+ * Parses `git diff --numstat` (tab-separated `added\tremoved\tpath`; binary files
+ * report `-` for both counts, which we treat as 0) and folds in untracked
+ * (agent-created) files as zero-line-count entries.
+ */
+export function numstatChanges(repo: string): {
+  filesChanged: string[];
+  added: number;
+  removed: number;
+} {
+  const numstat = git(["diff", "--numstat"], repo).out;
+  const files: string[] = [];
+  let added = 0;
+  let removed = 0;
+  for (const line of numstat.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [a, r, ...pathParts] = trimmed.split("\t");
+    const path = pathParts.join("\t");
+    if (!path) continue;
+    files.push(path);
+    added += a === "-" ? 0 : Number(a) || 0;
+    removed += r === "-" ? 0 : Number(r) || 0;
+  }
+  const untracked = git(["ls-files", "--others", "--exclude-standard"], repo)
+    .out.split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const filesChanged = [...new Set([...files, ...untracked])];
+  return { filesChanged, added, removed };
 }
 
 // --- Agent-change manifest -------------------------------------------------
@@ -69,7 +113,10 @@ function manifestPath(repo: string): string {
 }
 
 function gitLines(args: string[], repo: string): string[] {
-  return git(args, repo).out.split("\n").map((s) => s.trim()).filter(Boolean);
+  return git(args, repo)
+    .out.split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /** {tracked modified, untracked} sets right now. */
