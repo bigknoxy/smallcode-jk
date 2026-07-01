@@ -7,6 +7,28 @@ import { renderDiagnostic } from "@/verify/failure-extract.ts";
 import { defaultPromptSet } from "./prompt-set.ts";
 import type { AgentConfig, AgentState } from "./types.ts";
 
+/**
+ * Every repo-relative file path a turn wrote to, across BOTH write paths: FILE:/
+ * PATCH:/SEARCH-REPLACE edit blocks (via `applyResults` — using `effectivePath`
+ * when a path-typo rescue redirected the write) and the `write_file` TOOL call
+ * (via `toolCalls`, since it never goes through `applyResults`). Used by the
+ * off-task-drift re-anchor below to detect "the model edited some OTHER file
+ * while the pinned target's test is still failing". Pure; exported for testing.
+ */
+export function turnEditedPaths(turn: AgentState["turns"][number]): Set<string> {
+  const paths = new Set<string>();
+  for (const r of turn.applyResults) {
+    if (r.status !== "applied") continue;
+    paths.add(r.effectivePath ?? r.filePath);
+  }
+  for (const tc of turn.toolCalls) {
+    if (tc.name !== "write_file") continue;
+    const p = tc.args["path"];
+    if (typeof p === "string") paths.add(p);
+  }
+  return paths;
+}
+
 export interface BuildTurnPromptOpts {
   /** When true, emit a REDRAFT section and suppress Recent History. */
   redraft?: boolean;
@@ -133,6 +155,30 @@ export function buildTurnPrompt(
       parts.push("```");
       parts.push(loc.window);
       parts.push("```");
+    }
+
+    // Off-task-drift re-anchor (dogfood #1 blocker): a confident single edit
+    // target + a still-failing test is the strongest signal the harness has that
+    // this turn should stay on ONE file. The loop (loop.ts) already refuses to
+    // advance the goal index in this situation, but the model itself doesn't know
+    // that — without an explicit restatement it free-associates onto whatever
+    // else is in context. Repeat the target + test name every turn while red, and
+    // if the LAST turn edited a different file, call that out by name so the
+    // model can't miss it.
+    if (context.targetFile) {
+      const tgtPath = context.targetFile.path;
+      const editedPaths = turnEditedPaths(failingTurn!);
+      const editedOffTarget = editedPaths.size > 0 && !editedPaths.has(tgtPath);
+      parts.push(`\n## STAY ON TARGET`);
+      if (editedOffTarget) {
+        parts.push(
+          `⚠ You edited ${[...editedPaths].map((p) => `\`${p}\``).join(", ")} last turn, but the target is \`${tgtPath}\` and \`${d.assertionId}\` still fails. Edit \`${tgtPath}\` instead — do not edit other files while this test is red.`,
+        );
+      } else {
+        parts.push(
+          `Edit ONLY \`${tgtPath}\`. The failing test is \`${d.assertionId}\`. Your last edit did not fix it — try a different fix in \`${tgtPath}\`.`,
+        );
+      }
     }
   }
 

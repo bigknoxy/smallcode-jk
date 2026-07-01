@@ -446,7 +446,9 @@ flowchart TD
     STALL -- "stallCount >= STALL_LIMIT\nAND redraftCount < MAX_REDRAFTS" --> REDRAFT[Set redraftNext=true\nrotateStrategy hint\nreset stallCount\nredraftCount++]
     REDRAFT --> FINISH
     STALL -- different sig or count ok --> FINISH{TOOL: finish\ncalled?}
-    FINISH -- yes --> ADVANCE[advanceGoal\ncurrentGoalIndex++]
+    FINISH -- yes --> ANCHOR{off-task-drift guard:\ntargetFile pinned AND\noutcome=failing AND\nlater goal exists?}
+    ANCHOR -- yes: stay anchored --> GOAL
+    ANCHOR -- no --> ADVANCE[advanceGoal\ncurrentGoalIndex++]
     ADVANCE --> GOAL
     FINISH -- no --> MAXCHECK{turns ≥ maxTurns?}
     MAXCHECK -- yes --> MAXED([status: max_turns])
@@ -463,8 +465,26 @@ flowchart TD
     style REGRESSED fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
     style REVERT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
     style WARNMODEL fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
+    style ANCHOR fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
         </div>
       </div>
+      <p>
+        <strong style="color: var(--text-primary);">Off-task-drift guard</strong> (dogfood #1 blocker,
+        found via 2 live 7b runs: turn 1 lands a wrong edit on the correct target file, then turns 2-8
+        wander into unrelated files and never touch it again). While the harness has confidently pinned a
+        single edit target (<code>context.targetFile</code>) AND the oracle still reports that target's
+        test <code>failing</code> AND a LATER goal exists to drift onto
+        (<code>currentGoalIndex+1 &lt; goals.length</code> — the planner's own trailing "write tests" /
+        "run tests" sub-goals for a bug-fix task), <code>TOOL: finish</code> no longer calls
+        <code>advanceGoal</code>. Staying on the same goal means the next turn's <code>getContext</code>
+        re-resolves the identical target file, instead of the prompt's "Current Action" and retrieval
+        query sliding onto a sub-goal that has nothing to do with the fix. Single-goal tasks (e.g. each
+        Best-of-N attempt) are unaffected — <code>finish()</code> still ends the run exactly as before.
+        Paired with a per-turn <strong>"## STAY ON TARGET"</strong> prompt re-anchor
+        (<code>prompt.ts</code>): restates "Edit ONLY <code>&lt;target&gt;</code>…" every turn while red,
+        escalating to a named warning if <code>turnEditedPaths(turn)</code> shows the PRIOR turn wrote to
+        some other file.
+      </p>
     </section>
 
     <!-- ===== EDIT-FORMAT PARSE PIPELINE ===== -->
