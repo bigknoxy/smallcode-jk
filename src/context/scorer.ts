@@ -1,3 +1,4 @@
+import { isTestFilePath } from "@/edit/applier.ts";
 import type { CodeSymbol, FileMap } from "./types.ts";
 
 export interface ScoredFile {
@@ -5,6 +6,59 @@ export interface ScoredFile {
   score: number;
   matchedSymbols: CodeSymbol[];
 }
+
+/**
+ * Path segments that mark a file as test/fixture/vendor/example/generated data
+ * rather than application source. A repo with a large fixture/vendor tree (e.g.
+ * smallcode's own `evals/fixtures/**`, 344 near-duplicate source files) can
+ * contain a FIXTURE copy of the exact file being fixed — lexically identical to
+ * the real source — which would otherwise tie or even outrank it in retrieval.
+ */
+const LOW_PRIORITY_SEGMENTS = new Set([
+  "fixtures",
+  "__fixtures__",
+  "__mocks__",
+  "__snapshots__",
+  "testdata",
+  "test-data",
+  "examples",
+  "example",
+  "vendor",
+  "third_party",
+  "node_modules", // already walked out; kept here for defense-in-depth
+]);
+
+/**
+ * True when `path` looks like test/fixture/vendor/example/generated data rather
+ * than real application source. Used ONLY to deprioritize EDIT TARGET selection
+ * (`scoreFiles`'s multiplicative penalty) — it does NOT hide the file from
+ * context; tests/fixtures remain visible as reference material, just not chosen
+ * as the file to edit. Reuses `isTestFilePath` (the same heuristic `applyBatch`
+ * uses to reject test-file WRITES) so the two never drift on what counts as a
+ * test path. Pure — no I/O.
+ */
+export function isLowPriorityTargetPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/");
+  const segments = normalized.split("/").filter((s) => s.length > 0);
+  if (segments.length > 0) {
+    const top = segments[0]!.toLowerCase();
+    if (top === "evals" || top === "eval") return true;
+  }
+  for (const seg of segments) {
+    if (LOW_PRIORITY_SEGMENTS.has(seg.toLowerCase())) return true;
+  }
+  return isTestFilePath(normalized);
+}
+
+/**
+ * Multiplicative penalty applied to a low-priority (test/fixture/vendor/example)
+ * path's score. Gated on score > 0 by the caller so a zero-score file is never
+ * resurrected — this only WIDENS the gap between a real source file and a
+ * lexically-identical fixture/vendor twin (or breaks an exact tie), it never
+ * changes ranking when no such paths are in play (the common case / the
+ * retrieval probes).
+ */
+const LOW_PRIORITY_PENALTY = 0.25;
 
 // Tokenize a query string: split on non-alphanumeric/underscore chars, filter < 2 chars.
 function tokenizeQuery(query: string): string[] {
@@ -66,6 +120,12 @@ export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
         score += symScore;
         matchedSymbols.push(sym);
       }
+    }
+
+    // Deprioritize test/fixture/vendor/example paths for TARGET selection —
+    // gated on score > 0 so a zero-score file is never resurrected above zero.
+    if (score > 0 && isLowPriorityTargetPath(fileMap.path)) {
+      score *= LOW_PRIORITY_PENALTY;
     }
 
     return { fileMap, score, matchedSymbols };
