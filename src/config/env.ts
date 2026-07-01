@@ -25,6 +25,7 @@ export const env = {
   get targetPin(): boolean { return boolEnv("SMALLCODE_TARGET_PIN", true); },
   get graderRetries(): number { return intEnv("SMALLCODE_GRADER_RETRIES", 1); },
   get watchdog(): boolean { return boolEnv("SMALLCODE_WATCHDOG", true); },
+  get targetLock(): boolean { return boolEnv("SMALLCODE_TARGET_LOCK", true); },
 };
 
 /** Metadata for discoverability / `smallcode config env` listing. */
@@ -38,4 +39,5 @@ export const ENV_REGISTRY: EnvVarDoc[] = [
   { name: "SMALLCODE_TARGET_PIN", parse: "bool", default: "on", description: "Pin the scored edit-target file as a whole undroppable context chunk." },
   { name: "SMALLCODE_GRADER_RETRIES", parse: "int", default: "1", description: "Deterministic grader infra-error retry count." },
   { name: "SMALLCODE_WATCHDOG", parse: "bool", default: "on", description: "Throughput watchdog: unload/reload the model on KV-cache decay." },
+  { name: "SMALLCODE_TARGET_LOCK", parse: "bool", default: "on", description: "Hard-reject FILE:/PATCH:/write_file edits to a file other than the confidently-pinned fix target while the run is in fix-mode (baseline had a failing test)." },
 ];

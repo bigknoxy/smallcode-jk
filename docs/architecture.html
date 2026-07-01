@@ -429,9 +429,12 @@ flowchart TD
     THINKONLY -- yes --> ANSWERNOW[record failed turn\nset answerNowNext=true\nNEXT turn: ANSWER NOW prompt\nno think, act immediately]
     ANSWERNOW --> GOAL
     THINKONLY -- no --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
-    PARSEEDITS --> APPLY[applyBatch\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
+    PARSEEDITS --> APPLY[applyBatch targetPath?=lockTargetPath\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nHARD-REJECT edit to non-target path\nwhen target lock active isOnTargetPath\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
-    PARSETOOLS --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
+    PARSETOOLS --> TOOLLOCK{write_file AND\ntarget lock active AND\npath ≠ target?}
+    TOOLLOCK -- yes --> TOOLREJECT[skip write, feedback:\nEdit REJECTED — fixes only target]
+    TOOLREJECT --> ORACLE
+    TOOLLOCK -- no --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
     EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
     ORACLE --> REGRESSED{verdict.regressed?\nnewFailures present OR\ntotal red > baseline red OR\nR4: introduced load/compile error\n(SMALLCODE_VALIDATE_EDIT, default on)}
     REGRESSED -- yes --> REVERT[revertFiles\nrestore pre-turn content\nvia ApplyResult.effectivePath\n+ originalContent\nfold stall signature onto prior turn]
@@ -466,6 +469,8 @@ flowchart TD
     style REVERT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
     style WARNMODEL fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
     style ANCHOR fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
+    style TOOLLOCK fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
+    style TOOLREJECT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
         </div>
       </div>
       <p>
@@ -484,6 +489,24 @@ flowchart TD
         (<code>prompt.ts</code>): restates "Edit ONLY <code>&lt;target&gt;</code>…" every turn while red,
         escalating to a named warning if <code>turnEditedPaths(turn)</code> shows the PRIOR turn wrote to
         some other file.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Target lock (hard-reject, drift enforcement)</strong>
+        — dogfooding found the prompt-level guard above is not enough: a 7b model ignored
+        "## STAY ON TARGET" and edited an unrelated file 7× in one run. When
+        <code>SMALLCODE_TARGET_LOCK</code> is on (default), a confident single
+        <code>context.targetFile</code> is pinned, AND the pre-loop <code>testBaseline</code> was red
+        (<code>fixModeBaseline</code>), <code>loop.ts</code> computes <code>lockTargetPath</code> each
+        turn and enforces it on <strong>both</strong> write paths: <code>applyBatch(blocks, read, write,
+        { targetPath })</code> rejects any <code>FILE:</code>/<code>PATCH:</code> block whose effective
+        path isn't the target (<code>status: "error"</code>, nothing written — mirrors the existing
+        test-file guard), and the loop's <code>TOOL: write_file</code> executor skips the call before
+        <code>executeTool</code> runs, feeding back the same
+        "Edit REJECTED — this task fixes only <code>&lt;target&gt;</code>…" message as a failed tool
+        result. <code>isOnTargetPath</code> normalizes slashes/<code>./</code> and rescues dot-flattened
+        path typos bidirectionally (reused from the existing typo-rescue logic) so a mistyped target path
+        still counts as on-target. No <code>targetFile</code> (multi-file/low-confidence retrieval) or
+        baseline all-green → no enforcement, edits flow through unchanged.
       </p>
     </section>
 

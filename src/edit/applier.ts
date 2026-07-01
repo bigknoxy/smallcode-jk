@@ -432,10 +432,53 @@ export function isTestFilePath(path: string): boolean {
  */
 export const TEST_FILE_EDIT_REJECTED = "editing test/spec files is not allowed";
 
+/**
+ * Stable marker embedded in the ApplyResult.error of a rejected off-target edit.
+ * The prompt builder can match on this to give re-anchoring feedback instead of
+ * the generic recovery instruction — exported so the reject site and any future
+ * consumer can never drift on the exact string.
+ */
+export const OFF_TARGET_EDIT_REJECTED = "off-target edit blocked by target lock";
+
+/** Strip a leading `./` and normalize backslashes to forward slashes for comparison. */
+function normalizeForCompare(p: string): string {
+  return p.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+/**
+ * True when `path` is (or resolves to, via the dots-as-slashes typo rescue in
+ * either direction) the same file as `targetPath`. Used by the target-lock
+ * guard so a model that typo-flattens the pinned target's own path (e.g.
+ * `src.calc.ts` for `src/calc.ts`) is still recognized as on-target rather than
+ * spuriously rejected. Pure — no I/O.
+ */
+export function isOnTargetPath(path: string, targetPath: string): boolean {
+  const a = normalizeForCompare(path);
+  const b = normalizeForCompare(targetPath);
+  if (a === b) return true;
+  const flatA = flattenedPathCandidate(a);
+  if (flatA !== null && normalizeForCompare(flatA) === b) return true;
+  const flatB = flattenedPathCandidate(b);
+  if (flatB !== null && normalizeForCompare(flatB) === a) return true;
+  return false;
+}
+
+export interface ApplyBatchOpts {
+  /**
+   * The confidently-pinned single fix target (relative to repo root). When set,
+   * `applyBatch` REJECTS any block whose effective path is not the target — the
+   * drift-enforcement guard (dogfood: a 7b ignored a prompt-level "edit ONLY
+   * <target>" instruction and edited an unrelated file 7×). Undefined ⇒ no
+   * enforcement (multi-file/low-confidence tasks are unaffected).
+   */
+  targetPath?: string;
+}
+
 export async function applyBatch(
   blocks: EditBlock[],
   readFile: (path: string) => Promise<string | null>,
   writeFile: (path: string, content: string) => Promise<void>,
+  opts?: ApplyBatchOpts,
 ): Promise<ApplyBatchResult> {
   const inMemory = new Map<string, string>();
   const results: ApplyResult[] = [];
@@ -484,6 +527,27 @@ export async function applyBatch(
         effectivePath: path,
         status: "error",
         error: `edit rejected: ${TEST_FILE_EDIT_REJECTED} — the tests are the specification. Fix the implementation file so the existing tests pass; do not modify the tests.`,
+      });
+      continue;
+    }
+
+    // Target-lock: while a confident single fix target is pinned, reject any
+    // edit to a DIFFERENT file before it is written — the enforcement version
+    // of the prompt-level "stay on target" instruction, which dogfooding
+    // proved a 7b will simply ignore. Checked on both the effective and the
+    // emitted path (mirrors the test-file guard) so a typo'd off-target path
+    // can't sneak past, and via `isOnTargetPath` so a typo'd TARGET path still
+    // counts as on-target.
+    if (
+      opts?.targetPath !== undefined &&
+      !isOnTargetPath(path, opts.targetPath) &&
+      !isOnTargetPath(block.filePath, opts.targetPath)
+    ) {
+      results.push({
+        filePath: block.filePath,
+        effectivePath: path,
+        status: "error",
+        error: `Edit REJECTED — this task fixes only \`${opts.targetPath}\`; your edit to \`${block.filePath}\` was NOT written. Make your change in \`${opts.targetPath}\`. (${OFF_TARGET_EDIT_REJECTED})`,
       });
       continue;
     }

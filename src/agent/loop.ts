@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path, { sep } from "node:path";
 import { env } from "@/config/env.ts";
 import type { ContextBundle } from "@/context/types.ts";
-import { applyBatch, parse } from "@/edit/index.ts";
+import { applyBatch, isOnTargetPath, parse } from "@/edit/index.ts";
 import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
@@ -250,6 +250,13 @@ export async function runLoop(
   // the baseline set is empty and behaviour is identical to before this fix.
   const testBaseline = captureTestBaseline(state.repoRoot);
 
+  // Target-lock fix-mode: true when the baseline already had a red test — the
+  // drift-prone regime (bug-fix with a failing test) dogfooding surfaced. A
+  // clean baseline (new-feature / no-test-yet task) never enforces the lock
+  // even when a target happens to be pinned, since there's no "the fix goes
+  // HERE" red signal to key off.
+  const fixModeBaseline = testBaseline.hadAnyTests && (testBaseline.failingIds.size > 0 || testBaseline.redCount > 0);
+
   // Stall/redraft carry-forward: tracks whether the NEXT turn should be a redraft.
   let redraftNext = false;
   let redraftStrategyHint: string | undefined;
@@ -289,6 +296,15 @@ export async function runLoop(
         query: goal.description,
       };
     }
+
+    // Target-lock: enforce only when the harness confidently pinned a SINGLE
+    // edit target this turn AND the run is in fix-mode. `env.targetLock` is the
+    // escape hatch for a genuine multi-file task that happens to also match
+    // fix-mode (SMALLCODE_TARGET_LOCK=0 disables enforcement entirely).
+    const lockTargetPath =
+      env.targetLock && fixModeBaseline && context.targetFile !== undefined
+        ? context.targetFile.path
+        : undefined;
 
     // Build turn prompt. Answer-now recovery (think-only truncation last turn)
     // takes precedence over a stall redraft — getting ANY answer out beats trying
@@ -416,7 +432,12 @@ export async function runLoop(
         editRejected = true;
       } else {
         try {
-          const batchResult = await applyBatch(editBlocks, readFileFn, writeFileFn);
+          const batchResult = await applyBatch(
+            editBlocks,
+            readFileFn,
+            writeFileFn,
+            lockTargetPath !== undefined ? { targetPath: lockTargetPath } : undefined,
+          );
           applyResults = batchResult.results;
         } catch {
           applyResults = [];
@@ -474,6 +495,24 @@ export async function runLoop(
     // are control-flow only and handled separately below.
     for (const call of toolCalls) {
       if (call.name === "think" || call.name === "finish") continue;
+
+      // Target-lock (write_file path): mirrors the applyBatch reject above for
+      // the OTHER write path — `TOOL: write_file` bypasses applyBatch entirely
+      // and writes straight to disk in tools.ts, so it needs its own guard.
+      // Skipped with feedback, never executed — no write, nothing to revert.
+      if (call.name === "write_file" && lockTargetPath !== undefined) {
+        const p = call.args["path"];
+        if (typeof p === "string" && !isOnTargetPath(p, lockTargetPath)) {
+          toolResults.push({
+            name: "write_file",
+            success: false,
+            output: "",
+            error: `Edit REJECTED — this task fixes only \`${lockTargetPath}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPath}\`.`,
+          });
+          continue;
+        }
+      }
+
       try {
         toolResults.push(await executeTool(call, toolCtx));
       } catch (err) {

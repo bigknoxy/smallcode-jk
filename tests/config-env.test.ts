@@ -25,8 +25,8 @@ snapshot();
 afterEach(restore);
 
 describe("ENV_REGISTRY", () => {
-  it("has 8 entries", () => {
-    expect(ENV_REGISTRY.length).toBe(8);
+  it("has 9 entries", () => {
+    expect(ENV_REGISTRY.length).toBe(9);
   });
 
   it("every env getter name appears in ENV_REGISTRY", () => {
@@ -40,6 +40,7 @@ describe("ENV_REGISTRY", () => {
       "SMALLCODE_TARGET_PIN",
       "SMALLCODE_GRADER_RETRIES",
       "SMALLCODE_WATCHDOG",
+      "SMALLCODE_TARGET_LOCK",
     ];
     for (const name of expected) {
       expect(registryNames.has(name)).toBe(true);
@@ -148,5 +149,16 @@ describe("env.watchdog (default ON)", () => {
   it('"0" -> false', () => {
     process.env["SMALLCODE_WATCHDOG"] = "0";
     expect(env.watchdog).toBe(false);
+  });
+});
+
+describe("env.targetLock (default ON)", () => {
+  it("unset -> true", () => {
+    delete process.env["SMALLCODE_TARGET_LOCK"];
+    expect(env.targetLock).toBe(true);
+  });
+  it('"0" -> false', () => {
+    process.env["SMALLCODE_TARGET_LOCK"] = "0";
+    expect(env.targetLock).toBe(false);
   });
 });

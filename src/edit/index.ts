@@ -4,7 +4,9 @@ export {
   ELISION_DETECTED,
   findElisionMarker,
   generateDiff,
+  isOnTargetPath,
   isTestFilePath,
+  OFF_TARGET_EDIT_REJECTED,
   TEST_FILE_EDIT_REJECTED,
   truncationReason,
 } from "./applier.ts";
@@ -18,6 +20,7 @@ export {
   PATCH_BYTE_THRESHOLD,
   PATCH_LINE_THRESHOLD,
 } from "./patch-function.ts";
+export type { ApplyBatchOpts } from "./applier.ts";
 export type {
   ApplyBatchResult,
   ApplyResult,
