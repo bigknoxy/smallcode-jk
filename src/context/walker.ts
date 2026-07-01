@@ -13,11 +13,18 @@ export interface WalkOptions {
 const DEFAULT_IGNORE = [
   "node_modules",
   ".git",
+  ".claude",
   "dist",
   "out",
   "build",
   "coverage",
   ".bun",
+  ".next",
+  ".cache",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".turbo",
   "*.lock",
   "bun.lock",
 ];
@@ -58,6 +65,42 @@ const EXTENSION_LANGUAGE: Record<string, string> = {
   ".cpp": "cpp",
   ".h": "c",
 };
+
+/**
+ * Minimal, dependency-free .gitignore parser. Supports the common cases:
+ *   - bare names/dirs (`node_modules`)
+ *   - directory patterns with a trailing slash (`dist/`)
+ *   - leading-slash root-anchored entries (`/build`)
+ *   - simple extension globs (`*.log`)
+ * Comments (`#`), blank lines, and negation (`!`) entries are skipped —
+ * negation isn't supported by the simple name-match ignore mechanism used
+ * here, so silently dropping those lines is safer than mis-excluding files.
+ * Patterns containing an internal `/` (nested-path patterns) are dropped
+ * since matching only operates on a single path segment at a time.
+ */
+function parseGitignore(content: string): string[] {
+  const patterns: string[] = [];
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith("!")) continue;
+    let pattern = line;
+    if (pattern.startsWith("/")) pattern = pattern.slice(1);
+    if (pattern.endsWith("/")) pattern = pattern.slice(0, -1);
+    if (!pattern) continue;
+    if (pattern.includes("/")) continue; // nested-path pattern; not supported
+    patterns.push(pattern);
+  }
+  return patterns;
+}
+
+async function loadGitignorePatterns(root: string): Promise<string[]> {
+  try {
+    const content = await readFile(join(root, ".gitignore"), "utf-8");
+    return parseGitignore(content);
+  } catch {
+    return [];
+  }
+}
 
 function matchesIgnorePattern(name: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
@@ -160,14 +203,17 @@ async function walkDir(
 export async function walkRepo(options: WalkOptions, now: number): Promise<RepoMap> {
   const {
     root,
-    ignore = DEFAULT_IGNORE,
+    ignore = [],
     maxFileSizeBytes = MAX_FILE_SIZE_BYTES,
     extensions = DEFAULT_EXTENSIONS,
   } = options;
 
   const extSet = new Set(extensions.map((e) => e.toLowerCase()));
 
-  const files = await walkDir(root, root, ignore, extSet, maxFileSizeBytes);
+  const gitignorePatterns = await loadGitignorePatterns(root);
+  const combinedIgnore = [...DEFAULT_IGNORE, ...ignore, ...gitignorePatterns];
+
+  const files = await walkDir(root, root, combinedIgnore, extSet, maxFileSizeBytes);
 
   const totalSymbols = files.reduce((sum, f) => sum + f.symbols.length, 0);
 
