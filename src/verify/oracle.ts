@@ -1,3 +1,4 @@
+import { env } from "@/config/env.ts";
 import { computeStaticConfidence, type StaticConfidence } from "./confidence.ts";
 import { extractFirstFailure, type FailureDiagnostic } from "./failure-extract.ts";
 import { runChecker } from "./runner.ts";
@@ -132,7 +133,7 @@ export function hasLoadError(output: string): boolean {
  * Set SMALLCODE_VALIDATE_EDIT=0 to restore the old count-only behaviour (used as
  * the baseline arm of the R4 A/B).
  */
-const VALIDATE_EDIT = process.env["SMALLCODE_VALIDATE_EDIT"] !== "0";
+const VALIDATE_EDIT = env.validateEdit;
 
 export type TestState = "green" | "red" | "absent";
 
@@ -351,9 +352,8 @@ export async function runTieredOracle(
   // deterministic static-confidence (typecheck + lint) the caller can report
   // honestly. Gate the (extra lint) work behind an env flag, default ON — it only
   // fires when tests are ABSENT, never on a test-backed turn.
-  const confidence =
-    process.env["SMALLCODE_STATIC_CONFIDENCE"] === "0"
-      ? undefined
-      : await computeStaticConfidence(repoRoot, tcResult);
+  const confidence = env.staticConfidence
+    ? await computeStaticConfidence(repoRoot, tcResult)
+    : undefined;
   return { outcome: "clean", checks, feedback: "", confidence };
 }

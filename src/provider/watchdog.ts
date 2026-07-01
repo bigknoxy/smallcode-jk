@@ -15,6 +15,7 @@
  * genuinely-completed, sufficiently-large slow generations.
  */
 
+import { env } from "@/config/env.ts";
 import type { CompletionRequest, CompletionResponse, Provider, StreamChunk } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -144,8 +145,7 @@ export class WatchdogProvider implements Provider {
  * Enabled by default. Disable by setting `SMALLCODE_WATCHDOG=0`.
  */
 export function maybeWrapWatchdog(provider: Provider, opts?: WatchdogOptions): Provider {
-  const flag = process.env["SMALLCODE_WATCHDOG"];
-  const enabled = flag !== "0";
+  const enabled = env.watchdog;
   if (!enabled) return provider;
   return new WatchdogProvider(provider, opts);
 }

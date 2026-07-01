@@ -1,3 +1,4 @@
+import { env } from "@/config/env.ts";
 import type { DeterministicTestsGrader, GraderResult } from "../types.ts";
 
 // ---------------------------------------------------------------------------
@@ -90,7 +91,7 @@ export async function runDeterministicGrader(
 
     // Bounded retry on transient INFRA errors only. Default 1 retry (2 attempts);
     // override with SMALLCODE_GRADER_RETRIES.
-    const maxRetries = Number(process.env["SMALLCODE_GRADER_RETRIES"] ?? "1");
+    const maxRetries = env.graderRetries;
     let proc!: ReturnType<typeof Bun.spawnSync>;
     let combined = "";
     let passedFiles = new Set<string>();

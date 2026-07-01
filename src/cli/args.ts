@@ -14,6 +14,7 @@ export interface ParsedArgs {
  *   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
  *   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>]
  *   smallcode config list-models
+ *   smallcode config env
  *   smallcode --version / -v
  *   smallcode --help / -h
  */
@@ -84,7 +85,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   if (cmd === "config") {
     const sub = rest[0];
-    if (sub === "init" || sub === "list-models") {
+    if (sub === "init" || sub === "list-models" || sub === "env") {
       return {
         command: "config",
         subcommand: sub,

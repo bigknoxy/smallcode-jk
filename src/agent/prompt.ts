@@ -1,3 +1,4 @@
+import { env } from "@/config/env.ts";
 import { estimateTokens } from "@/context/tokens.ts";
 import type { ContextBundle } from "@/context/types.ts";
 import { TEST_FILE_EDIT_REJECTED } from "@/edit/index.ts";
@@ -28,13 +29,13 @@ export interface BuildTurnPromptOpts {
 // (edit-reliability OVERALL 0.63 -> 0.80), so this is now DEFAULT ON. Opt OUT with
 // SMALLCODE_DIFF_EDIT=0. The size gate (DIFF_MIN_FN_LINES) still confines it to
 // LARGE target functions, so small-file FILE: mode is unaffected.
-const DIFF_EDIT = process.env["SMALLCODE_DIFF_EDIT"] !== "0";
+const DIFF_EDIT = env.diffEdit;
 // Size gate: the minimal-diff format only pays off on LARGE target functions
 // (where whole-function re-emission over-edits). On small functions whole-function
 // PATCH already works and exact-match S/R only adds fragility (the edit-reliability
 // A/B: wrapText 42ln 0.20→0.60 win; padCell 10ln 0.70→0.10 regression). Apply diff
 // only when the target function is at least this many lines.
-const DIFF_MIN_FN_LINES = Number(process.env["SMALLCODE_DIFF_MIN_FN"] ?? "30");
+const DIFF_MIN_FN_LINES = env.diffMinFnLines;
 
 export function buildSystemPrompt(_profile: ModelProfile, config: AgentConfig): string {
   // Delegate to promptSet if supplied; otherwise assemble the default set

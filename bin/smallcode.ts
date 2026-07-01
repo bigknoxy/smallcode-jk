@@ -3,6 +3,7 @@ import { parseArgs } from "../src/cli/args.ts";
 import { runCommand } from "../src/cli/commands/run.ts";
 import { configInitCommand } from "../src/cli/commands/config-init.ts";
 import { configModelsCommand } from "../src/cli/commands/config-models.ts";
+import { configEnvCommand } from "../src/cli/commands/config-env.ts";
 import { updateCommand, uninstallCommand } from "../src/cli/commands/selfmanage.ts";
 import { diffCommand, undoCommand } from "../src/cli/commands/review.ts";
 import { chatCommand } from "../src/cli/commands/chat.ts";
@@ -36,6 +37,7 @@ Usage:
   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>] [--force]
   smallcode config list-models
+  smallcode config env
   smallcode update
   smallcode uninstall [--yes|-y]
   smallcode --version
@@ -77,6 +79,8 @@ try {
         await configInitCommand(parsed);
       } else if (parsed.subcommand === "list-models") {
         await configModelsCommand();
+      } else if (parsed.subcommand === "env") {
+        await configEnvCommand();
       } else {
         process.stderr.write(`[smallcode] Unknown config subcommand: "${parsed.subcommand ?? ""}"\n`);
         printUsage();

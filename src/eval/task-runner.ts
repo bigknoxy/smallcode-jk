@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { env } from "@/config/env.ts";
 import { runBestOfNLoop, defaultTemperatures } from "../agent/bestofn-loop.ts";
 import type { LoopDependencies } from "../agent/loop.ts";
 import { runLoop } from "../agent/loop.ts";
@@ -87,7 +88,7 @@ function buildTranscript(
 
 // Option A toggle: pin the edit target + size-gate the format. Default on; set
 // SMALLCODE_TARGET_PIN=0 to measure the pre-A baseline on the identical path.
-const TARGET_PIN_ENABLED = process.env["SMALLCODE_TARGET_PIN"] !== "0";
+const TARGET_PIN_ENABLED = env.targetPin;
 
 // Build trial context via the SAME production retrieval the CLI uses: walkRepo
 // (symbol-indexed repo map) → buildContext (query scoring, target pinning,
@@ -139,13 +140,13 @@ async function runBonTrial(
     models: opts.escalationLadder,
     deps: { ...loopDeps, config: agentConfig },
     setup: async (attempt) => {
-      const env = await createTrialEnv(task, fixturesRoot);
-      cleanups.push(env.cleanup);
-      attemptDirs[attempt] = env.dir;
+      const trialEnv = await createTrialEnv(task, fixturesRoot);
+      cleanups.push(trialEnv.cleanup);
+      attemptDirs[attempt] = trialEnv.dir;
       const trialConfig: AgentConfig = {
         ...agentConfig,
-        repoRoot: env.dir,
-        statePath: join(env.dir, ".smallcode", "state.json"),
+        repoRoot: trialEnv.dir,
+        statePath: join(trialEnv.dir, ".smallcode", "state.json"),
       };
       const state = createState(trialConfig, task.desc);
       attemptStates[attempt] = state;
@@ -153,7 +154,7 @@ async function runBonTrial(
         state,
         statePath: getStatePath(trialConfig),
         getContext: async (goal: string): Promise<ContextBundle> =>
-          buildTrialContext(env.dir, goal, contextBudgetFor(loopDeps.profile)),
+          buildTrialContext(trialEnv.dir, goal, contextBudgetFor(loopDeps.profile)),
       };
     },
     verify: async (attempt) => {
