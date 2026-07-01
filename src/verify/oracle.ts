@@ -338,11 +338,23 @@ export async function runTieredOracle(
     checks.push(tsc);
     tcResult = tsc;
     if (real) {
+      // R4-for-Tier-2: a genuine tsc error here means THIS turn's edit does not
+      // compile, on a file with no covering test to catch it via Tier 1. Without
+      // `regressed: true` the loop's revert-on-regression guard (which gates on
+      // `verdict.regressed === true`, not `outcome`) never fires for this path —
+      // a build-breaking FILE:/PATCH: edit to an untested file was kept forever
+      // (the second revert-guarantee gap, alongside the write_file one fixed by
+      // #75). Safe unconditionally: revert restores each file to its state at
+      // the START of THIS turn (captured per-apply), not to the task baseline,
+      // and the loop only reverts when something was actually edited this turn
+      // (`revertOriginals.size > 0`) — so a repo that already failed to typecheck
+      // before any edit is never touched.
       return {
         outcome: "failing",
         checks,
         feedback: `Type errors:\n${tsc.output.slice(0, MAX_FEEDBACK)}`,
         diagnostic: extractFirstFailure(tsc.output) ?? undefined,
+        regressed: true,
       };
     }
   }

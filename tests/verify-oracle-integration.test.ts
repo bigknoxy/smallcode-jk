@@ -152,6 +152,33 @@ test("failing: no test + real type error (+tsconfig) → outcome failing", async
   expect(v.feedback.toLowerCase()).toContain("type");
 }, 60_000);
 
+test("regression: build-breaking edit to an UNTESTED file (Tier 2 typecheck) is flagged regressed for revert", async () => {
+  // The second revert-guarantee gap (dogfood): a PATCH-applied edit broke
+  // src/verify/oracle.ts's runTieredOracle — bun's `bun test` output for that
+  // break is ONLY "error: Unexpected" / "BuildMessage:"-style (no parseable
+  // `(fail)` line and, on an untested file, no test tier at all), so the file
+  // fell through to Tier 2 (typecheck, tests absent). Tier 2's real-error branch
+  // returned outcome "failing" but never set `regressed`, so loop.ts's
+  // `verdict?.regressed === true` gate never fired and the broken edit was kept
+  // forever. Reproduce with a scaffold where NO test covers the file (Tier 1 is
+  // "absent") and the edit is a syntax break (stray brace) — the same shape a
+  // bad SEARCH/REPLACE PATCH produces, caught only by tsc.
+  const dir = await scaffold({
+    "src/g.ts": "export function g(x: string): string { return x; }\n",
+    "tsconfig.json": TSCONFIG,
+    "package.json": '{"name":"t","type":"module"}',
+  });
+  const baseline = captureTestBaseline(dir);
+  expect(baseline.hadAnyTests).toBe(false);
+
+  // The "edit": a bad PATCH leaves a stray closing brace — does not parse.
+  await writeFile(join(dir, "src", "g.ts"), "export function g(x: string): string { return x }}\n", "utf-8");
+
+  const verdict = await runTieredOracle(dir, { baseline });
+  expect(verdict.outcome).toBe("failing");
+  expect(verdict.regressed).toBe(true);
+}, 60_000);
+
 test("clean (not false-fail): no test + no tsconfig → typecheck skipped, outcome clean", async () => {
   // Bare dir: tsc can't run usefully (no inputs / config). Must degrade to
   // skipped, NOT block the task as failing.
