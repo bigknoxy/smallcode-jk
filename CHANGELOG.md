@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.5.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.4.1...v1.5.0) (2026-07-01)
+
+
+### Features
+
+* **context:** deprioritize test/fixture/vendor paths in edit-target selection ([#83](https://github.com/bigknoxy/smallcode-jk/issues/83)) ([3af5d4f](https://github.com/bigknoxy/smallcode-jk/commit/3af5d4f9147c38c542e836b27c5740dea892b951))
+* **edit:** hard-reject off-target edits when a confident fix target exists (drift enforcement) ([#80](https://github.com/bigknoxy/smallcode-jk/issues/80)) ([52bad7b](https://github.com/bigknoxy/smallcode-jk/commit/52bad7be44e41c18528ca9332b005b4105051cc7))
+
+
+### Bug Fixes
+
+* **agent:** keep the loop anchored to the target file until the failing test passes (off-task drift) ([#79](https://github.com/bigknoxy/smallcode-jk/issues/79)) ([a558460](https://github.com/bigknoxy/smallcode-jk/commit/a55846090e57755dc2cfdc47eaa5db90f0a35dda))
+* **agent:** lock to a stable run-level target so drift can't move the enforcement target ([#81](https://github.com/bigknoxy/smallcode-jk/issues/81)) ([92a81a7](https://github.com/bigknoxy/smallcode-jk/commit/92a81a76cc8545b8207c3527152bc3f3b2a6d415))
+* **agent:** revert build-breaking write_file edits — close the "never leave repo broken" gap ([#75](https://github.com/bigknoxy/smallcode-jk/issues/75)) ([8337167](https://github.com/bigknoxy/smallcode-jk/commit/83371674f3736bf6d15cf5508f605f002f5c8e49))
+* **context:** exclude .claude/dist/generated dirs + honor .gitignore in walkRepo (retrieval scope) ([#82](https://github.com/bigknoxy/smallcode-jk/issues/82)) ([edbb14b](https://github.com/bigknoxy/smallcode-jk/commit/edbb14b969e62e6a7aa13780cbb165eb656286e3))
+* **edit:** recover from whole-file-vs-PATCH mismatch instead of looping ([#78](https://github.com/bigknoxy/smallcode-jk/issues/78)) ([ce20df4](https://github.com/bigknoxy/smallcode-jk/commit/ce20df4cc44c557bbeb38bc2e27f1a54935d9f27))
+* **verify:** revert-guarantee gap [#2](https://github.com/bigknoxy/smallcode-jk/issues/2) — Tier 2 typecheck failures never set regressed ([#77](https://github.com/bigknoxy/smallcode-jk/issues/77)) ([6bfff71](https://github.com/bigknoxy/smallcode-jk/commit/6bfff719810fbb7cf3f7aec504dad814fde2b627))
+
 ## [1.4.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.4.0...v1.4.1) (2026-07-01)
 
 
