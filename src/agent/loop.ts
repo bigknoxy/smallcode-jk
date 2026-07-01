@@ -681,7 +681,29 @@ export async function runLoop(
       await saveState(state, statePath);
       break;
     }
-    if (hasFinish) {
+
+    // Off-task-drift guard (dogfood #1 blocker): when the harness confidently
+    // pinned a single edit target this turn (`context.targetFile`) AND the oracle
+    // still reports the same test failing, do NOT let `finish()` advance the goal
+    // index onto a later sub-goal ("write tests"/"run tests" — the planner's own
+    // shape for a bug-fix task). Advancing there swaps the prompt's "Current
+    // Action" and the retrieval query away from the fix file entirely, which is
+    // exactly how the model wandered into unrelated files in the live dogfood
+    // (turns 2-8 edited src/verify/oracle.ts, metrics-store.ts, review.ts — never
+    // args.ts again). Staying on the SAME goal means next turn's getContext(goal
+    // .description) re-resolves the identical target file, keeping the model
+    // anchored until the test actually goes green (verdict.outcome flips to
+    // "solved" above and breaks the loop) or the model exhausts other goals via
+    // a DIFFERENT signal. Multi-file/multi-goal work is unaffected: this only
+    // fires when BOTH a confident single target AND a specific failing test are
+    // present, AND there IS a later goal to drift onto (`currentGoalIndex + 1 <
+    // goals.length`) — a single-goal task has nothing to wander into, so
+    // advancing there just ends the run exactly as before (the grader/BoN
+    // caller judges the outcome from the oracle, not from `status`).
+    const hasNextGoal = state.currentGoalIndex + 1 < state.goals.length;
+    const anchorActive =
+      hasNextGoal && context.targetFile !== undefined && verdict?.outcome === "failing";
+    if (hasFinish && !anchorActive) {
       advanceGoal(state);
       await saveState(state, statePath);
     }
