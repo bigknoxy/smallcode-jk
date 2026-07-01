@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/bigknoxy/smallcode-jk/compare/v1.4.0...v1.4.1) (2026-07-01)
+
+
+### Miscellaneous Chores
+
+* release 1.4.1 ([#72](https://github.com/bigknoxy/smallcode-jk/issues/72)) ([c6714a4](https://github.com/bigknoxy/smallcode-jk/commit/c6714a4180cd2045ae4ffedfdf7580d39180ed1a))
+
 ## [1.4.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.3.0...v1.4.0) (2026-06-30)
 
 
