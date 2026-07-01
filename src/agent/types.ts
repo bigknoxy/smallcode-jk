@@ -103,6 +103,18 @@ export interface AgentState {
    * flag means the model called finish() but tests were NOT oracle-verified.
    */
   verified?: boolean;
+  /**
+   * Target-lock (fix #80 follow-up): the FIRST confidently-pinned edit target
+   * (`context.targetFile.path`) seen this run, captured ONCE and never
+   * overwritten. Per-turn retrieval (`getContext`) re-runs every turn and its
+   * `targetFile` DRIFTS once the model edits an off-target file (that file
+   * enters recent-history/context and gets re-pinned) — enforcing against the
+   * live per-turn value let a drifted edit "become" the new target and stop
+   * being rejected. Enforcement in loop.ts uses THIS stable field instead, so
+   * drift can never move the lock. Unset when no confident target was ever
+   * established (multi-file tasks stay unlocked, as before).
+   */
+  lockedTargetPath?: string;
 }
 
 export interface Candidate {
