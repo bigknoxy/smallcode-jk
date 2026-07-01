@@ -3,9 +3,6 @@ import { git, isGitRepo } from "@/util/git.ts";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
-import { changedSets, makeInteractiveApprover, recordAgentChanges, workingChanges } from "./review.ts";
-import { renderConfidence } from "../../verify/confidence.ts";
-import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
 import type { AgentConfig, AgentState } from "../../agent/types.ts";
@@ -16,8 +13,17 @@ import { contextBudgetFor } from "../../models/context-budget.ts";
 import { ModelRegistry } from "../../models/registry.ts";
 import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
+import { renderConfidence } from "../../verify/confidence.ts";
+import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
 import type { ParsedArgs } from "../args.ts";
 import { ProgressDisplay } from "../progress.ts";
+import {
+  changedSets,
+  makeInteractiveApprover,
+  numstatChanges,
+  recordAgentChanges,
+  workingChanges,
+} from "./review.ts";
 
 // ---------------------------------------------------------------------------
 // classifyCompletion — pure helper; no I/O; exported for unit tests.
@@ -100,6 +106,50 @@ function flagNumber(flags: Record<string, string | boolean>, key: string): numbe
     return Number.isFinite(n) ? n : undefined;
   }
   return undefined;
+}
+
+function flagBool(flags: Record<string, string | boolean>, key: string): boolean {
+  return flags[key] === true || flags[key] === "true";
+}
+
+// ---------------------------------------------------------------------------
+// formatRunJson — pure helper for `--json` output; exported for unit tests.
+// ---------------------------------------------------------------------------
+
+export interface RunJsonResult {
+  ok: boolean;
+  verified: boolean;
+  status: string;
+  model: string;
+  turnsUsed: number;
+  filesChanged: string[];
+  added: number;
+  removed: number;
+  reason: string;
+}
+
+/**
+ * Build the single-line `--json` payload for `smallcode run`. Pure — no I/O.
+ * `ok`/`status` come from the classification/finalState (NOT re-derived), so this
+ * stays byte-for-byte consistent with the human-facing verdict.
+ */
+export function formatRunJson(
+  finalState: Pick<AgentState, "status" | "verified" | "turns">,
+  classification: CompletionClassification,
+  changes: { filesChanged: string[]; added: number; removed: number },
+  modelId: string,
+): RunJsonResult {
+  return {
+    ok: classification.ok,
+    verified: finalState.verified === true,
+    status: finalState.status,
+    model: modelId,
+    turnsUsed: finalState.turns.length,
+    filesChanged: changes.filesChanged,
+    added: changes.added,
+    removed: changes.removed,
+    reason: classification.ok ? "" : classification.message,
+  };
 }
 
 /**
@@ -307,8 +357,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
         },
         verify: async () => (await runTieredOracle(repoRoot, { baseline })).outcome === "solved",
       });
-      finalState =
-        bon.states[bon.winningAttempt ?? bon.states.length - 1] ?? state;
+      finalState = bon.states[bon.winningAttempt ?? bon.states.length - 1] ?? state;
       if (bon.winningModelId) {
         process.stderr.write(
           `[smallcode] Best-of-N resolved on attempt ${(bon.winningAttempt ?? 0) + 1}/${bon.attemptsUsed} via ${bon.winningModelId}.\n`,
@@ -348,6 +397,20 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
         (changes.untracked.length ? `  new: ${changes.untracked.join(", ")}\n` : "") +
         "[smallcode] Review: smallcode diff --repo <repo>  ·  Undo: smallcode undo --repo <repo>\n",
     );
+  }
+
+  // --json: suppress the human-facing verdict and print exactly one JSON line to
+  // stdout instead. ProgressDisplay + the informational writes above already went
+  // to stderr, so stdout stays clean either way — this only replaces the final
+  // showComplete/showWarn/showError call. Exit code is UNCHANGED either way.
+  if (flagBool(args.flags, "json")) {
+    const jsonChanges = isGitRepo(repoRoot)
+      ? numstatChanges(repoRoot)
+      : { filesChanged: [], added: 0, removed: 0 };
+    const payload = formatRunJson(finalState, classification, jsonChanges, modelId);
+    process.stdout.write(`${JSON.stringify(payload)}\n`);
+    if (classification.ok) return;
+    process.exit(1);
   }
 
   if (classification.ok) {

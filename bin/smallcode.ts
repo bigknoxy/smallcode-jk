@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { parseArgs } from "../src/cli/args.ts";
 import { runCommand } from "../src/cli/commands/run.ts";
+import { fixCommand } from "../src/cli/commands/fix.ts";
 import { configInitCommand } from "../src/cli/commands/config-init.ts";
 import { configModelsCommand } from "../src/cli/commands/config-models.ts";
 import { configEnvCommand } from "../src/cli/commands/config-env.ts";
@@ -29,7 +30,8 @@ function printUsage(): void {
   process.stdout.write(`smallcode v${version}
 
 Usage:
-  smallcode run <task description> [--model <id>] [--best-of-n <N>] [--escalation <m1,m2,..>]
+  smallcode run <task description> [--model <id>] [--best-of-n <N>] [--escalation <m1,m2,..>] [--json]
+  smallcode fix [--repo <path>] [--test "<cmd>"] [--model <id>] [--best-of-n <n>] [--escalation <m1,m2>] [--json] [--max-turns <n>]
   smallcode chat [--repo <path>] [--model <id>]   # interactive multi-task session
   smallcode diff [--repo <path>]            # show what the agent changed
   smallcode undo [--repo <path>] [--yes]    # revert the agent's changes (dry-run without --yes)
@@ -60,6 +62,10 @@ try {
 
     case "run":
       await runCommand(parsed);
+      break;
+
+    case "fix":
+      await fixCommand(parsed);
       break;
 
     case "chat":

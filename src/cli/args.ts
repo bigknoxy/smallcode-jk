@@ -9,7 +9,8 @@ export interface ParsedArgs {
  * Minimal arg parser — no external deps.
  *
  * Supported patterns:
- *   smallcode run <task description...>
+ *   smallcode run <task description...> [--json]
+ *   smallcode fix [--repo <path>] [--test "<cmd>"] [--model <id>] [--best-of-n <n>] [--escalation <m1,m2>] [--json] [--max-turns <n>]
  *   smallcode eval run <suite-dir> [--model <id>] [--trials <n>] [--output json|text]
  *   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
  *   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>]
@@ -98,6 +99,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   if (cmd === "run") {
     return { command: "run", positionals: rest, flags };
+  }
+
+  if (cmd === "fix") {
+    return { command: "fix", positionals: rest, flags };
   }
 
   if (cmd === "update") {

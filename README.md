@@ -236,7 +236,8 @@ All commands are invoked via `bun run index.ts <command>` (or a compiled `smallc
 
 | Command | Flags | Description |
 |---|---|---|
-| `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` | Run the agent on a coding task inside the given repo directory. Ends with a diff summary + how to review/undo. |
+| `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--json` | Run the agent on a coding task inside the given repo directory. Ends with a diff summary + how to review/undo. `--json` prints exactly one JSON line (`{ok, verified, status, model, turnsUsed, filesChanged, added, removed, reason}`) to stdout instead — for scripting/CI, exit code is unchanged (0 iff verified). |
+| `fix` | `--repo <path>` `--test "<cmd>"` `--model <id>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--max-turns <n>` `--json` | Test-driven auto-fix: runs the test command (default `bun test`); if GREEN, exits 0 immediately ("nothing to fix"); if RED, derives a task from the failing output and runs the SAME pipeline as `run`. The pre-commit / delegation primitive — point a hook or another agent at it and it either no-ops or drives the loop until tests pass (or gives up honestly). |
 | `chat` | `--repo <path>` `--model <id>` `--config <path>` | Interactive multi-task session — keeps the repo index + model warm across tasks. Slash-commands: `/add` `/drop` `/files` (pin context), `/diff` `/undo` (review/revert), `/model` `/clear` `/help` `/exit`. Any other line is a coding task. |
 | `diff` | `--repo <path>` | Show what the agent changed (unified diff + any new files). |
 | `undo` | `--repo <path>` `--yes` | Revert **only** what the agent changed — a run records its own edits to `.smallcode/agent-changes.json`, so undo restores those tracked files + deletes those new files and **never touches your own uncommitted work**. **Dry-run without `--yes`**; committed history is never touched. |
@@ -244,6 +245,13 @@ All commands are invoked via `bun run index.ts <command>` (or a compiled `smallc
 | `eval gate` | `--suite <path>` `--baseline <path>` `--model <id>` `--threshold <0-1>` | Regression gate: fail if pass@1 drops below `threshold` versus baseline snapshot. For use in CI. |
 | `config init` | `--out <path>` | Write a starter `smallcode.config.json` to the given path. |
 | `config list-models` | | List all registered model profiles (built-ins + any custom entries from config). |
+
+### Pre-commit / delegation: `run --json` + `fix`
+
+Both are additive, machine-readable entry points for wiring smallcode into a hook, CI step, or another agent — no human in the loop required:
+
+- `smallcode run "<task>" --json` — same agent loop, same exit code (0 iff oracle-verified green), but the human progress display is replaced by exactly one JSON line on stdout so a caller can parse the outcome without screen-scraping.
+- `smallcode fix` — the "auto-fix the red build" primitive. It runs your test command first; if it's already green there's nothing to do (fast exit 0, no model call). If it's red, it builds the task automatically from the captured failing output and hands off to the exact same `run` pipeline (config, provider, model registry, Best-of-N, escalation ladder, `--json`) — so a pre-commit hook or CI step can just run `smallcode fix --json` and either get a no-op or a genuine attempt to make the suite pass, honestly reported either way. The anti-test-edit guard stays in force: the model may not edit tests to fake a green.
 
 ---
 
