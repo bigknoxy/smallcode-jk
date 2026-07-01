@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path, { sep } from "node:path";
+import { env } from "@/config/env.ts";
 import type { ContextBundle } from "@/context/types.ts";
 import { applyBatch, parse } from "@/edit/index.ts";
 import { promptHardCap } from "@/models/context-budget.ts";
@@ -22,7 +23,7 @@ const MAX_REDRAFTS = 2;
 // source line (a runtime throw), surface a tight window around that exact line in
 // the next prompt — the `where` a small model can't localize itself. Off by
 // default → byte-identical to the prior loop, so the A/B baseline arm is clean.
-const LOCALIZE = process.env["SMALLCODE_LOCALIZE"] === "1";
+const LOCALIZE = env.localize;
 
 /**
  * Read a tight window around a 1-based source line, marking the failing line.
