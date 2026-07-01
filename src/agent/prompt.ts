@@ -166,7 +166,12 @@ export function buildTurnPrompt(
     // if the LAST turn edited a different file, call that out by name so the
     // model can't miss it.
     if (context.targetFile) {
-      const tgtPath = context.targetFile.path;
+      // Name the STABLE run-level lock (state.lockedTargetPath) when one has
+      // been established, not the live per-turn context.targetFile — the
+      // latter can drift once an off-target edit enters retrieval context, and
+      // the enforcement below (loop.ts) locks to the stable value too, so the
+      // prompt must name the same file it will actually reject edits against.
+      const tgtPath = state.lockedTargetPath ?? context.targetFile.path;
       const editedPaths = turnEditedPaths(failingTurn!);
       const editedOffTarget = editedPaths.size > 0 && !editedPaths.has(tgtPath);
       parts.push(`\n## STAY ON TARGET`);

@@ -297,13 +297,25 @@ export async function runLoop(
       };
     }
 
-    // Target-lock: enforce only when the harness confidently pinned a SINGLE
-    // edit target this turn AND the run is in fix-mode. `env.targetLock` is the
-    // escape hatch for a genuine multi-file task that happens to also match
-    // fix-mode (SMALLCODE_TARGET_LOCK=0 disables enforcement entirely).
+    // Target-lock: capture the FIRST confidently-pinned edit target ONCE and
+    // enforce THAT stable value for the whole run — never the live per-turn
+    // `context.targetFile`. `context` is rebuilt every turn via `getContext`,
+    // so once the model edits an off-target file, that file enters recent-
+    // history/context and retrieval re-pins `context.targetFile` onto it
+    // (dogfood: the model edited an unrelated file 6x with ZERO rejections
+    // because the lock kept "moving" to follow the drift). Locking to
+    // `state.lockedTargetPath` — set once below and never overwritten — means
+    // drift can no longer relocate the enforcement target.
+    if (state.lockedTargetPath === undefined && fixModeBaseline && context.targetFile !== undefined) {
+      state.lockedTargetPath = context.targetFile.path;
+    }
+    // `env.targetLock` is the escape hatch for a genuine multi-file task that
+    // happens to also match fix-mode (SMALLCODE_TARGET_LOCK=0 disables
+    // enforcement entirely). If no confident target was EVER established,
+    // the lock stays off for the whole run (multi-file tasks unaffected).
     const lockTargetPath =
-      env.targetLock && fixModeBaseline && context.targetFile !== undefined
-        ? context.targetFile.path
+      env.targetLock && fixModeBaseline && state.lockedTargetPath !== undefined
+        ? state.lockedTargetPath
         : undefined;
 
     // Build turn prompt. Answer-now recovery (think-only truncation last turn)

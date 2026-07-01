@@ -496,17 +496,33 @@ flowchart TD
         "## STAY ON TARGET" and edited an unrelated file 7× in one run. When
         <code>SMALLCODE_TARGET_LOCK</code> is on (default), a confident single
         <code>context.targetFile</code> is pinned, AND the pre-loop <code>testBaseline</code> was red
-        (<code>fixModeBaseline</code>), <code>loop.ts</code> computes <code>lockTargetPath</code> each
-        turn and enforces it on <strong>both</strong> write paths: <code>applyBatch(blocks, read, write,
-        { targetPath })</code> rejects any <code>FILE:</code>/<code>PATCH:</code> block whose effective
-        path isn't the target (<code>status: "error"</code>, nothing written — mirrors the existing
-        test-file guard), and the loop's <code>TOOL: write_file</code> executor skips the call before
-        <code>executeTool</code> runs, feeding back the same
-        "Edit REJECTED — this task fixes only <code>&lt;target&gt;</code>…" message as a failed tool
-        result. <code>isOnTargetPath</code> normalizes slashes/<code>./</code> and rescues dot-flattened
-        path typos bidirectionally (reused from the existing typo-rescue logic) so a mistyped target path
-        still counts as on-target. No <code>targetFile</code> (multi-file/low-confidence retrieval) or
-        baseline all-green → no enforcement, edits flow through unchanged.
+        (<code>fixModeBaseline</code>), the loop enforces it on <strong>both</strong> write paths:
+        <code>applyBatch(blocks, read, write, { targetPath })</code> rejects any
+        <code>FILE:</code>/<code>PATCH:</code> block whose effective path isn't the target
+        (<code>status: "error"</code>, nothing written — mirrors the existing test-file guard), and the
+        loop's <code>TOOL: write_file</code> executor skips the call before <code>executeTool</code>
+        runs, feeding back the same "Edit REJECTED — this task fixes only <code>&lt;target&gt;</code>…"
+        message as a failed tool result. <code>isOnTargetPath</code> normalizes slashes/<code>./</code>
+        and rescues dot-flattened path typos bidirectionally (reused from the existing typo-rescue logic)
+        so a mistyped target path still counts as on-target. No <code>targetFile</code> (multi-file/low-
+        confidence retrieval) or baseline all-green → no enforcement, edits flow through unchanged.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Stable run-level lock (drift can't move the
+        target)</strong> — the ORIGINAL <code>lockTargetPath</code> was recomputed from
+        <code>context.targetFile</code> on <em>every</em> turn, and <code>context</code> is rebuilt each
+        turn via <code>getContext</code>: once the model edited an off-target file, that file entered
+        recent-history/context and retrieval re-pinned <code>context.targetFile</code> onto it — silently
+        relocating the "lock" onto the drifted file (or to <code>undefined</code>) and rejecting nothing.
+        Live dogfood: an unrelated file was edited 6× with <strong>zero</strong> rejections. The fix adds
+        <code>AgentState.lockedTargetPath</code>, captured <strong>once</strong> — the first turn where
+        <code>state.lockedTargetPath === undefined &amp;&amp; fixModeBaseline &amp;&amp;
+        context.targetFile !== undefined</code> — and persisted via <code>saveState</code>; never
+        overwritten after that. Every turn's enforcement now reads <code>lockTargetPath</code> from this
+        STABLE field instead of the live per-turn <code>context.targetFile</code>, so an off-target edit
+        entering context can no longer relocate what gets enforced. The "## STAY ON TARGET" prompt
+        (<code>prompt.ts</code>) names <code>state.lockedTargetPath ?? context.targetFile.path</code> too,
+        so the prompt and the enforcement always agree on which file is "the target".
       </p>
     </section>
 
