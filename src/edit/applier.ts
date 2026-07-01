@@ -29,6 +29,47 @@ function delimitersBalanced(s: string): boolean {
 }
 
 /**
+ * Stable marker substring embedded in the truncationReason/error string when an
+ * elision placeholder (`// ...`, `# ...`, `// rest unchanged`, etc.) is detected
+ * in a whole-file replacement. Exported so callers (the prompt builder) can
+ * detect this SPECIFIC cause — distinct from a generic truncation — and switch
+ * the next turn's recovery to a forced PATCH/SEARCH-REPLACE template instead of
+ * repeating the same "re-emit the file" instruction the model just failed to
+ * follow. Never changed without updating every matcher.
+ */
+export const ELISION_DETECTED = "elided content detected";
+
+// Placeholder patterns a model uses to mean "the rest of the file is unchanged,
+// I'm not going to retype it" — the exact behavior that produces the abbreviated
+// whole-file re-emit this guard exists to catch. Matched line-by-line (not
+// substring on the whole text) so a legitimate `...` inside a string literal or
+// a real spread operator (`...rest`) used in actual code doesn't false-positive
+// as often — comment-shaped elision markers are the strong, precise signal.
+const ELISION_PATTERNS: RegExp[] = [
+  /^\s*\/\/\s*\.\.\.\s*.*$/, // "// ..." / "// ... rest of file"
+  /^\s*\/\*\s*\.\.\.\s*.*?\*\/\s*$/, // "/* ... */"
+  /^\s*#\s*\.\.\.\s*.*$/, // "# ..." (python/shell-style comment)
+  /^\s*\/\/\s*(?:rest|remainder)\s+(?:of\s+(?:the\s+)?file|unchanged)\b.*$/i, // "// rest of file unchanged"
+  /^\s*\/\/\s*unchanged\b.*$/i, // "// unchanged"
+  /^\s*\.\.\.\s*rest\b.*$/i, // "...rest of the file"
+];
+
+/**
+ * Returns the offending line when `text` contains an elision placeholder line
+ * (a small model's shorthand for "I'm skipping the unchanged parts"), or null
+ * when none is found. Exported so the prompt builder can distinguish this
+ * precise failure mode from a generic shrink/bracket truncation.
+ */
+export function findElisionMarker(text: string): string | null {
+  for (const line of text.split("\n")) {
+    for (const pattern of ELISION_PATTERNS) {
+      if (pattern.test(line)) return line.trim();
+    }
+  }
+  return null;
+}
+
+/**
  * Returns a human-readable reason when a whole-file replacement looks TRUNCATED
  * (a small model that was told to re-emit the entire file dropped the tail), or
  * null when the write looks intact. Conservative by design: it only fires on
@@ -36,7 +77,10 @@ function delimitersBalanced(s: string): boolean {
  * accept (writing corruption that regresses passing tests) is far worse than a
  * false reject (one extra re-prompt turn).
  *
- * New/empty files are always allowed. Two signals trigger a reject:
+ * New/empty files are always allowed. Signals that trigger a reject:
+ *  - the replacement contains an elision placeholder line (`// ...`, `// rest
+ *    unchanged`, …) — the strongest, most precise signal a model abbreviated
+ *    instead of re-emitting the complete file;
  *  - the replacement's brackets are unbalanced while the original's were
  *    balanced (the classic "cut off mid-function" shape), or
  *  - the replacement lost more than half the lines of a non-trivial file.
@@ -47,6 +91,13 @@ export function truncationReason(original: string, replace: string): string | nu
 
   if (replace.trim() === "") {
     return "replacement is empty (refusing to blank an existing file)";
+  }
+
+  // Elision placeholder: a strong, precise signal independent of size — catches
+  // an abbreviated re-emit even when it doesn't cross the 50%-shrink threshold.
+  const elidedLine = findElisionMarker(replace);
+  if (elidedLine !== null) {
+    return `${ELISION_DETECTED} (\`${elidedLine}\`) — this is an ABBREVIATED file, not the complete one`;
   }
 
   // Bracket-balance: only fire when the ORIGINAL was cleanly balanced (so we

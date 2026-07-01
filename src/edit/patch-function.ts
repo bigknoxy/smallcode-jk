@@ -328,6 +328,21 @@ function locateFunctionRegion(
 }
 
 /**
+ * Extract the exact CURRENT source text of the named function/definition from
+ * `content` (start of its definition line through its closing brace), or null
+ * when it can't be uniquely located. Used by the prompt builder's PATCH-recovery
+ * path to hand the model a small, copy-pasteable current-state block instead of
+ * the whole file — showing only the function it's told to edit removes the
+ * temptation to echo the surrounding file back with elision placeholders.
+ * Read-only; never used on the write path (that stays in applyPatchBlock).
+ */
+export function extractFunctionSource(content: string, functionName: string): string | null {
+  const region = locateFunctionRegion(content, functionName, "");
+  if (region === null || "ambiguous" in region) return null;
+  return content.slice(region.start, region.end);
+}
+
+/**
  * Re-add a leading `export` (or `export default`) that the original function
  * had but the model's replacement dropped. Small models routinely paraphrase a
  * signature and silently lose the `export` keyword, turning the function private

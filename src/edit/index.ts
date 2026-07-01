@@ -1,13 +1,23 @@
 export {
   applyBatch,
   applyBlock,
+  ELISION_DETECTED,
+  findElisionMarker,
   generateDiff,
   isTestFilePath,
   TEST_FILE_EDIT_REJECTED,
+  truncationReason,
 } from "./applier.ts";
 export { parse } from "./parser.ts";
 export { repairBlock } from "./repair.ts";
-export { applyPatchBlock, chooseEditFormat, parsePatchBlocks, PATCH_BYTE_THRESHOLD, PATCH_LINE_THRESHOLD } from "./patch-function.ts";
+export {
+  applyPatchBlock,
+  chooseEditFormat,
+  extractFunctionSource,
+  parsePatchBlocks,
+  PATCH_BYTE_THRESHOLD,
+  PATCH_LINE_THRESHOLD,
+} from "./patch-function.ts";
 export type {
   ApplyBatchResult,
   ApplyResult,

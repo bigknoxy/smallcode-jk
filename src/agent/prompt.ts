@@ -1,7 +1,7 @@
 import { env } from "@/config/env.ts";
 import { estimateTokens } from "@/context/tokens.ts";
 import type { ContextBundle } from "@/context/types.ts";
-import { TEST_FILE_EDIT_REJECTED } from "@/edit/index.ts";
+import { ELISION_DETECTED, extractFunctionSource, TEST_FILE_EDIT_REJECTED } from "@/edit/index.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import { renderDiagnostic } from "@/verify/failure-extract.ts";
 import { defaultPromptSet } from "./prompt-set.ts";
@@ -216,6 +216,11 @@ export function buildTurnPrompt(
   } else {
     // Include last 2 turns of history (suppressed on redraft — dead-end attempts add noise)
     const recentTurns = state.turns.slice(-2);
+    // Escalation counter for the whole-file-vs-PATCH mismatch recovery (below):
+    // counts how many of the recent turns already hit this exact failure mode, so
+    // the SECOND consecutive occurrence gets sterner, more explicit wording
+    // instead of repeating the same instruction the model just ignored.
+    let wholeFileMismatchSeen = 0;
     if (recentTurns.length > 0) {
       parts.push("\n## Recent History");
       for (const turn of recentTurns) {
@@ -232,7 +237,11 @@ export function buildTurnPrompt(
 
         if (turn.applyResults.length > 0) {
           parts.push("**Edit results:**");
-          for (const result of turn.applyResults) {
+          for (let ri = 0; ri < turn.applyResults.length; ri++) {
+            const result = turn.applyResults[ri]!;
+            // The block the model actually emitted for this result (same index —
+            // applyBatch pushes exactly one result per input block, in order).
+            const emittedBlock = turn.editBlocks[ri];
             const icon = result.status === "applied" ? "✓" : "✗";
             const detail = result.error ? ` — ${result.error}` : "";
             parts.push(`  ${icon} ${result.filePath} (${result.status})${detail}`);
@@ -254,6 +263,24 @@ export function buildTurnPrompt(
               // would itself force the failure loop. Keep the model on the PATCH
               // block for the single target function instead.
               const tgt = context.targetFile;
+
+              // Whole-file-vs-PATCH mismatch (checked FIRST, ahead of srRetry/
+              // patchRetry): the model was directed to PATCH one function but
+              // instead answered with a whole-file-shaped block (search === "")
+              // — usually an ABBREVIATED re-emit with `// ...` elision, which the
+              // truncation guard correctly rejected. Re-showing the whole file and
+              // saying "don't emit the whole file" (the old patchRetry message) is
+              // exactly the prompt that produced this mistake in the first place —
+              // a 3B/7B pattern-matches "file shown → emit file back". Force a
+              // concrete, copy-pasteable SEARCH/REPLACE template instead, scoped to
+              // ONLY the target function's current text (not the whole file) so
+              // there is nothing left to echo wholesale.
+              const wholeFileMismatch =
+                tgt?.path === result.filePath &&
+                tgt.format === "patch" &&
+                tgt.functionName !== undefined &&
+                (emittedBlock?.search === "" || (result.error?.includes(ELISION_DETECTED) ?? false));
+
               // SR-mode recovery: when the failed file was given the SEARCH/REPLACE
               // (minimal-diff) directive — same gate buildTurnPrompt's "## Edit
               // Target" uses (patch format + functionName + DIFF_EDIT + large fn) —
@@ -262,17 +289,51 @@ export function buildTurnPrompt(
               // given for a large file → whole-file emission → truncation → fail
               // loop. Detect SR-mode BEFORE the generic PATCH/whole-file branches.
               const srRetry =
+                !wholeFileMismatch &&
                 tgt?.path === result.filePath &&
                 tgt.format === "patch" &&
                 tgt.functionName !== undefined &&
                 DIFF_EDIT &&
                 (tgt.functionLineCount ?? 0) >= DIFF_MIN_FN_LINES;
               const patchRetry =
+                !wholeFileMismatch &&
                 !srRetry &&
                 tgt?.format === "patch" &&
                 tgt.functionName !== undefined &&
                 tgt.path === result.filePath;
-              if (srRetry) {
+              if (wholeFileMismatch) {
+                wholeFileMismatchSeen++;
+                const escalate = wholeFileMismatchSeen >= 2;
+                const fnBody = matchingChunk
+                  ? extractFunctionSource(matchingChunk.content, tgt!.functionName!)
+                  : null;
+                parts.push(
+                  escalate
+                    ? `  You made this SAME mistake again: a whole-file/abbreviated re-emit was rejected. This is your FINAL chance — Do NOT re-emit the file. Do NOT use \`// ...\` or ANY placeholder for "unchanged" code. Emit ONLY a SEARCH/REPLACE block for the exact lines that change, in this shape:`
+                    : `  Your last answer re-emitted the WHOLE FILE (likely with \`// ...\` elision) instead of a targeted edit, and was rejected. Do NOT re-emit the file. Do NOT use \`// ...\` or any placeholder. Emit ONLY a SEARCH/REPLACE block for the lines that change, in exactly this shape:`,
+                );
+                parts.push("  ```");
+                parts.push(`  ${tgt!.path}`);
+                parts.push("  <<<<<<< SEARCH");
+                parts.push("  (the exact current line(s) containing the bug)");
+                parts.push("  =======");
+                parts.push("  (the corrected line(s))");
+                parts.push("  >>>>>>> REPLACE");
+                parts.push("  ```");
+                if (fnBody !== null) {
+                  parts.push(
+                    `  The \`${tgt!.functionName}\` function currently reads exactly (copy SEARCH text byte-for-byte from here — do NOT copy the whole file):`,
+                  );
+                  parts.push("  ```");
+                  parts.push(fnBody);
+                  parts.push("  ```");
+                } else if (matchingChunk) {
+                  parts.push(`  The file currently contains:`);
+                  parts.push("  ```");
+                  parts.push(matchingChunk.content);
+                  parts.push("  ```");
+                }
+              } else if (srRetry) {
                 parts.push(
                   `  Re-emit a SEARCH/REPLACE block for \`${tgt!.functionName}\`. Copy the SEARCH text BYTE-FOR-BYTE (exact indentation, every character) from the file shown below — the previous SEARCH did not match. Change only the buggy line(s) in REPLACE.`,
                 );

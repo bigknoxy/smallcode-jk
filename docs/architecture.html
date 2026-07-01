@@ -517,6 +517,31 @@ flowchart TD
         a feedback error — the tests are the oracle, so a model editing them to pass can never forge a
         "solved" verdict.
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">Elision-detection + forced-PATCH recovery</strong>:
+        the #1 real-repo usability blocker was a PATCH-target model instead re-emitting an
+        <em>abbreviated whole file</em> (<code>// ...</code> / <code># ...</code> / "rest of file
+        unchanged" placeholders standing in for elided code). The truncation guard
+        (<code>truncationReason</code> in <code>src/edit/applier.ts</code>) now runs
+        <code>findElisionMarker</code> as its first, size-independent check and rejects with a stable
+        <code>ELISION_DETECTED</code> marker in the error — before, only the &gt;50%-line-shrink
+        heuristic caught this, which missed abbreviations that still looked bulky. Rejecting alone
+        was not enough: the OLD not-applied feedback re-showed the whole file and said "don't emit
+        the whole file", which is the exact pattern that produced the mistake, so a small model
+        repeated it every turn and never landed an edit (max_turns, zero progress — no false-green,
+        but no progress either). <code>buildTurnPrompt</code> now detects this specific shape —
+        <code>editBlocks[i].search === ""</code> or <code>ELISION_DETECTED</code> in the apply error,
+        for a PATCH-format target — ahead of the generic SR/PATCH retry branches, and forces a
+        different remedy: <code>extractFunctionSource</code> (reusing <code>locateFunctionRegion</code>)
+        isolates ONLY the target function's current text (never the whole file) and the feedback emits
+        a literal copy-pasteable <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; SEARCH / ======= / &gt;&gt;&gt;&gt;&gt;&gt;&gt; REPLACE</code>
+        template with explicit "Do NOT re-emit the file. Do NOT use <code>// ...</code>." wording,
+        escalating to sterner "FINAL chance" wording if the same mismatch repeats in the very next
+        turn (<code>wholeFileMismatchSeen</code> counter over the last 2 turns). Default-on, no env
+        gate; additive — falls through to the existing SR/PATCH/FILE retry branches when the mismatch
+        shape isn't detected. Deterministic prompt-level regression test:
+        <code>tests/prompt-recovery-elision.test.ts</code>.
+      </p>
       <div class="diagram-wrap">
         <div class="mermaid">
 flowchart LR
