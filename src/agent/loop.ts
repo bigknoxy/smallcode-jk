@@ -451,6 +451,24 @@ export async function runLoop(
       });
     }
 
+    // The `write_file` TOOL call writes straight to disk (tools.ts) and — unlike
+    // FILE:/PATCH: edit blocks — is never routed through applyBatch, so its
+    // pre-write content is never captured anywhere. A build-breaking write_file
+    // therefore left revertOriginals (below) empty even when verdict.regressed
+    // was true, so the revert-on-regression guarantee silently didn't apply to
+    // it (the actual dogfood bug: a garbage write_file edit survived 5 turns).
+    // Snapshot each target's pre-turn content here, BEFORE executing, the same
+    // way applyBatch stashes the first on-disk version it sees per path — so a
+    // regression can be rolled back regardless of which write path produced it.
+    const toolWriteOriginals = new Map<string, string>();
+    for (const call of toolCalls) {
+      if (call.name !== "write_file") continue;
+      const p = call.args["path"];
+      if (typeof p !== "string" || toolWriteOriginals.has(p)) continue;
+      const disk = await readFileFn(p);
+      if (disk !== null) toolWriteOriginals.set(p, disk); // null = new file, nothing to revert to
+    }
+
     // Execute model-emitted side-effecting tool calls (read_file, run_command,
     // run_tests) so their real output feeds back into the next turn. think/finish
     // are control-flow only and handled separately below.
@@ -521,6 +539,11 @@ export async function runLoop(
       if (r.originalContent === undefined) continue; // brand-new file → leave in place
       const key = r.effectivePath ?? r.filePath;
       if (!revertOriginals.has(key)) revertOriginals.set(key, r.originalContent);
+    }
+    // Fold in write_file TOOL originals captured above so a build-breaking
+    // write_file is reverted exactly like a build-breaking FILE:/PATCH: block.
+    for (const [key, content] of toolWriteOriginals) {
+      if (!revertOriginals.has(key)) revertOriginals.set(key, content);
     }
     let revertedNewFailures: string[] | undefined;
     let reverted = false;
