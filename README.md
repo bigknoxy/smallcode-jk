@@ -38,7 +38,7 @@ If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to
 ### Verify, update, uninstall
 
 ```bash
-smallcode --version   # prints: smallcode v1.4.0
+smallcode --version   # prints: smallcode v1.5.0
 smallcode update      # re-downloads latest release (or SMALLCODE_TARBALL) and reinstalls
 smallcode uninstall   # dry-run: shows what would be removed
 smallcode uninstall --yes   # actually removes ~/.smallcode and the wrapper
