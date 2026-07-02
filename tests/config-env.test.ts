@@ -25,8 +25,8 @@ snapshot();
 afterEach(restore);
 
 describe("ENV_REGISTRY", () => {
-  it("has 9 entries", () => {
-    expect(ENV_REGISTRY.length).toBe(9);
+  it("has 10 entries", () => {
+    expect(ENV_REGISTRY.length).toBe(10);
   });
 
   it("every env getter name appears in ENV_REGISTRY", () => {
@@ -41,6 +41,7 @@ describe("ENV_REGISTRY", () => {
       "SMALLCODE_GRADER_RETRIES",
       "SMALLCODE_WATCHDOG",
       "SMALLCODE_TARGET_LOCK",
+      "SMALLCODE_PHASE_GATE",
     ];
     for (const name of expected) {
       expect(registryNames.has(name)).toBe(true);

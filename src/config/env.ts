@@ -26,6 +26,7 @@ export const env = {
   get graderRetries(): number { return intEnv("SMALLCODE_GRADER_RETRIES", 1); },
   get watchdog(): boolean { return boolEnv("SMALLCODE_WATCHDOG", true); },
   get targetLock(): boolean { return boolEnv("SMALLCODE_TARGET_LOCK", true); },
+  get phaseGate(): boolean { return boolEnv("SMALLCODE_PHASE_GATE", false); },
 };
 
 /** Metadata for discoverability / `smallcode config env` listing. */
@@ -40,4 +41,5 @@ export const ENV_REGISTRY: EnvVarDoc[] = [
   { name: "SMALLCODE_GRADER_RETRIES", parse: "int", default: "1", description: "Deterministic grader infra-error retry count." },
   { name: "SMALLCODE_WATCHDOG", parse: "bool", default: "on", description: "Throughput watchdog: unload/reload the model on KV-cache decay." },
   { name: "SMALLCODE_TARGET_LOCK", parse: "bool", default: "on", description: "Hard-reject FILE:/PATCH:/write_file edits to a file other than the confidently-pinned fix target while the run is in fix-mode (baseline had a failing test)." },
+  { name: "SMALLCODE_PHASE_GATE", parse: "bool", default: "off", description: "P0#2 statewright-style phase gate: while no target is confidently pinned and no file has been read yet (\"explore\" phase), advertise only read/inspect tools and hard-reject write_file/FILE:/PATCH: edits. A pinned/locked target is always \"edit\" phase (unchanged behavior)." },
 ];
