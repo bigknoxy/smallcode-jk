@@ -102,12 +102,24 @@ export function classifyPassQuality(t: Transcript): PassQualityResult {
     }
   }
 
-  // --- Lucky signal (c): never localized — zero turns carried a diagnostic ---
-  // The model never got a structured failure diagnosis at all and still
-  // ended up green; it stumbled into the fix rather than diagnosing it.
+  // A run "struggled" if it ever failed a turn (revert, recorded failure
+  // signature, or simply took more than a clean-solve number of turns). A run
+  // that did NOT struggle — e.g. a 1-turn solve off a stack trace — legitimately
+  // has no failure diagnostic because nothing ever failed; that is the BEST
+  // case, not a lucky one. Gating the "blind" signals on `struggled` stops them
+  // misfiring on clean instant solves (real-data validation caught this: 8/8
+  // clean 1-turn throw-class solves were being mislabeled Lucky).
+  const struggled =
+    revertTurns.length > 0 ||
+    turns.length > IDEAL_MAX_TURNS ||
+    turns.some((turn) => turn.failureSignature !== undefined);
+
+  // --- Lucky signal (c): never localized — the run STRUGGLED (failed at least
+  // once) yet no turn ever carried a diagnostic: it thrashed toward green
+  // without a structured diagnosis rather than diagnosing the failure.
   const anyDiagnostic = turns.some((turn) => turn.diagnostic !== undefined);
-  if (!anyDiagnostic && turns.length > 0) {
-    signals.push("never-localized: zero turns carried a diagnostic before green");
+  if (struggled && !anyDiagnostic && turns.length > 0) {
+    signals.push("never-localized: run failed yet no turn carried a diagnostic before green");
   }
 
   // --- Lucky signal (b): untargeted final edit ---
@@ -138,22 +150,21 @@ export function classifyPassQuality(t: Transcript): PassQualityResult {
   }
 
   // --- Ideal: clean explore -> edit -> verify shape ---
+  // A clean solve is few turns, no reverts, no recovery prompts, AND it applied
+  // an edit (a zero-edit "pass" is a no-op fixture, not a solve — falls to Solid).
+  // We do NOT require a diagnostic: the cleanest solves (1-turn off a stack
+  // trace) never produce one because they never failed. `struggled` being false
+  // already guarantees no revert / no failure signature / few turns.
   const noReverts = revertTurns.length === 0;
   const fewTurns = turns.length > 0 && turns.length <= IDEAL_MAX_TURNS;
   const noRecovery = turns.every((turn) => !turn.redrafted && !turn.answerNow);
-  // A diagnostic present on or before the solving turn (if any edit was
-  // applied at all — a task that passed with zero edits can't have a
-  // "diagnostic before the solving edit" by definition, so it can't be Ideal
-  // under this signal; it falls through to Solid, which is the safe default).
-  const diagnosedBeforeSolve =
-    solvingTurn !== undefined &&
-    turns.slice(0, turns.indexOf(solvingTurn) + 1).some((turn) => turn.diagnostic !== undefined);
+  const appliedAnEdit = solvingTurn !== undefined;
 
-  if (noReverts && fewTurns && noRecovery && diagnosedBeforeSolve) {
+  if (!struggled && noReverts && fewTurns && noRecovery && appliedAnEdit) {
     return {
       quality: "ideal",
       signals: [
-        `clean shape: ${turns.length} turn(s), no reverts, no redraft/answerNow, diagnostic present by turn ${solvingTurn?.turn}`,
+        `clean shape: ${turns.length} turn(s), no reverts, no recovery, applied edit on turn ${solvingTurn?.turn}`,
       ],
     };
   }

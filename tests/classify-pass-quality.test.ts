@@ -72,14 +72,27 @@ describe("classifyPassQuality", () => {
     expect(result.signals.some((s) => s.startsWith("churn"))).toBe(true);
   });
 
-  it("classifies a pass with no diagnostic anywhere as lucky (never localized)", () => {
+  it("classifies a STRUGGLED pass with no diagnostic anywhere as lucky (never localized)", () => {
+    // The run failed at least once (recorded failure signatures) yet no turn
+    // ever carried a diagnostic — thrashed toward green without diagnosing.
     const turns = [
-      makeTurn({ turn: 1 }),
-      makeTurn({ turn: 2, applyResults: appliedEdit }),
+      makeTurn({ turn: 1, failureSignature: "sig-A" }),
+      makeTurn({ turn: 2, failureSignature: "sig-B" }),
+      makeTurn({ turn: 3, applyResults: appliedEdit }),
     ];
     const result = classifyPassQuality(makeTranscript(turns));
     expect(result.quality).toBe("lucky");
     expect(result.signals.some((s) => s.startsWith("never-localized"))).toBe(true);
+  });
+
+  it("classifies a clean 1-turn solve with NO diagnostic as ideal, not lucky (real-data case)", () => {
+    // Regression guard for the false positive real-transcript validation caught:
+    // a stack-trace-localized bug the model fixes in ONE turn never fails, so it
+    // legitimately has no diagnostic — that is the BEST case, not a lucky one.
+    const turns = [makeTurn({ turn: 1, applyResults: appliedEdit })];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("ideal");
+    expect(result.signals.some((s) => s.startsWith("never-localized"))).toBe(false);
   });
 
   it("classifies a middling pass (diagnosis present but not on the solving edit, many turns) as solid", () => {
