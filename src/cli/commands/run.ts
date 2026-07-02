@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { git, isGitRepo } from "@/util/git.ts";
 import { runBestOfNLoop } from "../../agent/bestofn-loop.ts";
+import { runEscalateOnFailure } from "../../agent/escalate-on-failure.ts";
 import { buildEscalationLadder } from "../../agent/escalation.ts";
 import { runLoop } from "../../agent/loop.ts";
 import { planTask } from "../../agent/planner.ts";
@@ -22,6 +23,7 @@ import {
   makeInteractiveApprover,
   numstatChanges,
   recordAgentChanges,
+  revertAgentChanges,
   workingChanges,
 } from "./review.ts";
 
@@ -247,7 +249,10 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   // otherwise repo context overflows the real window and Ollama returns HTTP
   // 400 after a few turns. See models/context-budget.ts.
   process.stderr.write("[smallcode] Scanning repository...\n");
-  const ctxBudget = contextBudgetFor(profile);
+  // `let` (not const): the escalate-on-failure ladder recomputes this per rung so
+  // a bigger model gets its own (larger) context budget. buildBundle closes over
+  // the variable, so reassigning it before an attempt takes effect immediately.
+  let ctxBudget = contextBudgetFor(profile);
   let repoMap: Awaited<ReturnType<typeof walkRepo>>;
   try {
     repoMap = await walkRepo({ root: repoRoot }, Date.now());
@@ -319,8 +324,22 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     ? changedSets(repoRoot)
     : { tracked: new Set<string>(), untracked: new Set<string>() };
 
-  // 11. Run loop — single-shot, or run-level Best-of-N (optionally with the R1
-  // model-escalation ladder) when bestOfN > 1.
+  // 11. Run loop — single-shot, single-shot escalate-on-failure, or run-level
+  // Best-of-N (optionally with the R1 model-escalation ladder) when bestOfN > 1.
+  //
+  // Escalate-on-failure eligibility, captured ONCE (a bun-test subprocess): only
+  // when bestOfN === 1 AND a ladder is configured AND the repo is a git repo (the
+  // scoped revert between rungs needs git) AND the baseline is genuinely red (a
+  // failing test must exist for the oracle to confirm a "solve" to escalate ON).
+  const escalationBaseline =
+    bestOfN <= 1 && escalationSpec.length > 0 && isGitRepo(repoRoot)
+      ? captureTestBaseline(repoRoot)
+      : undefined;
+  const canEscalateOnFailure =
+    escalationBaseline !== undefined &&
+    escalationBaseline.hadAnyTests &&
+    (escalationBaseline.failingIds.size > 0 || escalationBaseline.redCount > 0);
+
   let finalState: typeof state;
   if (bestOfN > 1) {
     // Guard: BoN rolls the working tree back between attempts, so it needs a git
@@ -367,7 +386,68 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
       progress.showError(`agent loop failed: ${String(err)}`);
       process.exit(1);
     }
+  } else if (canEscalateOnFailure) {
+    // Single-shot escalate-on-failure (bestOfN === 1 + an escalation ladder):
+    // run the cheapest model; if the oracle doesn't confirm the fix, revert ONLY
+    // the agent's edits (scoped manifest undo — the user's own work is preserved,
+    // so NO clean-tree requirement) and retry with the next bigger LOCAL model.
+    const baseline = escalationBaseline as ReturnType<typeof captureTestBaseline>;
+    process.stderr.write(
+      `[smallcode] escalate-on-failure ladder [${escalationSpec.join(" → ")}] — retries a bigger local model only if the current one fails; agent edits are reverted between attempts.\n`,
+    );
+    try {
+      const result = await runEscalateOnFailure({
+        models: escalationSpec,
+        log: (m) => process.stderr.write(`[smallcode] ${m}\n`),
+        reset: async () => {
+          // Revert exactly what the just-failed attempt wrote (vs the pre-run
+          // dirty set), leaving the user's own uncommitted edits untouched.
+          await recordAgentChanges(repoRoot, preRunDirty);
+          revertAgentChanges(repoRoot);
+        },
+        isSolved: async () => (await runTieredOracle(repoRoot, { baseline })).outcome === "solved",
+        runAttempt: async (rungId) => {
+          const rungProfile = registry.get(rungId);
+          ctxBudget = contextBudgetFor(rungProfile);
+          const rungDeps = {
+            provider,
+            profile: rungProfile,
+            reasoningHandler: rungProfile.reasoningTags
+              ? new ReasoningHandler(rungProfile.reasoningTags)
+              : new ReasoningHandler({ open: "<think>", close: "</think>" }),
+            config: { ...agentConfig, modelId: rungId },
+            ...(approveEdit ? { approveEdit } : {}),
+          };
+          const rungState = createState({ ...agentConfig, modelId: rungId }, task);
+          rungState.goals = goals.map((g) => ({ ...g }));
+          return runLoop(rungState, getStatePath(agentConfig), rungDeps, getContext);
+        },
+      });
+      finalState = result.finalState;
+      if (result.solvedModelId) {
+        process.stderr.write(
+          `[smallcode] solved by ${result.solvedModelId} on attempt ${result.attemptsUsed}/${escalationSpec.length}.\n`,
+        );
+      } else {
+        process.stderr.write(
+          `[smallcode] escalation exhausted — none of [${escalationSpec.join(", ")}] solved it.\n`,
+        );
+      }
+    } catch (err) {
+      progress.showError(`agent loop failed: ${String(err)}`);
+      process.exit(1);
+    }
   } else {
+    if (escalationSpec.length > 0) {
+      // An escalation ladder was configured but can't apply this run — say why
+      // rather than silently ignoring it.
+      const why = !isGitRepo(repoRoot)
+        ? "not a git repo (needed to revert edits between attempts)"
+        : "no failing tests in the baseline to verify a fix against";
+      process.stderr.write(
+        `[smallcode] escalation [${escalationSpec.join(", ")}] not applied — ${why}; running ${modelId} single-shot.\n`,
+      );
+    }
     try {
       finalState = await runLoop(state, statePath, deps, getContext);
     } catch (err) {

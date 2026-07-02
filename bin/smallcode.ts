@@ -44,6 +44,19 @@ Usage:
   smallcode uninstall [--yes|-y]
   smallcode --version
   smallcode --help
+
+Model escalation (run / fix):
+  --escalation <m1,m2,..>   Ordered LOCAL model ladder, cheapest first (e.g.
+                            qwen2.5-coder:7b,qwen2.5-coder:32b). Also settable as
+                            "escalation" in smallcode.config.json; the flag wins.
+    • With --best-of-n 1 (default): SINGLE-SHOT ESCALATE-ON-FAILURE. Runs the
+      cheapest model; if the oracle can't confirm the fix, reverts ONLY the
+      agent's own edits (your uncommitted work is preserved) and retries with the
+      next bigger model. Stops on the first solve. Needs a git repo and a failing
+      test to verify against; otherwise it runs the base model single-shot.
+    • With --best-of-n N>1: runs N attempts up the same ladder, resolving on the
+      first oracle-green attempt. Requires a CLEAN git tree (attempts roll the
+      whole tree back). Everything stays on one local Ollama endpoint — offline.
 `);
 }
 
