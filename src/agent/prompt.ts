@@ -168,8 +168,8 @@ export function buildTurnPrompt(
     // mismatch's trace stops at the test line and carries no location).
     if (failingTurn!.failureLocation) {
       const loc = failingTurn!.failureLocation;
-      parts.push(`\n## FAILURE LOCATION — the error was thrown at \`${loc.file}:${loc.line}\``);
-      parts.push("Fix the marked line (or what feeds it). Edit ONLY this region:");
+      parts.push(`\n## BUG LOCATION — the bug is on \`${loc.file}:${loc.line}\``);
+      parts.push("Change the marked line (or what feeds it) so the test passes. Edit ONLY this region:");
       parts.push("```");
       parts.push(loc.window);
       parts.push("```");

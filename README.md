@@ -424,6 +424,7 @@ MIT
 - `SC_SUITE` / `SC_N` / `SC_TASKS`: knobs for `scripts/probe-selfconsistency.ts` (the oracle-free self-consistency probe) — the suite to draw from, number of independent attempts per task, and comma-separated task-id substrings. Measurement-only; not used by the product runtime.
 - `SWEBENCH_LIMIT`: how many SWE-bench-Lite instances `scripts/vendor-swebench.ts` ingests (and `scripts/run-swebench.ts` attempts). SWE-bench is **ingested** into runnable task descriptors here; **execution** needs a prepared per-instance Python env (the official Docker harness) — the runner clones + applies the test patch, then skips any instance whose deps aren't importable on this machine rather than report a fake 0.
 - `SWEBENCH_WORK`: working dir where `scripts/run-swebench.ts` clones/caches SWE-bench repos at their `base_commit` (default `/tmp/swebench-work`).
+- `SMALLCODE_R2_FORCE_LINE`: R2 upper-bound **probe** only (format `relpath:line`, e.g. `src/index.js:90`). When a turn fails with a value-mismatch diagnostic that has no natural throw-location, forces the R2 `## BUG LOCATION` window onto that line. Measurement knob (it uses knowledge the harness can't itself derive for an assertion mismatch) — never a shipped default. Used to measure whether handing a small model the exact buggy line lifts a floor: on the `mri` floor task it moved plain 7b from **0/5 → 1/5** where 32b+Best-of-2 got 0/5 (localization is necessary; expression-semantics is the residual wall).
 <!-- agent-skills:doc-keeper:end -->
 
 ## Escalation — scale to your hardware
