@@ -102,17 +102,20 @@ export function classifyPassQuality(t: Transcript): PassQualityResult {
     }
   }
 
-  // A run "struggled" if it ever failed a turn (revert, recorded failure
-  // signature, or simply took more than a clean-solve number of turns). A run
-  // that did NOT struggle — e.g. a 1-turn solve off a stack trace — legitimately
-  // has no failure diagnostic because nothing ever failed; that is the BEST
-  // case, not a lucky one. Gating the "blind" signals on `struggled` stops them
-  // misfiring on clean instant solves (real-data validation caught this: 8/8
-  // clean 1-turn throw-class solves were being mislabeled Lucky).
+  // A run "struggled" if it actually thrashed — a reverted attempt, more than a
+  // clean-solve number of turns, or ≥2 DISTINCT failure signatures (multiple
+  // different failed attempts). We do NOT count a single persistent failure
+  // signature: in fix-mode the baseline is red, so the very first turn always
+  // carries the baseline signature — that is the task, not thrashing. Counting
+  // "any signature" (the earlier definition) flagged every clean diagnose→fix as
+  // struggled (forensic on realrepo-dequal-multifile: a clean 2-turn solve was
+  // mislabeled Lucky via the untargeted-fix signal). A clean solve — few turns,
+  // no reverts, one persistent baseline signature — is the BEST case, not lucky.
+  const distinctFailSigs = new Set(
+    turns.map((t) => t.failureSignature).filter((s): s is string => s !== undefined),
+  ).size;
   const struggled =
-    revertTurns.length > 0 ||
-    turns.length > IDEAL_MAX_TURNS ||
-    turns.some((turn) => turn.failureSignature !== undefined);
+    revertTurns.length > 0 || turns.length > IDEAL_MAX_TURNS || distinctFailSigs >= 2;
 
   // --- Lucky signal (c): never localized — the run STRUGGLED (failed at least
   // once) yet no turn ever carried a diagnostic: it thrashed toward green
@@ -135,6 +138,7 @@ export function classifyPassQuality(t: Transcript): PassQualityResult {
   );
   const solvingTurn = editTurns.length > 0 ? editTurns[editTurns.length - 1] : undefined;
   if (
+    struggled &&
     solvingTurn !== undefined &&
     solvingTurn.diagnostic === undefined &&
     anyDiagnostic &&
