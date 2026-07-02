@@ -20,6 +20,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 import { defaultTemperatures } from "../src/agent/bestofn-loop.ts";
+import { summarizeRepairs } from "../src/eval/repair-metrics.ts";
 import { runTask } from "../src/eval/task-runner.ts";
 import { bootstrapCI, passAtKFromFlags } from "../src/eval/stats.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
@@ -266,6 +267,13 @@ interface LiveTaskMetrics {
   bestOfN: number;
   /** Mean BoN attempts actually spent per trial (≤ bestOfN; undefined when off). */
   avgAttemptsUsed?: number;
+  /** Repair-path telemetry (summed across trials): successfully-applied edit
+   * blocks, how many needed a non-exact fuzzy-repair salvage, and the per-
+   * strategy breakdown. The measurable payoff ceiling for any edit-FORMAT
+   * change (see docs/harness-engineering-roadmap.md P2 verdict). */
+  appliedEdits: number;
+  repaired: number;
+  repairByStrategy: Record<string, number>;
 }
 
 /** Count turns whose tool results carry the think-only truncation error. */
@@ -404,6 +412,16 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
   const thinkOnlyTurns = perTrialThinkOnly.reduce((sum, x) => sum + x, 0);
   const trialsWithTruncation = perTrialThinkOnly.filter((x) => x > 0).length;
 
+  // Repair-path telemetry — how often an applied edit only matched after the
+  // fuzzy-repair salvage (search text drifted). Summed across trials.
+  const repairSummaries = result.trials.map((t) => summarizeRepairs(t.transcript.turns));
+  const appliedEdits = repairSummaries.reduce((s, r) => s + r.appliedEdits, 0);
+  const repaired = repairSummaries.reduce((s, r) => s + r.repaired, 0);
+  const repairByStrategy = repairSummaries.reduce<Record<string, number>>((acc, r) => {
+    for (const [k, v] of Object.entries(r.byStrategy)) acc[k] = (acc[k] ?? 0) + v;
+    return acc;
+  }, {});
+
   return {
     taskId: task.id,
     n,
@@ -419,6 +437,9 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     infraDropped,
     bestOfN: BEST_OF_N,
     avgAttemptsUsed: result.avgAttemptsUsed,
+    appliedEdits,
+    repaired,
+    repairByStrategy,
   };
 }
 
@@ -449,7 +470,8 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
       m.bestOfN > 1 && m.avgAttemptsUsed !== undefined
         ? ` BoN${m.bestOfN}@${m.avgAttemptsUsed.toFixed(1)}`
         : "";
-    const truncCol = `${m.thinkOnlyTurns} (${m.trialsWithTruncation}t)${m.infraDropped > 0 ? ` !${m.infraDropped}infra` : ""}${bonCol}`;
+    const repCol = m.appliedEdits > 0 ? ` rep:${m.repaired}/${m.appliedEdits}` : "";
+    const truncCol = `${m.thinkOnlyTurns} (${m.trialsWithTruncation}t)${m.infraDropped > 0 ? ` !${m.infraDropped}infra` : ""}${bonCol}${repCol}`;
     const p1 = fmtPK(m.passAtK[1], m.passAtKCI[1]);
     const pK = fmtPK(m.passAtK[bigK], m.passAtKCI[bigK]);
     const editFmt = `${(m.editFormatPct * 100).toFixed(0)}%`;
@@ -472,6 +494,19 @@ function printLiveTable(metrics: LiveTaskMetrics[]): void {
       : 0;
   console.log(
     `${padEnd("OVERALL (pooled)", COL1)} | ${padEnd(fmtPK(overall1.p, overall1.ci), COL2)} | ${padEnd(fmtPK(overallK.p, overallK.ci), COL3)} | ${padEnd(String(pooled.length), COL4)} | ${padEnd("", COL5)} | ${padEnd(`${(pooledEditFmt * 100).toFixed(0)}%`, 8)} |`,
+  );
+  // Repair-path telemetry summary — the baseline for any edit-FORMAT work
+  // (P2 constrained-decoding closed NO-GO for lack of exactly this number).
+  const totApplied = metrics.reduce((s, m) => s + m.appliedEdits, 0);
+  const totRepaired = metrics.reduce((s, m) => s + m.repaired, 0);
+  const byStrat = metrics.reduce<Record<string, number>>((acc, m) => {
+    for (const [k, v] of Object.entries(m.repairByStrategy)) acc[k] = (acc[k] ?? 0) + v;
+    return acc;
+  }, {});
+  const stratStr = ["whitespace", "fuzzy"].map((k) => `${k}=${byStrat[k] ?? 0}`).join(" ");
+  const repRate = totApplied > 0 ? ((totRepaired / totApplied) * 100).toFixed(1) : "0.0";
+  console.log(
+    `\nRepair-path: ${totRepaired}/${totApplied} applied edits needed fuzzy-repair salvage (${repRate}%) — ${stratStr}. Exact matches = the rest. This is the payoff ceiling for edit-FORMAT changes; a low rate means edit format is already reliable.`,
   );
   console.log(
     "\nCI = 95% bootstrap over n trials. Two results differ significantly only when their CIs do NOT overlap. n<8 → treat CI as indicative only; raise SMALLCODE_EVAL_N to tighten.",
