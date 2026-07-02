@@ -94,6 +94,9 @@
       overflow-x: auto;
       display: flex;
       gap: 0;
+      position: sticky;
+      top: 0;
+      z-index: 20;
     }
 
     .page-subnav a {
@@ -119,6 +122,88 @@
     @media (max-width: 768px) {
       .page-subnav { padding: 0 var(--space-5); }
     }
+
+    /* ── Table filter bar ── */
+    .table-filter-bar {
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-faint);
+      padding: var(--space-3) 0;
+      position: sticky;
+      top: 44px; /* sits right below the sticky .page-subnav */
+      z-index: 19;
+    }
+
+    .table-filter-bar .container {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+
+    .table-filter__label {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      white-space: nowrap;
+    }
+
+    .table-filter__input {
+      flex: 1 1 320px;
+      min-width: 0;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+    }
+
+    .table-filter__input:focus {
+      outline: none;
+      border-color: var(--accent-violet);
+    }
+
+    .table-filter__count {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
+      white-space: nowrap;
+    }
+
+    /* ── Collapsible long table-cell content ── */
+    .sc-table td details.cell-collapse summary {
+      cursor: pointer;
+      color: var(--text-secondary);
+      list-style: none;
+    }
+
+    .sc-table td details.cell-collapse summary::-webkit-details-marker { display: none; }
+
+    .sc-table td details.cell-collapse summary::before {
+      content: "▸ ";
+      color: var(--accent-violet);
+      font-family: var(--font-mono);
+    }
+
+    .sc-table td details.cell-collapse[open] summary::before {
+      content: "▾ ";
+    }
+
+    .sc-table td details.cell-collapse summary .expand-hint {
+      color: var(--text-tertiary);
+      font-size: var(--text-xs);
+      font-family: var(--font-mono);
+    }
+
+    .sc-table td details.cell-collapse .cell-full {
+      margin-top: var(--space-2);
+    }
+
+    tr.table-filter-hidden { display: none; }
 
     /* ── Main content ── */
     .page-main {
@@ -238,7 +323,7 @@
       <li><a href="../index.html">Home</a></li>
       <li><a href="architecture.html">Architecture</a></li>
       <li><a href="llms.html" class="active" aria-current="page">LLM Reference</a></li>
-      <li><a href="ROADMAP.md">Roadmap</a></li>
+      <li><a href="roadmap.html">Roadmap</a></li>
     </ul>
     <div class="sc-nav__cta">
       <a href="https://github.com/bigknoxy/smallcode-jk" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">
@@ -255,7 +340,7 @@
   <a href="../index.html">Home</a>
   <a href="architecture.html">Architecture</a>
   <a href="llms.html">LLM Reference</a>
-  <a href="ROADMAP.md">Roadmap</a>
+  <a href="roadmap.html">Roadmap</a>
   <a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
 </div>
 
@@ -284,6 +369,23 @@
   <a href="#edit-format">Edit format spec</a>
   <a href="#config">Config &amp; env vars</a>
   <a href="#scripts">How to run</a>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     TABLE FILTER (client-side, vanilla JS — filters every .sc-table row on the page)
+═══════════════════════════════════════════ -->
+<div class="table-filter-bar">
+  <div class="container">
+    <label for="table-filter" class="table-filter__label">Filter tables</label>
+    <input
+      type="search"
+      id="table-filter"
+      class="table-filter__input"
+      placeholder="Type to filter every table on this page (module names, env vars, tool names, keywords)…"
+      autocomplete="off"
+    />
+    <span id="table-filter-count" class="table-filter__count" aria-live="polite"></span>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════
@@ -466,6 +568,7 @@
             <tr><td><code>scripts/distill-skill.ts</code></td><td>CLI that loads the session log + transcript store, filters passing sessions, calls <code>distillSkill</code>, and prints the result to stdout or writes it to <code>--out &lt;path&gt;</code>. Options: <code>--log &lt;path&gt;</code> (default <code>evals/sessions.jsonl</code>), <code>--transcripts &lt;dir&gt;</code> (default <code>evals/transcripts</code>), <code>--max &lt;n&gt;</code> (default 20). Idempotent; no model calls; guarded by <code>import.meta.main</code>.</td></tr>
             <tr><td><code>scripts/classify-pass-quality.ts</code></td><td>P0 "lucky-pass" heuristic (AgentLens, arXiv 2605.12925) — static-analysis pass over stored eval transcripts, ZERO new model calls. Classifies each PASSING trajectory as Lucky (churn/no-diagnostic/untargeted-fix signals) / Solid / Ideal (clean few-turn explore→edit→verify with a diagnostic and no reverts/redraft). Pure <code>classifyPassQuality()</code> + <code>classifyTranscripts()</code> exported for testing. CLI: <code>bun scripts/classify-pass-quality.ts [--repo &lt;path&gt;] [--task &lt;taskId&gt;] [--json]</code>; prints a per-task ideal/solid/lucky table + lucky-rate, or one JSON object with <code>--json</code>. Missing/empty transcripts dir prints a message and exits 0. Purely additive — does not touch the agent loop or any correctness metric.</td></tr>
             <tr><td><code>src/eval/repair-metrics.ts</code></td><td>Repair-path telemetry. Pure <code>summarizeRepairs(turns) → {appliedEdits, repaired, repairRate, byStrategy}</code>. The applier already stamps <code>ApplyResult.repair = {strategy, confidence}</code> on any SEARCH/REPLACE block that only matched AFTER the fuzzy-repair pipeline salvaged it (search text drifted — whitespace/indent/near-miss); an EXACT match leaves it undefined. This counts how often that salvage fired — the measurable payoff ceiling for any edit-FORMAT change (the P2 constrained-decoding spike closed NO-GO partly for lack of this baseline). <code>scripts/run-baseline.ts</code> aggregates it per-task (<code>rep:R/A</code> column) + a suite-level "Repair-path: R/A (rate%)" line. Measured baseline: qwen2.5-coder:7b on edit-reliability = <strong>0/36 (0.0%)</strong> — edit format already byte-exact-reliable, repair.ts is a rarely-firing safety net.</td></tr>
+            <tr><td><code>src/eval/save-transcripts.ts</code></td><td>Issue #95 feeder. Pure <code>saveTrialTranscripts(store, results) → count</code> — flattens <code>TaskEvalResult[]</code> (or a bare <code>TrialResult[]</code>) and <code>TranscriptStore.save()</code>s each trial's <code>transcript</code> into the <code>&lt;transcriptsDir&gt;/&lt;taskId&gt;/&lt;id&gt;.json</code> layout <code>classify-pass-quality.ts</code> reads. No model/provider dependency (unit-tested). Gated by <code>SMALLCODE_SAVE_TRANSCRIPTS</code> / <code>eval run --save-transcripts</code>; OFF by default. NOTE: <code>smallcode eval run</code>'s <code>runSuite</code> (<code>src/eval/runner.ts</code>) is still a Phase-7 placeholder returning <code>taskResults:[]</code>, so today the CLI saves 0 — the working path is <code>SMALLCODE_SAVE_TRANSCRIPTS=1 bun scripts/run-baseline.ts</code>, verified end-to-end (4 saved → classifier read them).</td></tr>
             <tr><td><code>src/verify/runner.ts</code></td><td>Run a configurable checker suite (format, lint, typecheck, test) after edits. Return <code>VerifyResult</code>.</td></tr>
             <tr><td><code>src/verify/corrector.ts</code></td><td>Feed verify failures back to the model as a correction prompt. Up to <code>maxCorrectionIterations</code>.</td></tr>
             <tr><td><code>src/verify/sandbox.ts</code></td><td>Sandbox enforcement for verify-phase commands — allowlist check and path traversal guard.</td></tr>
@@ -771,6 +874,36 @@ function add(a: number, b: number): number { return a + b; }
               <td>on</td>
               <td><code>provider/factory.ts</code></td>
               <td>Set <code>0</code> to disable the throughput watchdog (auto <code>ollama stop</code> on KV-cache decay)</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_LOCALIZE</code></td>
+              <td>off</td>
+              <td><code>config/env.ts</code>, <code>agent/loop.ts</code></td>
+              <td>R2 externalize-localization: surface the source line of a runtime throw in the next prompt</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_VALIDATE_EDIT</code></td>
+              <td>on</td>
+              <td><code>config/env.ts</code>, <code>agent/loop.ts</code></td>
+              <td>R4 validate-before-commit: treat an edit that fails to load/compile as a regression</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_STATIC_CONFIDENCE</code></td>
+              <td>on</td>
+              <td><code>config/env.ts</code>, <code>verify/oracle.ts</code></td>
+              <td>Oracle-free static-confidence grade on the no-test path (broken/parses/type-clean)</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_PHASE_GATE</code></td>
+              <td>off</td>
+              <td><code>config/env.ts</code>, <code>agent/loop.ts</code></td>
+              <td>P0#2 statewright-style phase gate: while no target is confidently pinned and no file has been read yet ("explore" phase), advertise only read/inspect tools and hard-reject write_file/FILE:/PATCH: edits. A pinned/locked target is always "edit" phase (unchanged behavior). Status: shipped but measured INERT in the A/B — the explore-tool restriction fired 0× on the edit-reliability + realrepo suites, see <a href="roadmap.html">roadmap.html</a></td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_SAVE_TRANSCRIPTS</code></td>
+              <td>off</td>
+              <td><code>config/env.ts</code>, <code>eval run</code>, <code>run-baseline.ts</code></td>
+              <td><code>eval run --save-transcripts</code>: persist every trial's Transcript to the TranscriptStore layout (<code>&lt;transcriptsDir&gt;/&lt;taskId&gt;/&lt;id&gt;.json</code>) so <code>scripts/classify-pass-quality.ts</code> has real data. Honored by <code>smallcode eval run</code> and <code>scripts/run-baseline.ts</code></td>
             </tr>
             <tr>
               <td><code>SMALLCODE_DISCIPLINE</code></td>
@@ -1130,11 +1263,11 @@ PARAMETER num_ctx 8192
       <ul class="sc-footer__links" role="list">
         <li><a href="../index.html">Home</a></li>
         <li><a href="architecture.html">Architecture</a></li>
-        <li><a href="ROADMAP.md">Roadmap</a></li>
+        <li><a href="roadmap.html">Roadmap</a></li>
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-01</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-02</span>
   </div>
 </footer>
 
@@ -1159,6 +1292,95 @@ PARAMETER num_ctx 8192
       });
     });
   }
+</script>
+
+<!-- ═══════════════════════════════════════════
+     TABLE SCANNABILITY (R9-style dev-UX): collapsible long cells + a
+     client-side filter box. Vanilla JS, no deps. Every table row's original
+     HTML is preserved verbatim — this only WRAPS long <td> content inside a
+     <details> element with a plain-text teaser as the <summary>; it never
+     deletes or rewrites the underlying content.
+═══════════════════════════════════════════ -->
+<script>
+  (function () {
+    // ── 1. Collapse long table cells behind <details><summary> ──
+    // Any <td> whose visible text exceeds this length gets a short teaser;
+    // the FULL original innerHTML is preserved unchanged inside .cell-full.
+    var CELL_TEASER_THRESHOLD = 320;
+    var TEASER_CHARS = 130;
+
+    document.querySelectorAll('.sc-table td').forEach(function (td) {
+      var text = td.textContent.trim();
+      if (text.length <= CELL_TEASER_THRESHOLD) return;
+      // Skip cells that are just a single short <code> token repeated, or
+      // already contain a details element (defensive, in case of re-run).
+      if (td.querySelector('details.cell-collapse')) return;
+
+      var fullHtml = td.innerHTML;
+      var teaserText = text.slice(0, TEASER_CHARS).trim() + '…';
+
+      var details = document.createElement('details');
+      details.className = 'cell-collapse';
+
+      var summary = document.createElement('summary');
+      var teaserSpan = document.createElement('span');
+      teaserSpan.textContent = teaserText;
+      var hintSpan = document.createElement('span');
+      hintSpan.className = 'expand-hint';
+      hintSpan.textContent = ' (click to expand)';
+      summary.appendChild(teaserSpan);
+      summary.appendChild(hintSpan);
+
+      var fullDiv = document.createElement('div');
+      fullDiv.className = 'cell-full';
+      fullDiv.innerHTML = fullHtml; // verbatim original content, untouched
+
+      details.appendChild(summary);
+      details.appendChild(fullDiv);
+
+      td.innerHTML = '';
+      td.appendChild(details);
+    });
+
+    // ── 2. Client-side filter box: hides non-matching rows across every
+    //      .sc-table on the page (module map, tool contracts, config/env
+    //      vars, edit-format table, etc). Opens any matching collapsed cell
+    //      so the match is actually visible, not just present in the DOM.
+    var input = document.getElementById('table-filter');
+    var countEl = document.getElementById('table-filter-count');
+    if (!input) return;
+
+    var allRows = Array.prototype.slice.call(document.querySelectorAll('.sc-table tbody tr'));
+
+    function applyFilter() {
+      var q = input.value.trim().toLowerCase();
+      var visible = 0;
+
+      allRows.forEach(function (row) {
+        if (!q) {
+          row.classList.remove('table-filter-hidden');
+          visible++;
+          return;
+        }
+        var matches = row.textContent.toLowerCase().indexOf(q) !== -1;
+        row.classList.toggle('table-filter-hidden', !matches);
+        if (matches) {
+          visible++;
+          // Auto-open any collapsed cell so a match isn't hidden inside it.
+          row.querySelectorAll('details.cell-collapse').forEach(function (d) {
+            if (d.textContent.toLowerCase().indexOf(q) !== -1) d.open = true;
+          });
+        }
+      });
+
+      if (!countEl) return;
+      countEl.textContent = q
+        ? visible + ' / ' + allRows.length + ' rows match'
+        : '';
+    }
+
+    input.addEventListener('input', applyFilter);
+  })();
 </script>
 
 </body>
