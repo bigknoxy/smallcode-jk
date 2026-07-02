@@ -175,20 +175,28 @@ try {
         const threshold = parseFloat(thresholdRaw);
         const allowDelta = allowDeltaRaw !== undefined ? parseFloat(allowDeltaRaw) : undefined;
 
-        // Load config for model/transcriptsDir
+        // Load config for model/transcriptsDir + the provider runSuite needs.
         let resolvedModel = model ?? "unknown";
         let transcriptsDir = "evals/transcripts";
+        let gateCfg: ReturnType<typeof loadConfig>["config"] | null = null;
         try {
-          const cfg = loadConfig(configPath).config;
-          if (model === undefined) resolvedModel = cfg.activeModel;
-          transcriptsDir = cfg.eval?.transcriptsDir ?? transcriptsDir;
+          gateCfg = loadConfig(configPath).config;
+          if (model === undefined) resolvedModel = gateCfg.activeModel;
+          transcriptsDir = gateCfg.eval?.transcriptsDir ?? transcriptsDir;
         } catch {
           // optional
+        }
+        if (gateCfg === null) {
+          process.stderr.write(
+            "[smallcode] Error: eval gate needs a config with provider.baseUrl — create smallcode.config.json (e.g. `smallcode config init`).\n",
+          );
+          process.exit(1);
         }
 
         const suite = await loadSuite(resolve(suiteDir));
         const result = await runSuite(suite, {
           model: resolvedModel,
+          config: gateCfg,
           trials: 1,
           transcriptsDir,
           fixturesRoot: "evals/fixtures",
