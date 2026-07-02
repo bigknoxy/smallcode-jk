@@ -219,15 +219,21 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   const repoRoot = resolve(flagString(args.flags, "repo") ?? process.cwd());
   const maxTurns = flagNumber(args.flags, "max-turns") ?? config.maxTurns;
   const bestOfN = flagNumber(args.flags, "best-of-n") ?? config.bestOfN;
-  // R1 escalation ladder: --escalation overrides config.escalation; comma-separated
-  // model ids, cheapest first. Only meaningful with bestOfN > 1.
+  // R1 escalation ladder (cheapest-first model ids). Precedence:
+  //   1. --escalation <m1,m2,..>  — explicit ladder, always wins.
+  //   2. explicit --model <id>    — SUPPRESSES the config default ladder: asking
+  //      for one model means run exactly that model, not "climb from it".
+  //   3. config.escalation        — the out-of-box default ladder (e.g. 3b,7b).
   const escalationFlag = flagString(args.flags, "escalation");
+  const modelFlagGiven = flagString(args.flags, "model") !== undefined;
   const escalationSpec = escalationFlag
     ? escalationFlag
         .split(",")
         .map((s) => s.trim())
         .filter((s) => s.length > 0)
-    : (config.escalation ?? []);
+    : modelFlagGiven
+      ? []
+      : (config.escalation ?? []);
 
   const agentConfig: AgentConfig = {
     repoRoot,

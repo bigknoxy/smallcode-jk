@@ -48,7 +48,9 @@ Usage:
 Model escalation (run / fix):
   --escalation <m1,m2,..>   Ordered LOCAL model ladder, cheapest first (e.g.
                             qwen2.5-coder:7b,qwen2.5-coder:32b). Also settable as
-                            "escalation" in smallcode.config.json; the flag wins.
+                            "escalation" in smallcode.config.json (default 3b,7b);
+                            the flag wins. An explicit --model <id> overrides the
+                            config ladder and runs just that one model.
     • With --best-of-n 1 (default): SINGLE-SHOT ESCALATE-ON-FAILURE. Runs the
       cheapest model; if the oracle can't confirm the fix, reverts ONLY the
       agent's own edits (your uncommitted work is preserved) and retries with the

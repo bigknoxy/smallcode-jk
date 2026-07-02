@@ -241,6 +241,8 @@ describe("configInitCommand", () => {
     const inner = cfg["config"] as Record<string, unknown>;
     expect(inner["activeModel"]).toBe("vibethinker-3b");
     expect(inner["maxTurns"]).toBe(15);
+    // Out-of-box escalate-on-failure ladder: 3b → 7b (hardware-safe; no 32b assumed).
+    expect(inner["escalation"]).toEqual(["qwen2.5-coder:3b", "qwen2.5-coder:7b"]);
   });
 
   it("uses custom model and endpoint when provided", async () => {

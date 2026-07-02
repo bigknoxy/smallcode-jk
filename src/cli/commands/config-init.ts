@@ -46,13 +46,15 @@ export async function configInitCommand(args: ParsedArgs): Promise<void> {
       },
       maxTurns: 15,
       bestOfN: 1,
-      // R1 escalation ladder (optional): model ids cheapest-first, tried across
-      // Best-of-N attempts. Empty = run activeModel alone (low-resource default).
-      // With bigger hardware set bestOfN>1 and escalate as high as your box allows
-      // — every rung is local. Example:
-      //   "bestOfN": 3,
-      //   "escalation": ["qwen2.5-coder:3b", "qwen2.5-coder:7b", "gemma4:12b"]
-      escalation: [] as string[],
+      // R1 escalation ladder: model ids cheapest-first. With the default
+      // bestOfN:1 this is SINGLE-SHOT escalate-on-failure — run 3b; if the fix
+      // fails, revert the agent's edits and retry with 7b (only pays for the
+      // bigger model on the residual; every rung is local). Two 3b/7b rungs are
+      // safe on modest hardware. Bigger box? append a larger local model, e.g.
+      // "qwen2.5-coder:32b". An explicit `--model <id>` overrides this ladder and
+      // runs that one model. With bestOfN>1 the same ladder is climbed across
+      // attempts (needs a clean git tree). Empty [] = run activeModel alone.
+      escalation: ["qwen2.5-coder:3b", "qwen2.5-coder:7b"] as string[],
     },
   };
 
