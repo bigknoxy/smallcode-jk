@@ -9,6 +9,7 @@ import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
 import { captureTestBaseline, escalateBrokenClean, runTieredOracle } from "@/verify/oracle.ts";
+import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
@@ -346,6 +347,15 @@ export async function runLoop(
       };
     }
 
+    // P0#2 phase-gated tool access (opt-in, SMALLCODE_PHASE_GATE — default off,
+    // see phase-gate.ts). `explorePhase` gates OUT of the same module the
+    // prompt (prompt.ts) advertises INTO, so the two can never drift. When the
+    // flag is off this is always false and every gate below is a no-op — byte-
+    // identical to pre-feature behavior. A confidently-pinned target is always
+    // "edit" phase (derivePhase), so a pinned-target run never hits this gate
+    // even with the flag on — preserving the common 1-turn-solve path.
+    const explorePhase = env.phaseGate && derivePhase(state, context) === "explore";
+
     // Target-lock: capture the FIRST confidently-pinned edit target ONCE and
     // enforce THAT stable value for the whole run — never the live per-turn
     // `context.targetFile`. `context` is rebuilt every turn via `getContext`,
@@ -486,7 +496,13 @@ export async function runLoop(
     // can reject them; a rejected turn writes nothing and tells the model so.
     let applyResults: import("@/edit/types.ts").ApplyResult[] = [];
     let editRejected = false;
-    if (editBlocks.length > 0) {
+    // P0#2 phase gate: no confident target yet AND no file read this run — the
+    // model must localize before it edits. Reject the whole batch, write
+    // nothing, same as the diff-review-rejection path below.
+    let phaseGateEditRejected = false;
+    if (editBlocks.length > 0 && explorePhase) {
+      phaseGateEditRejected = true;
+    } else if (editBlocks.length > 0) {
       let approved = true;
       if (deps.approveEdit) {
         try {
@@ -549,6 +565,17 @@ export async function runLoop(
       });
     }
 
+    // P0#2 phase gate: same rejection wording the "explore" turn prompt already
+    // told the model to expect (phase-gate.ts EXPLORE_REJECT_MESSAGE).
+    if (phaseGateEditRejected) {
+      toolResults.push({
+        name: "write_file",
+        success: false,
+        output: "",
+        error: EXPLORE_REJECT_MESSAGE,
+      });
+    }
+
     // The `write_file` TOOL call writes straight to disk (tools.ts) and — unlike
     // FILE:/PATCH: edit blocks — is never routed through applyBatch, so its
     // pre-write content is never captured anywhere. A build-breaking write_file
@@ -572,6 +599,20 @@ export async function runLoop(
     // are control-flow only and handled separately below.
     for (const call of toolCalls) {
       if (call.name === "think" || call.name === "finish") continue;
+
+      // P0#2 phase gate: "explore" phase only advertises read_file/run_tests/
+      // think/finish (PHASE_ALLOWED_TOOLS in phase-gate.ts) — write_file and
+      // run_command are rejected outright, never executed, same wording the
+      // turn prompt already gave the model.
+      if (explorePhase && (call.name === "write_file" || call.name === "run_command")) {
+        toolResults.push({
+          name: call.name,
+          success: false,
+          output: "",
+          error: EXPLORE_REJECT_MESSAGE,
+        });
+        continue;
+      }
 
       // Target-lock (write_file path): mirrors the applyBatch reject above for
       // the OTHER write path — `TOOL: write_file` bypasses applyBatch entirely

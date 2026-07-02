@@ -4,6 +4,7 @@ import type { ContextBundle } from "@/context/types.ts";
 import { ELISION_DETECTED, extractFunctionSource, TEST_FILE_EDIT_REJECTED } from "@/edit/index.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import { renderDiagnostic } from "@/verify/failure-extract.ts";
+import { derivePhase, PHASE_ALLOWED_TOOLS } from "./phase-gate.ts";
 import { defaultPromptSet } from "./prompt-set.ts";
 import type { AgentConfig, AgentState } from "./types.ts";
 
@@ -90,12 +91,29 @@ export function buildTurnPrompt(
 
   const parts: string[] = [];
 
+  // P0#2 phase-gated tool access (opt-in, SMALLCODE_PHASE_GATE — default off).
+  // When off, `phase` is always "edit" and every branch below is a no-op, so the
+  // prompt is byte-identical to pre-feature output. See phase-gate.ts.
+  const phaseGateOn = env.phaseGate;
+  const phase = phaseGateOn ? derivePhase(state, context) : "edit";
+  const exploring = phaseGateOn && phase === "explore";
+
   parts.push(`## Task`);
   parts.push(state.task);
 
   parts.push(`\n## Current Action (step ${state.currentGoalIndex + 1}/${state.goals.length})`);
   parts.push(goal !== undefined ? goal.description : "No active goal.");
   parts.push("\nExecute this action NOW with a FILE: block or tool calls. Do not describe — act.");
+
+  if (phaseGateOn) {
+    const allowed = PHASE_ALLOWED_TOOLS[phase].join(", ");
+    parts.push(`\n## Tools available this turn (${phase} phase): ${allowed}`);
+    if (exploring) {
+      parts.push(
+        "You have not confirmed the target file yet — read it first. write_file, run_command, and FILE:/PATCH: edit blocks are NOT available this turn; any edit will be rejected.",
+      );
+    }
+  }
 
   // Structured failure diagnostic from the most recent failing turn. This is the
   // strongest bug-LOCALIZATION signal a small model gets: a wrong operator /
@@ -193,7 +211,7 @@ export function buildTurnPrompt(
   // large?" (it reliably gets that wrong). PATCH localizes the edit to one
   // function so the model emits ~15 lines instead of 160 it would truncate.
   const target = context.targetFile;
-  if (target) {
+  if (target && !exploring) {
     const usePatch = target.format === "patch" && target.functionName !== undefined;
     // Human-readable label for the edit target. The extractor names an anonymous
     // `export default function (…)` with the synthetic anchor "default" so the
