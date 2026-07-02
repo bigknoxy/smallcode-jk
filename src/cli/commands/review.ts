@@ -10,11 +10,40 @@ import type { ParsedArgs } from "../args.ts";
  * format + a truncated preview of the new content) and reads a y/N from the
  * terminal — default N, so the user must opt IN to each write. Returns undefined
  * when approval isn't required → the loop applies edits unconditionally.
+ *
+ * Two bypasses return `undefined` (apply unconditionally) so the interactive
+ * y/N gate never silently auto-declines when it structurally cannot be answered
+ * (issue #91 — headless runs with `requireApproval:true` rejected EVERY edit
+ * because `prompt()` returns null with no TTY, defaulting the answer to N):
+ *   - `opts.bypass` (an explicit `--yes`): the user opted out of review.
+ *   - `opts.interactive === false` (no TTY — CI, piped, `--json`, delegation):
+ *     an interactive gate can't function, so we apply and emit a ONE-TIME notice
+ *     pointing at `smallcode diff`/`undo` (the scoped-undo safety net) rather
+ *     than declining every write for reasons unrelated to the edits.
+ * `opts` omitted ⇒ `interactive` defaults to true (unchanged behavior for any
+ * existing caller that doesn't pass it).
  */
+export interface ApproverOptions {
+  /** True when stdin is an interactive TTY. Default (omitted) = true. */
+  interactive?: boolean;
+  /** Explicit bypass (e.g. `--yes`) — apply without prompting. */
+  bypass?: boolean;
+}
+
 export function makeInteractiveApprover(
   requireApproval: boolean | undefined,
+  opts?: ApproverOptions,
 ): ((blocks: EditBlock[]) => Promise<boolean>) | undefined {
   if (!requireApproval) return undefined;
+  if (opts?.bypass) return undefined;
+  if (opts?.interactive === false) {
+    process.stderr.write(
+      "[smallcode] requireApproval is on but stdin is not a TTY — applying edits UNREVIEWED " +
+        "(an interactive prompt can't be answered here). Review with `smallcode diff` and roll back " +
+        "with `smallcode undo`; pass --yes to silence this notice.\n",
+    );
+    return undefined;
+  }
   return (blocks: EditBlock[]) => {
     process.stderr.write(
       `\n[smallcode] Review ${blocks.length} proposed edit(s) before writing:\n`,

@@ -62,6 +62,28 @@ describe("workingChanges (R9 diff/undo core)", () => {
     expect(typeof makeInteractiveApprover(true)).toBe("function"); // diff-review hook armed
   });
 
+  test("makeInteractiveApprover bypasses the prompt headlessly (issue #91)", () => {
+    // Interactive TTY → the y/N hook is armed.
+    expect(typeof makeInteractiveApprover(true, { interactive: true })).toBe("function");
+    // No TTY → hook is NOT armed (would auto-decline every edit); apply instead.
+    const origWrite = process.stderr.write.bind(process.stderr);
+    let warned = "";
+    (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+      warned += s;
+      return true;
+    };
+    try {
+      expect(makeInteractiveApprover(true, { interactive: false })).toBeUndefined();
+    } finally {
+      (process.stderr as unknown as { write: typeof origWrite }).write = origWrite;
+    }
+    expect(warned).toContain("not a TTY");
+    // Explicit --yes bypass → no hook regardless of TTY.
+    expect(makeInteractiveApprover(true, { bypass: true, interactive: true })).toBeUndefined();
+    // Approval not required → still undefined even headless (no spurious warning).
+    expect(makeInteractiveApprover(false, { interactive: false })).toBeUndefined();
+  });
+
   test("after git restore + clean, tree is reported clean again", async () => {
     const dir = await repo();
     await writeFile(join(dir, "a.txt"), "two\n");

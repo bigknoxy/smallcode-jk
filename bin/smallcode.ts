@@ -30,8 +30,8 @@ function printUsage(): void {
   process.stdout.write(`smallcode v${version}
 
 Usage:
-  smallcode run <task description> [--model <id>] [--best-of-n <N>] [--escalation <m1,m2,..>] [--json]
-  smallcode fix [--repo <path>] [--test "<cmd>"] [--model <id>] [--best-of-n <n>] [--escalation <m1,m2>] [--json] [--max-turns <n>]
+  smallcode run <task description> [--model <id>] [--best-of-n <N>] [--escalation <m1,m2,..>] [--json] [--yes]
+  smallcode fix [--repo <path>] [--test "<cmd>"] [--model <id>] [--best-of-n <n>] [--escalation <m1,m2>] [--json] [--max-turns <n>] [--yes]
   smallcode chat [--repo <path>] [--model <id>]   # interactive multi-task session
   smallcode diff [--repo <path>]            # show what the agent changed
   smallcode undo [--repo <path>] [--yes]    # revert the agent's changes (dry-run without --yes)
@@ -44,6 +44,13 @@ Usage:
   smallcode uninstall [--yes|-y]
   smallcode --version
   smallcode --help
+
+Edit approval (run / fix / chat):
+  When config sandbox.requireApproval is true, each edit is shown for y/N in an
+  interactive terminal. In a NON-interactive run (CI, piped, --json, delegation)
+  there is no TTY to answer, so edits are APPLIED with a one-time notice — review
+  with 'smallcode diff', roll back with 'smallcode undo'. Pass --yes to apply
+  without prompting (and silence the notice) even in a terminal.
 
 Model escalation (run / fix):
   --escalation <m1,m2,..>   Ordered LOCAL model ladder, cheapest first (e.g.
