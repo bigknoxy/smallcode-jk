@@ -380,9 +380,15 @@ graph TD
         next turn's prompt — replacing a blind 600-char raw slice with a structured block the model
         can directly act on. <strong>R2 externalize-localization</strong> (<code>SMALLCODE_LOCALIZE=1</code>, default off):
         when the failure is a runtime throw whose stack reached a source line, the loop reads a tight
-        window around that exact line and renders a <code>## FAILURE LOCATION … ⟵ FAILED HERE</code> block —
-        handing the small model the <em>where</em> it cannot localize itself. Suppressed for value-mismatch
-        failures (their trace points at the test line, not the bug).
+        window around that exact line and renders a <code>## BUG LOCATION … ⟵ FAILED HERE</code> block —
+        handing the small model the <em>where</em> it cannot localize itself. Naturally suppressed for
+        value-mismatch failures (their trace points at the test line, not the bug). An upper-bound
+        <strong>probe</strong> (<code>SMALLCODE_R2_FORCE_LINE=relpath:line</code>, measurement-only, never a
+        shipped default) forces that same window onto a given line for value-mismatch failures too: on the
+        <code>mri</code> floor task it moved plain 7b from <strong>0/5 → 1/5</strong> where 32b + Best-of-2
+        got 0/5 — evidence that externalized localization is <em>necessary</em> (7b never lands the line
+        unaided) but not <em>sufficient</em> (given the line, 7b still over-rewrites the expression and
+        breaks the short-circuit logic 4/5 of the time — the residual wall is expression semantics).
       </p>
       <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the

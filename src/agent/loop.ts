@@ -806,6 +806,28 @@ export async function runLoop(
       }
     }
 
+    // R2 upper-bound PROBE (SMALLCODE_R2_FORCE_LINE=relpath:line). When this turn
+    // failed with a diagnostic but produced no natural throw-location (a value
+    // mismatch's trace stops at the test line — see failure-extract.ts), force the
+    // R2 window onto the given source line. This measures the CEILING of
+    // externalized localization: it hands the model a line the harness could NOT
+    // itself derive for an assertion mismatch, so it is a measurement knob ONLY,
+    // never a shipped default. If handing the exact line lifts a floor, a real
+    // assertion-failure localization oracle is worth building; if not, R2 is the
+    // wrong lever for that task class.
+    if (!failureLocation && env.r2ForceLine && verdict?.diagnostic) {
+      const sepIdx = env.r2ForceLine.lastIndexOf(":");
+      const rel = sepIdx > 0 ? env.r2ForceLine.slice(0, sepIdx) : "";
+      const forcedLine = sepIdx > 0 ? parseInt(env.r2ForceLine.slice(sepIdx + 1), 10) : NaN;
+      if (rel && Number.isFinite(forcedLine) && forcedLine > 0) {
+        const abs = path.resolve(state.repoRoot, rel);
+        if (abs.startsWith(path.resolve(state.repoRoot) + sep)) {
+          failureLocation =
+            (await readFailureWindow(abs, forcedLine, state.repoRoot)) ?? undefined;
+        }
+      }
+    }
+
     const turn: TurnRecord = {
       turn: state.turns.length + 1,
       goalId: goal.id,

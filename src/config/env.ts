@@ -28,10 +28,11 @@ export const env = {
   get targetLock(): boolean { return boolEnv("SMALLCODE_TARGET_LOCK", true); },
   get phaseGate(): boolean { return boolEnv("SMALLCODE_PHASE_GATE", false); },
   get saveTranscripts(): boolean { return boolEnv("SMALLCODE_SAVE_TRANSCRIPTS", false); },
+  get r2ForceLine(): string | undefined { const v = process.env["SMALLCODE_R2_FORCE_LINE"]; return v && v.trim() ? v.trim() : undefined; },
 };
 
 /** Metadata for discoverability / `smallcode config env` listing. */
-export interface EnvVarDoc { name: string; parse: "bool" | "int"; default: string; description: string; }
+export interface EnvVarDoc { name: string; parse: "bool" | "int" | "string"; default: string; description: string; }
 export const ENV_REGISTRY: EnvVarDoc[] = [
   { name: "SMALLCODE_LOCALIZE", parse: "bool", default: "off", description: "R2 externalize-localization: surface the source line of a runtime throw in the next prompt." },
   { name: "SMALLCODE_VALIDATE_EDIT", parse: "bool", default: "on", description: "R4 validate-before-commit: treat an edit that fails to load/compile as a regression." },
@@ -44,4 +45,5 @@ export const ENV_REGISTRY: EnvVarDoc[] = [
   { name: "SMALLCODE_TARGET_LOCK", parse: "bool", default: "on", description: "Hard-reject FILE:/PATCH:/write_file edits to a file other than the confidently-pinned fix target while the run is in fix-mode (baseline had a failing test)." },
   { name: "SMALLCODE_PHASE_GATE", parse: "bool", default: "off", description: "P0#2 statewright-style phase gate: while no target is confidently pinned and no file has been read yet (\"explore\" phase), advertise only read/inspect tools and hard-reject write_file/FILE:/PATCH: edits. A pinned/locked target is always \"edit\" phase (unchanged behavior)." },
   { name: "SMALLCODE_SAVE_TRANSCRIPTS", parse: "bool", default: "off", description: "eval run --save-transcripts: persist every trial's Transcript to the TranscriptStore layout (<transcriptsDir>/<taskId>/<id>.json) so scripts/classify-pass-quality.ts has real data. Honored by `smallcode eval run` and scripts/run-baseline.ts." },
+  { name: "SMALLCODE_R2_FORCE_LINE", parse: "string", default: "(unset)", description: "R2 upper-bound PROBE only (format `relpath:line`, e.g. `src/index.js:90`). When a turn fails with a value-mismatch diagnostic that carries no natural throw-location, forces the R2 BUG LOCATION window onto the given source line. MEASUREMENT KNOB, never a shipped default: it uses knowledge the harness cannot itself derive for an assertion mismatch, to measure the ceiling of externalized localization (does handing the model the exact line lift a floor?)." },
 ];
