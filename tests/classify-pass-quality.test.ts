@@ -1,0 +1,108 @@
+import { describe, expect, it } from "bun:test";
+import { classifyPassQuality, classifyTranscripts } from "../scripts/classify-pass-quality.ts";
+import type { TurnRecord } from "../src/agent/types.ts";
+import type { Transcript } from "../src/eval/types.ts";
+
+// ---------------------------------------------------------------------------
+// Fixture helpers — minimal TurnRecord/Transcript builders. No disk I/O; these
+// are hand-built in-memory objects, cast where convenient per project
+// convention (see e.g. tests/agent-loop.test.ts style).
+// ---------------------------------------------------------------------------
+
+function makeTurn(overrides: Partial<TurnRecord> & { turn: number }): TurnRecord {
+  return {
+    goalId: "g1",
+    prompt: "prompt",
+    rawResponse: "raw",
+    answer: "answer",
+    toolCalls: [],
+    toolResults: [],
+    editBlocks: [],
+    applyResults: [],
+    promptTokens: 10,
+    completionTokens: 10,
+    timestamp: Date.now(),
+    ...overrides,
+  } as unknown as TurnRecord;
+}
+
+function makeTranscript(turns: TurnRecord[], outcome: Transcript["outcome"] = "passed"): Transcript {
+  return {
+    id: "t1",
+    sessionId: "s1",
+    taskId: "task-a",
+    trialIndex: 0,
+    modelId: "qwen2.5-coder:3b",
+    turns,
+    outcome,
+    startedAt: 0,
+    finishedAt: 1000,
+  } as unknown as Transcript;
+}
+
+const appliedEdit = [{ filePath: "src/foo.ts", status: "applied" as const, diff: "diff" }];
+const diagnostic = { assertionId: "test > case", message: "expected 1 got 2", raw: "raw failure" };
+
+describe("classifyPassQuality", () => {
+  it("classifies a clean 1-turn pass with a diagnostic as ideal", () => {
+    const turns = [
+      makeTurn({ turn: 1, diagnostic, applyResults: appliedEdit }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("ideal");
+  });
+
+  it("classifies >=2 same-signature revert cycles as lucky (churn)", () => {
+    const turns = [
+      makeTurn({ turn: 1, diagnostic, failureSignature: "sig-A" }),
+      makeTurn({
+        turn: 2,
+        failureSignature: "sig-A",
+        reverted: { newFailures: ["a.test.ts"] },
+      }),
+      makeTurn({
+        turn: 3,
+        failureSignature: "sig-A",
+        reverted: { newFailures: ["a.test.ts"] },
+      }),
+      makeTurn({ turn: 4, applyResults: appliedEdit }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("lucky");
+    expect(result.signals.some((s) => s.startsWith("churn"))).toBe(true);
+  });
+
+  it("classifies a pass with no diagnostic anywhere as lucky (never localized)", () => {
+    const turns = [
+      makeTurn({ turn: 1 }),
+      makeTurn({ turn: 2, applyResults: appliedEdit }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("lucky");
+    expect(result.signals.some((s) => s.startsWith("never-localized"))).toBe(true);
+  });
+
+  it("classifies a middling pass (diagnosis present but not on the solving edit, many turns) as solid", () => {
+    const turns = [
+      makeTurn({ turn: 1, diagnostic }),
+      makeTurn({ turn: 2 }),
+      makeTurn({ turn: 3 }),
+      makeTurn({ turn: 4 }),
+      makeTurn({ turn: 5, applyResults: appliedEdit, diagnostic }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    // Solving turn (5) HAS a diagnostic, so the untargeted-fix signal doesn't
+    // fire, and anyDiagnostic is true so never-localized doesn't fire either
+    // — but 5 turns exceeds IDEAL_MAX_TURNS, so it's not Ideal. Solid.
+    expect(result.quality).toBe("solid");
+  });
+
+  it("excludes a failed transcript from classifyTranscripts", () => {
+    const turns = [makeTurn({ turn: 1, diagnostic, applyResults: appliedEdit })];
+    const passed = makeTranscript(turns, "passed");
+    const failed = makeTranscript([makeTurn({ turn: 1 })], "failed");
+    const classified = classifyTranscripts([passed, failed]);
+    expect(classified.length).toBe(1);
+    expect(classified[0]?.transcript.outcome).toBe("passed");
+  });
+});
