@@ -1,3 +1,9 @@
+## HARD RULE — docs NEVER drift from code (MANDATORY, NON-NEGOTIABLE)
+
+**Every `.html` and `.md` file in the repo MUST stay in sync with the codebase at all times.** This is not limited to the three public pages below — it covers `README.md`, `docs/*.html`, `docs/*.md` (including `docs/roadmap.html`, `docs/harness-engineering-roadmap.md`, `docs/ROADMAP.md`), and any other doc/markdown file. A commit that changes behavior, features, flags, env vars, config, commands, module structure, or benchmark numbers WITHOUT updating every doc/markdown file that references the changed thing is INCOMPLETE.
+
+On every commit: (1) grep the `.html`/`.md` files for anything your change affects (feature name, flag, env var, command, module, number); (2) update every match; (3) if genuinely none apply, state `docs: no doc/markdown impact` in the commit body so the skip is deliberate, not forgotten. Stale docs are a bug — treat a doc that contradicts the code as a defect to fix, not to ignore. When unsure whether a doc claim is still true, VERIFY it against the code before leaving it.
+
 ## Public docs sync (MANDATORY)
 
 Three public pages live at repo root / `docs/` and WILL be published to GitHub Pages in a later phase. They must NEVER drift from the code:

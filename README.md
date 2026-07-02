@@ -35,6 +35,47 @@ curl -fsSL https://raw.githubusercontent.com/bigknoxy/smallcode-jk/main/install.
 This installs smallcode to `~/.smallcode` and writes a wrapper to `~/.local/bin/smallcode`.
 If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to your shell config.
 
+### Your first fix
+
+smallcode is fully local — no API key, no network calls beyond your Ollama server. Once Ollama is running (see Prerequisites) and `smallcode` is installed:
+
+**1. Initialize a config in your project**
+
+```bash
+cd your-project
+smallcode config init --model qwen2.5-coder:3b
+```
+
+Writes `smallcode.config.json` pointed at `http://localhost:11434/v1`, with `sandbox.requireApproval: true` (each edit is shown for a `y/N` in an interactive terminal — nothing lands without your OK) and the default escalation ladder `["qwen2.5-coder:3b", "qwen2.5-coder:7b"]` (climbs to 7b only if 3b's fix doesn't pass the test oracle). **Gotcha:** without `--model`, `config init` defaults to `vibethinker-3b` — pass `--model qwen2.5-coder:3b` for the recommended model.
+
+**2. Point it at a repo with a failing test and let it fix that test**
+
+```bash
+smallcode fix --repo /path/to/repo
+```
+
+Runs your test command (default `bun test`); if it's already green, this is a no-op. If it's RED, smallcode derives a fix task from the failing output and drives the agent loop, stopping the moment the test oracle goes green — escalating 3b → 7b automatically if the small model can't solve it.
+
+Or describe a task in your own words:
+
+```bash
+smallcode run "add input validation to src/api/handler.ts" --repo /path/to/repo
+```
+
+Success means the change was **oracle-verified**: the test suite (or, for untested code, a static-confidence grade) confirmed the fix, not just that the model claimed to be done.
+
+**3. Review, and undo if needed**
+
+```bash
+smallcode diff --repo /path/to/repo         # see exactly what changed
+smallcode undo --repo /path/to/repo         # dry-run: shows what would revert
+smallcode undo --repo /path/to/repo --yes   # revert (only the agent's own edits — your own work is untouched)
+```
+
+In a non-interactive run (CI, piped, `--json`) there's no TTY to answer the approval prompt, so edits are applied with a one-time notice instead of blocking — review with `diff`/`undo` as above, or pass `--yes` to apply without the notice.
+
+**4. Scale up (optional)** — the ladder above already escalates 3b → 7b on failure with zero flags. To use a different ladder or pin one model for a run: `--model <id>` (single model, no escalation) or `--escalation m1,m2,...` (override the config ladder). See [Escalation](#escalation--scale-to-your-hardware) below.
+
 ### Verify, update, uninstall
 
 ```bash
@@ -99,7 +140,7 @@ EOF
 **3. Run a coding task**
 
 ```bash
-bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo .
+bun bin/smallcode.ts run "Add input validation to src/api/handler.ts" --repo .
 ```
 
 ---
@@ -232,11 +273,11 @@ All three expose an OpenAI-compatible `/v1/chat/completions` endpoint. Point `pr
 
 ## CLI reference
 
-All commands are invoked via `bun run index.ts <command>` (or a compiled `smallcode` binary).
+All commands are invoked via `bun bin/smallcode.ts <command>` (or the installed `smallcode` binary).
 
 | Command | Flags | Description |
 |---|---|---|
-| `run` | `--task <string>` `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--json` | Run the agent on a coding task inside the given repo directory. Ends with a diff summary + how to review/undo. `--json` prints exactly one JSON line (`{ok, verified, status, model, turnsUsed, filesChanged, added, removed, reason}`) to stdout instead — for scripting/CI, exit code is unchanged (0 iff verified). |
+| `run` | `<task description>` (positional) `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--json` `--yes` | Run the agent on a coding task inside the given repo directory, e.g. `smallcode run "add input validation to src/api/handler.ts" --repo .`. Ends with a diff summary + how to review/undo. `--json` prints exactly one JSON line (`{ok, verified, status, model, turnsUsed, filesChanged, added, removed, reason}`) to stdout instead — for scripting/CI, exit code is unchanged (0 iff verified). |
 | `fix` | `--repo <path>` `--test "<cmd>"` `--model <id>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--max-turns <n>` `--json` | Test-driven auto-fix: runs the test command (default `bun test`); if GREEN, exits 0 immediately ("nothing to fix"); if RED, derives a task from the failing output and runs the SAME pipeline as `run`. The pre-commit / delegation primitive — point a hook or another agent at it and it either no-ops or drives the loop until tests pass (or gives up honestly). |
 | `chat` | `--repo <path>` `--model <id>` `--config <path>` | Interactive multi-task session — keeps the repo index + model warm across tasks. Slash-commands: `/add` `/drop` `/files` (pin context), `/diff` `/undo` (review/revert), `/model` `/clear` `/help` `/exit`. Any other line is a coding task. |
 | `diff` | `--repo <path>` | Show what the agent changed (unified diff + any new files). |
