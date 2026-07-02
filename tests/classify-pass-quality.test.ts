@@ -95,6 +95,35 @@ describe("classifyPassQuality", () => {
     expect(result.signals.some((s) => s.startsWith("never-localized"))).toBe(false);
   });
 
+  it("classifies a clean diagnose→fix (one baseline failure, no reverts) as ideal, not lucky (dequal forensic)", () => {
+    // Regression guard for the realrepo-dequal-multifile forensic false positive:
+    // a clean 2-turn solve — turn 1 sees the red baseline (one failure signature
+    // + diagnostic), turn 2 applies the fix — was mislabeled Lucky via
+    // untargeted-fix, because the SOLVING turn naturally has no diagnostic (it
+    // succeeded). A single persistent baseline signature + no reverts is NOT
+    // "struggling", so the blind-luck signals must not fire.
+    const turns = [
+      makeTurn({ turn: 1, failureSignature: "sig-A", diagnostic }),
+      makeTurn({ turn: 2, applyResults: appliedEdit }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("ideal");
+    expect(result.signals.some((s) => s.startsWith("untargeted-fix"))).toBe(false);
+  });
+
+  it("still flags untargeted-fix when the run actually churned (a reverted attempt)", () => {
+    // The signal must survive for genuine thrashing: a reverted attempt, then a
+    // fix on a turn that carried no fresh diagnostic (dequal trials 1 & 2).
+    const turns = [
+      makeTurn({ turn: 1, failureSignature: "sig-A", diagnostic }),
+      makeTurn({ turn: 2, failureSignature: "sig-A", reverted: { newFailures: ["x"] }, diagnostic }),
+      makeTurn({ turn: 3, applyResults: appliedEdit }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("lucky");
+    expect(result.signals.some((s) => s.startsWith("untargeted-fix"))).toBe(true);
+  });
+
   it("classifies a middling pass (diagnosis present but not on the solving edit, many turns) as solid", () => {
     const turns = [
       makeTurn({ turn: 1, diagnostic }),
