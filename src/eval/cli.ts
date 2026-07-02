@@ -60,10 +60,21 @@ export async function evalRunCommand(args: EvalRunCommandArgs): Promise<void> {
   // -------------------------------------------------------------------------
   // 4. Run suite
   // -------------------------------------------------------------------------
+  // A real run drives the model, so it needs a provider endpoint — which lives
+  // in the config. (The old stub tolerated a missing config by producing zero
+  // trials; now that eval actually runs, a missing config is a hard error.)
+  if (cfg === null) {
+    process.stderr.write(
+      "Error: eval run needs a config with provider.baseUrl — create smallcode.config.json (e.g. `smallcode config init`).\n",
+    );
+    process.exit(1);
+  }
+
   let result: EvalRunResult;
   try {
     result = await runSuite(suite, {
       model: modelId,
+      config: cfg,
       trials,
       transcriptsDir,
       fixturesRoot,
