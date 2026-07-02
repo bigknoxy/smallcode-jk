@@ -18,12 +18,15 @@
 import { mkdir, cp, rm, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { env } from "../src/config/env.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { defaultTemperatures } from "../src/agent/bestofn-loop.ts";
+import { saveTrialTranscripts } from "../src/eval/save-transcripts.ts";
 import { summarizeRepairs } from "../src/eval/repair-metrics.ts";
 import { runTask } from "../src/eval/task-runner.ts";
 import { bootstrapCI, passAtKFromFlags } from "../src/eval/stats.ts";
 import { loadSuite } from "../src/eval/task-loader.ts";
+import { TranscriptStore } from "../src/eval/transcript-store.ts";
 import { runDeterministicGrader } from "../src/eval/graders/deterministic.ts";
 import { runStaticGrader } from "../src/eval/graders/static.ts";
 import type { EvalTask, GraderConfig, GraderResult, TaskEvalResult } from "../src/eval/types.ts";
@@ -115,6 +118,15 @@ const TASK_FILTER = (process.env.SMALLCODE_TASK_FILTER ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter((s) => s.length > 0);
+// Issue #95: SMALLCODE_SAVE_TRANSCRIPTS=1 persists every trial's Transcript to
+// TRANSCRIPTS_DIR via the same TranscriptStore layout `eval run
+// --save-transcripts` uses (<taskId>/<id>.json), so
+// scripts/classify-pass-quality.ts has real data to read. OFF by default =
+// zero behavior/output change (transcripts can be large).
+const SAVE_TRANSCRIPTS = env.saveTranscripts;
+const TRANSCRIPTS_DIR = join(PROJECT_ROOT, "evals", "transcripts");
+const transcriptStore = SAVE_TRANSCRIPTS ? new TranscriptStore(TRANSCRIPTS_DIR) : undefined;
+let transcriptsSavedTotal = 0;
 
 // ---------------------------------------------------------------------------
 // Grader dispatch (same as validate-e1)
@@ -377,6 +389,10 @@ async function liveRunTask(task: EvalTask): Promise<LiveTaskMetrics> {
     ...(escalationLadder ? { escalationLadder } : {}),
     trialTimeoutMs: 20 * 60 * 1000, // 20 min per trial (VibeThinker-3B ~100-300s/call)
   });
+
+  if (transcriptStore) {
+    transcriptsSavedTotal += await saveTrialTranscripts(transcriptStore, [result]);
+  }
 
   // Exclude infra-error trials from the pass-rate denominator (the grader marks
   // them after exhausting retries). They never ran the tests; counting them as
@@ -711,6 +727,11 @@ async function main(): Promise<void> {
 
     console.log(`\n[run-baseline] Results: ${passCount}/${suite.tasks.length} tasks with pass@1 > 0`);
     console.log(`[run-baseline] Metrics appended to ${METRICS_HISTORY_PATH}`);
+    if (SAVE_TRANSCRIPTS) {
+      process.stderr.write(
+        `[run-baseline] Saved ${transcriptsSavedTotal} trial transcript(s) to ${TRANSCRIPTS_DIR}\n`,
+      );
+    }
   }
 }
 
