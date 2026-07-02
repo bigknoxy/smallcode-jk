@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.5.0...v1.6.0) (2026-07-02)
+
+
+### Features
+
+* **cli:** --json output + smallcode fix (test-driven auto-fix) — the delegation/pre-commit primitive ([#85](https://github.com/bigknoxy/smallcode-jk/issues/85)) ([bac1bb4](https://github.com/bigknoxy/smallcode-jk/commit/bac1bb4d68d3e8d10715b121d5ac17f96c23ce04))
+
+
+### Bug Fixes
+
+* **agent:** retarget the lock when the model persistently edits a mis-pinned file (unblock the real target) ([#87](https://github.com/bigknoxy/smallcode-jk/issues/87)) ([1caab23](https://github.com/bigknoxy/smallcode-jk/commit/1caab23c9487092f12062fbce97280ec82c8062d))
+* **retrieval:** dominant boost for files named verbatim in the query ([#88](https://github.com/bigknoxy/smallcode-jk/issues/88)) ([#88](https://github.com/bigknoxy/smallcode-jk/issues/88)) ([f59bfab](https://github.com/bigknoxy/smallcode-jk/commit/f59bfaba2e3d61e8ac11428e83312e71fec4c1a9))
+
 ## [1.5.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.4.1...v1.5.0) (2026-07-01)
 
 
