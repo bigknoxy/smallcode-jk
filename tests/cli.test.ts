@@ -82,6 +82,25 @@ describe("parseArgs", () => {
     const result = parseArgs(["config", "init", "--force"]);
     expect(result.flags["force"]).toBe(true);
   });
+
+  it("negative-number flag value is captured, not dropped", () => {
+    const result = parseArgs(["run", "task", "--max-turns", "-1"]);
+    expect(result.flags["max-turns"]).toBe("-1");
+    expect(result.positionals).toEqual(["task"]);
+  });
+
+  it("negative decimal flag value is captured", () => {
+    const result = parseArgs(["eval", "run", "--threshold", "-0.5"]);
+    expect(result.flags["threshold"]).toBe("-0.5");
+  });
+
+  it("boolean flag followed by another flag stays boolean (not swallowed)", () => {
+    // Guards against the over-general fix `if (next !== undefined)` which would
+    // wrongly capture the following flag as this flag's value.
+    const result = parseArgs(["config", "init", "--force", "--verbose"]);
+    expect(result.flags["force"]).toBe(true);
+    expect(result.flags["verbose"]).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

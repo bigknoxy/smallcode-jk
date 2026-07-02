@@ -78,3 +78,46 @@ describe("scoreFiles — low-priority path deprioritization", () => {
     expect(scored[1]!.score).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// scoreFiles — explicit path-mention dominates a partial-match decoy pile.
+// ---------------------------------------------------------------------------
+
+describe("scoreFiles — explicit path mention", () => {
+  it("a file named verbatim in the query outranks a big partial-match decoy", () => {
+    // The target: small file, few symbols — named explicitly in the query.
+    const target = makeFile("src/cli/args.ts", [makeSymbol("parseArgs")]);
+    // A decoy that accumulates many partial substring hits on common query
+    // words ("value", "token", "flag") across a dozen symbols — the exact shape
+    // that buried args.ts at rank 36 before the path-mention boost.
+    const decoy = makeFile(
+      "src/verify/oracle.ts",
+      ["tokenValue", "flagValue", "tokenFlag", "valueToken", "flagToken", "valueFlag"].map((n) =>
+        makeSymbol(n),
+      ),
+    );
+    const scored = scoreFiles(
+      [decoy, target],
+      "In src/cli/args.ts, parseArgs drops a negative-number token that should be captured as the flag value",
+    );
+    expect(scored[0]!.fileMap.path).toBe("src/cli/args.ts");
+    expect(scored[0]!.score).toBeGreaterThan(scored[1]!.score);
+  });
+
+  it("does not boost when the query names no path (bare-symbol query unaffected)", () => {
+    const a = makeFile("src/a.ts", [makeSymbol("wrapText")]);
+    const b = makeFile("src/b.ts", [makeSymbol("other")]);
+    // No path token in the query → PATH_MENTION_WEIGHT never applies; identical
+    // to the common-case ranking above.
+    const scored = scoreFiles([a, b], "fix wrapText bug");
+    expect(scored[0]!.score).toBe(16);
+  });
+
+  it("a bare word matching part of a path does not trigger the path boost", () => {
+    // "args" alone is not the file's full path — only the +2 path-token bonus
+    // applies, never the dominant PATH_MENTION_WEIGHT.
+    const f = makeFile("src/cli/args.ts", [makeSymbol("parseArgs")]);
+    const scored = scoreFiles([f], "fix the args handling");
+    expect(scored[0]!.score).toBeLessThan(100); // nowhere near the 1000 boost
+  });
+});

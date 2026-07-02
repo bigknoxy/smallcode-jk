@@ -50,8 +50,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
       } else {
         const key = token.slice(2);
         const next = argv[i + 1];
-        if (next !== undefined && !next.startsWith("-")) {
-          flags[key] = next;
+        // Treat `next` as this flag's value unless it looks like another flag.
+        // A leading "-" normally marks a flag, BUT a negative number (e.g.
+        // `--max-turns -1`) is a legitimate value — capture it rather than
+        // dropping it into positionals. Anything else starting with "-"
+        // (`--other`, `-x`) is a flag, so the current flag stays boolean.
+        const nextIsValue =
+          next !== undefined && (!next.startsWith("-") || /^-\d+(\.\d+)?$/.test(next));
+        if (nextIsValue) {
+          flags[key] = next as string;
           i++;
         } else {
           flags[key] = true;

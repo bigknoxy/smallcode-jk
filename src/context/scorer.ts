@@ -79,6 +79,33 @@ function tokenizeQuery(query: string): string[] {
  */
 const EXACT_NAME_WEIGHT = 15;
 
+/**
+ * Dominant boost for a file whose repo-relative path is named VERBATIM in the
+ * query (e.g. the task says "In src/cli/args.ts, parseArgs …"). Naming the exact
+ * path is the single strongest target signal a human can give — far stronger than
+ * any pile of partial symbol matches — yet without this a small file (few symbols
+ * → low aggregate) loses to a big decoy that substring-matches common query words
+ * ("value"/"token"/"test"/"pass") across dozens of its own symbols. Real case:
+ * args.ts (2 symbols, named in the query) ranked 36th behind progress.ts (126)
+ * and oracle.ts (84). Set an order of magnitude above the largest observed
+ * partial-match pile so an explicit path mention always wins its tier; when two
+ * real files are both named, the normal signals below tie-break between them.
+ */
+const PATH_MENTION_WEIGHT = 1000;
+
+/**
+ * True when `query` names `path` verbatim as a repo-relative path. The path is
+ * distinctive (contains a "/" separator and/or a file extension), so a plain
+ * substring test can't false-match a bare word. Slashes are normalized so a
+ * Windows-style candidate path still matches a forward-slash mention (queries are
+ * written with "/"). Pure.
+ */
+function queryMentionsPath(query: string, path: string): boolean {
+  const normPath = path.replace(/\\/g, "/").toLowerCase();
+  if (normPath.length < 3) return false;
+  return query.replace(/\\/g, "/").toLowerCase().includes(normPath);
+}
+
 export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
   const tokens = tokenizeQuery(query);
 
@@ -86,6 +113,13 @@ export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
     let score = 0;
     const matchedSymbols: CodeSymbol[] = [];
     const pathLower = fileMap.path.toLowerCase();
+
+    // Signal 0 (dominant): the query names this file's exact path — the strongest
+    // possible target signal, applied before the partial-match signals so no pile
+    // of decoy substring hits can outrank an explicitly-named file.
+    if (queryMentionsPath(query, fileMap.path)) {
+      score += PATH_MENTION_WEIGHT;
+    }
 
     // Signal 3: file path contains query token (+2 per matching token)
     for (const token of tokens) {
