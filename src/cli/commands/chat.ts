@@ -107,7 +107,10 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
       ? changedSets(repoRoot)
       : { tracked: new Set<string>(), untracked: new Set<string>() };
     try {
-      const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval);
+      const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval, {
+        interactive: process.stdin.isTTY === true,
+        bypass: args.flags["yes"] === true,
+      });
       final = await runLoop(
         state,
         getStatePath(agentConfig),

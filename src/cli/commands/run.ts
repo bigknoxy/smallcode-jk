@@ -314,8 +314,13 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   }
 
   // Diff-review-before-write: when sandbox.requireApproval is on, the loop asks
-  // the user to approve each proposed edit before it is written.
-  const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval);
+  // the user to approve each proposed edit before it is written. Headless (no
+  // TTY) or --yes bypasses the prompt and applies (issue #91) rather than
+  // silently auto-declining every edit.
+  const approveEdit = makeInteractiveApprover(config.sandbox?.requireApproval, {
+    interactive: process.stdin.isTTY === true,
+    bypass: flagBool(args.flags, "yes"),
+  });
   const deps = {
     provider,
     profile,
