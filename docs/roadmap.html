@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="smallcode roadmap — status board of P0/P1/P2 harness-engineering research items: what shipped, what was validated NO-GO, what's still open." />
+  <title>smallcode — Roadmap</title>
+  <link rel="stylesheet" href="assets/site.css" />
+
+  <style>
+    /* ── Mobile nav (same pattern as architecture.html / llms.html) ── */
+    .nav-hamburger {
+      display: none;
+      background: transparent;
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    .nav-mobile-drawer {
+      display: none;
+      flex-direction: column;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-dim);
+      padding: var(--space-4) var(--space-5);
+      gap: var(--space-1);
+    }
+
+    .nav-mobile-drawer a {
+      display: block;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--border-faint);
+      transition: color var(--dur-fast);
+    }
+
+    .nav-mobile-drawer a:last-child { border-bottom: none; }
+    .nav-mobile-drawer a:hover { color: var(--text-primary); }
+    .nav-mobile-drawer.open { display: flex; }
+
+    /* ── Page header ── */
+    .page-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-dim);
+      padding: var(--space-10) 0;
+    }
+
+    .page-header__eyebrow {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-violet);
+      margin-bottom: var(--space-3);
+    }
+
+    .page-header__title {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      margin-bottom: var(--space-3);
+    }
+
+    .page-header__sub {
+      font-size: var(--text-base);
+      color: var(--text-secondary);
+      line-height: 1.65;
+    }
+
+    .page-header__sub a {
+      color: var(--text-accent);
+      text-decoration: none;
+    }
+
+    .page-header__sub a:hover { text-decoration: underline; }
+
+    /* ── Section-local nav ── */
+    .page-subnav {
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-faint);
+      padding: 0 var(--space-12);
+      overflow-x: auto;
+      display: flex;
+      gap: 0;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    .page-subnav a {
+      color: var(--text-tertiary);
+      text-decoration: none;
+      padding: 0 var(--space-4);
+      height: 44px;
+      line-height: 44px;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      border-bottom: 2px solid transparent;
+      transition: color var(--dur-fast), border-color var(--dur-fast);
+      font-family: var(--font-mono);
+    }
+
+    .page-subnav a:hover {
+      color: var(--text-primary);
+      border-bottom-color: var(--border-mid);
+    }
+
+    @media (max-width: 720px) {
+      .page-subnav { padding: 0 var(--space-5); }
+    }
+
+    /* ── Doc section ── */
+    .doc-section {
+      padding: var(--space-12) 0;
+      border-bottom: 1px solid var(--border-faint);
+    }
+
+    .doc-section:last-of-type { border-bottom: none; }
+
+    .doc-section__heading {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+      font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: var(--space-3);
+      letter-spacing: -0.02em;
+    }
+
+    .doc-section > p {
+      color: var(--text-secondary);
+      line-height: 1.7;
+      max-width: 78ch;
+      margin-bottom: var(--space-5);
+    }
+
+    .doc-section p code { white-space: nowrap; }
+
+    /* ── Roadmap status board ── */
+    .roadmap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: var(--space-5);
+      margin-top: var(--space-5);
+    }
+
+    .roadmap-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+
+    .roadmap-card__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .roadmap-card__title {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--text-bright);
+      line-height: 1.3;
+    }
+
+    .roadmap-card__source {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .roadmap-card__section {
+      margin-top: var(--space-1);
+    }
+
+    .roadmap-card__label {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 4px;
+    }
+
+    .roadmap-card__body {
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      line-height: 1.6;
+    }
+
+    .roadmap-card__evidence {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-faint);
+      border-radius: var(--radius-sm);
+      padding: var(--space-3);
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .roadmap-card__evidence code {
+      white-space: normal;
+    }
+
+    .priority-band {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-3);
+      margin-bottom: var(--space-2);
+    }
+
+    .priority-band__label {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-violet);
+    }
+
+    .priority-band__sub {
+      color: var(--text-tertiary);
+      font-size: var(--text-sm);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     NAVIGATION
+═══════════════════════════════════════════ -->
+<nav class="sc-nav" role="navigation" aria-label="Main navigation">
+  <div class="sc-nav__inner">
+    <a href="../index.html" class="sc-nav__logo" aria-label="smallcode home">smallcode</a>
+    <ul class="sc-nav__links" role="list">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="architecture.html">Architecture</a></li>
+      <li><a href="llms.html">LLM Reference</a></li>
+      <li><a href="roadmap.html" class="active" aria-current="page">Roadmap</a></li>
+    </ul>
+    <div class="sc-nav__cta">
+      <a href="https://github.com/bigknoxy/smallcode-jk" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">
+        View on GitHub
+      </a>
+    </div>
+    <button class="nav-hamburger" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobile-nav-roadmap">
+      &#9776;
+    </button>
+  </div>
+</nav>
+
+<div class="nav-mobile-drawer" id="mobile-nav-roadmap" role="navigation" aria-label="Mobile navigation">
+  <a href="../index.html">Home</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="llms.html">LLM Reference</a>
+  <a href="roadmap.html">Roadmap</a>
+  <a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     PAGE HEADER
+═══════════════════════════════════════════ -->
+<header class="page-header" role="banner">
+  <div class="container">
+    <p class="page-header__eyebrow">Roadmap</p>
+    <h1 class="page-header__title">smallcode — Roadmap</h1>
+    <p class="page-header__sub">
+      Status board for the harness-engineering research pass (<code>docs/harness-engineering-roadmap.md</code>)
+      &nbsp;·&nbsp;
+      <a href="../index.html">Home</a> &nbsp;·&nbsp;
+      <a href="architecture.html">Architecture</a> &nbsp;·&nbsp;
+      MIT License
+    </p>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════
+     SECTION ANCHOR NAV
+═══════════════════════════════════════════ -->
+<div class="page-subnav" role="navigation" aria-label="Page sections">
+  <a href="#summary">Summary</a>
+  <a href="#p0">P0 — do next</a>
+  <a href="#p1">P1 — worth building</a>
+  <a href="#p2">P2 — parked</a>
+  <a href="#shipped">Shipped fixes</a>
+  <a href="#already-have">Already-have / refuted</a>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MAIN CONTENT
+═══════════════════════════════════════════ -->
+<main class="page-main" role="main">
+  <div class="container">
+
+    <!-- ===== SUMMARY ===== -->
+    <section id="summary" class="doc-section">
+      <h2 class="doc-section__heading">Executive summary</h2>
+      <p>
+        Source: a full read of <code>ai-boost/awesome-harness-engineering</code> (~30 categories, 566-line
+        README) plus 8 followed sources (outlines, statewright, TraceCoder, llvm-autofix, AgentAssay,
+        AgentLens, LaMR context-pruning). Most of the list is enterprise/cloud/frontier-model tooling that
+        doesn't transfer to a fully-offline sub-14B local-model TDD bug-fixer, so it was filtered out.
+        Three items cleared the bar as genuinely new and cheap to test: state-gated tool access
+        (statewright), process-quality scoring on top of binary solved/not-solved (AgentLens's "lucky
+        pass" taxonomy), and constrained decoding for edit-format validity (outlines). Two items were
+        investigated and explicitly rejected: LaMR's AST/CRF retrieval and TraceCoder's HLLM. AgentAssay's
+        behavioral fingerprinting was deprioritized in the original write-up but has since shipped (see
+        <a href="#p1">P1 #4</a>).
+      </p>
+      <div class="roadmap-grid">
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <span class="roadmap-card__title">Lucky-pass process-quality scoring</span>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__body">P0 #1 — static-analysis pass over transcripts already on disk.</div>
+        </div>
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <span class="roadmap-card__title">3-phase tool-access gate</span>
+            <span class="badge badge-amber">INERT</span>
+          </div>
+          <div class="roadmap-card__body">P0 #2 — shipped, but the explore-tool restriction fired 0× in the A/B.</div>
+        </div>
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <span class="roadmap-card__title">Compiler/module-error surfacing</span>
+            <span class="badge badge-green">ALREADY DONE</span>
+          </div>
+          <div class="roadmap-card__body">P1 #3 — verified already built pre-existing; residual gap deferred.</div>
+        </div>
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <span class="roadmap-card__title">Behavioral fingerprinting</span>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__body">P1 #4 — regression-gate now also diffs cost-behavior vectors.</div>
+        </div>
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <span class="roadmap-card__title">Constrained decoding (JSON-envelope edits)</span>
+            <span class="badge badge-red">NO-GO</span>
+          </div>
+          <div class="roadmap-card__body">P2 #5 — resolved 2026-07-02; empirical probe 0/6 vs free-text 5/6.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== P0 ===== -->
+    <section id="p0" class="doc-section">
+      <div class="priority-band">
+        <span class="priority-band__label">P0</span>
+        <span class="priority-band__sub">do next</span>
+      </div>
+      <div class="roadmap-grid">
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div>
+              <div class="roadmap-card__title">1. Lucky-pass / process-quality scoring</div>
+              <div class="roadmap-card__source">Source: AgentLens, arxiv.org/abs/2605.12925</div>
+            </div>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              Classify a <em>passing</em> trajectory as Lucky (blind retry, missing verification,
+              disordered explore/implement/verify) vs Solid vs Ideal — a re-read of transcripts already
+              logged, zero new model calls.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              Shipped as <code>scripts/classify-pass-quality.ts</code>, an AgentLens-derived static-analysis
+              pass over <code>transcript-store</code> output. Later found and fixed false-positive
+              classifications on real transcripts (per project memory — the classifier itself needed a
+              bugfix pass once run against live data, consistent with the project's "forensic &gt;
+              aggregate" discipline).
+            </div>
+          </div>
+        </div>
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div>
+              <div class="roadmap-card__title">2. Statewright's mechanism → 3-phase tool gate</div>
+              <div class="roadmap-card__source">Source: statewright, github.com/statewright/statewright</div>
+            </div>
+            <span class="badge badge-amber">INERT</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              Per-workflow-phase tool-schema restriction (planning → read-only tools; implementation →
+              edit unlocks; verify → no mutating tools) — statewright reported 2/10→10/10 on a 5-task
+              local-model SWE-bench subset. smallcode already partially does this via target-lock;
+              the gap was nothing stopping an edit-tool call before retrieval/planning locks a target.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              Built and A/B'd on the edit-reliability + realrepo suites (same protocol as the BoN/line-edit
+              A/Bs). Result: <strong>INERT</strong> — the explore-tool restriction fired 0× across the
+              suite (smallcode's tool surface was already small enough that the gate never actually
+              constrained anything in practice). Pooled pass@1 moved 0.93→1.00 but that shift is
+              attributed to noise, not the mechanism, since the gate never engaged. Valid negative result,
+              banked per project's "forensic &gt; aggregate" culture — kept shipped since it's harmless,
+              not because it measurably helped.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== P1 ===== -->
+    <section id="p1" class="doc-section">
+      <div class="priority-band">
+        <span class="priority-band__label">P1</span>
+        <span class="priority-band__sub">worth building, more setup</span>
+      </div>
+      <div class="roadmap-grid">
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div>
+              <div class="roadmap-card__title">3. Compiler/module-error surfacing</div>
+              <div class="roadmap-card__source">Source: llvm-autofix, arxiv.org/abs/2603.20075 (abstract-only)</div>
+            </div>
+            <span class="badge badge-green">ALREADY DONE</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              Surfacing structured compiler/error text instead of raw stdout — a scaffolding win that's
+              cheap for a small model to consume.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              Status-check read of <code>src/verify/oracle.ts</code> and
+              <code>src/verify/failure-extract.ts</code> found the tier-2 TypeScript typecheck advisory
+              and a <code>"Cannot find module '...'"</code> → <code>errorType: "module-load"</code>
+              shortcut already exist. This directly closes Dogfood gap #1 ("no compile/module-error
+              feedback loop") from project memory — it was already fixed by the time this research pass
+              ran. Residual gap (non-TS toolchains get no advisory signal) is deferred to backlog until a
+              non-TS suite exists to measure it against.
+            </div>
+          </div>
+        </div>
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div>
+              <div class="roadmap-card__title">4. AgentAssay-style behavioral fingerprinting</div>
+              <div class="roadmap-card__source">Source: AgentAssay, arxiv.org/abs/2603.02601</div>
+            </div>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              pass@k CIs answer "did the success rate change." Fingerprinting answers "did the model's
+              <em>behavior</em> change even at equal success rate" — e.g. a change that starts winning via
+              more Best-of-N retries instead of first-shot correctness, same pass@1, worse cost profile.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              Shipped in <code>src/improve/fingerprint.ts</code> — <code>fingerprintDiff</code> diffs a
+              behavioral vector (avgTurns, avgTokens, avgAttemptsUsed, repairRate, thinkOnlyRate) against
+              thresholds (<code>REGRESS_ABS_FALLBACK_THRESHOLD=0.15</code>,
+              <code>DRIFT_REL_THRESHOLD=0.3</code>, per-dimension <code>DRIFT_ABS_FLOORS</code>) and
+              returns a regress/drift/stable verdict — orthogonal to, not a replacement for, pass@k CIs.
+              Validated live against a real drift example.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== P2 ===== -->
+    <section id="p2" class="doc-section">
+      <div class="priority-band">
+        <span class="priority-band__label">P2</span>
+        <span class="priority-band__sub">parked / needs a blocking dependency resolved</span>
+      </div>
+      <div class="roadmap-grid">
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div>
+              <div class="roadmap-card__title">5. Constrained decoding (grammar-locked edit format)</div>
+              <div class="roadmap-card__source">Source: outlines, github.com/dottxt-ai/outlines</div>
+            </div>
+            <span class="badge badge-red">NO-GO</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              Regex/CFG/JSON-schema-constrained token sampling — filters the model's next-token
+              distribution so only grammar-valid continuations are ever sampled. Targets the exact
+              malformed-edit-block failure class <code>src/edit/repair.ts</code> already spends effort
+              recovering from.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence — RESOLVED 2026-07-02</div>
+            <div class="roadmap-card__evidence">
+              Ollama exposes constrained decoding <strong>only</strong> via JSON Schema
+              (<code>format</code>/<code>response_format</code>) over HTTP — raw GBNF is not reachable
+              (the grammar-param PR, ollama/ollama#4525, was closed in favor of structured outputs).
+              Plumbing already existed unused: <code>CompletionRequest.responseFormat</code> flows to the
+              HTTP body (<code>src/provider/openai-client.ts:44-73</code>), and a JSON edit-envelope
+              format already exists (<code>src/edit/parser.ts:202-293</code>). <strong>Decisive empirical
+              probe</strong> (qwen2.5-coder:7b, local, matched multi-line hard cases): JSON-envelope
+              constrained = <strong>0/6</strong> correct+byte-exact vs free-text SEARCH/REPLACE =
+              <strong>5/6</strong> on the identical bugs — forcing code into a JSON string value flattens
+              newlines/whitespace, so <code>search</code> is no longer byte-exact and the edit silently
+              won't apply. Same "added-precision → regression on a small model" pattern as the rejected
+              LINE_EDIT experiment. <strong>Verdict: keep free-text SEARCH/REPLACE.</strong> Next cheap
+              lever if revisited: instrument the repair-path invocation rate first (no telemetry exists
+              today) before any format change.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== SHIPPED FIXES ===== -->
+    <section id="shipped" class="doc-section">
+      <h2 class="doc-section__heading">Shipped alongside this research pass</h2>
+      <p>Fixes that landed during this cycle but aren't one of the 5 research items above.</p>
+      <div class="roadmap-grid">
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div class="roadmap-card__title">Repair-path telemetry</div>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              No counter existed around <code>repairBlock</code> / non-exact apply strategy in
+              <code>src/edit/applier.ts</code> — the P2 write-up's own "next cheap lever" needed this
+              before any edit-format change could be sized.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              <code>src/eval/repair-metrics.ts</code>'s <code>summarizeRepairs(turns)</code> now reports
+              <code>{ appliedEdits, repaired, repairRate, byStrategy }</code>. Measured baseline on the
+              edit-reliability suite: <strong>0% repair rate</strong> — exact-match apply is already
+              succeeding on every turn in that suite, so the repair path isn't currently the bottleneck
+              there (a real, useful negative result, not an absence of instrumentation).
+            </div>
+          </div>
+        </div>
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div class="roadmap-card__title">Headless-approval fix (issue #91)</div>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              <code>requireApproval:true</code> + no TTY (CI, piped, <code>--json</code>, delegation) made
+              <code>prompt()</code> return <code>null</code> — the interactive y/N gate silently defaulted
+              to "N" and rejected <strong>every</strong> edit in headless runs.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              <code>makeInteractiveApprover</code> (<code>src/cli/commands/review.ts</code>) now takes an
+              <code>ApproverOptions</code> with <code>interactive</code>/<code>bypass</code>: when
+              <code>opts.interactive === false</code>, edits apply unconditionally with a one-time stderr
+              notice pointing at <code>smallcode diff</code>/<code>smallcode undo</code>, instead of
+              rejecting every write for reasons unrelated to the edit itself.
+            </div>
+          </div>
+        </div>
+
+        <div class="roadmap-card">
+          <div class="roadmap-card__head">
+            <div class="roadmap-card__title">Scoped undo (never discard the user's own work)</div>
+            <span class="badge badge-green">DONE</span>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">What it is</div>
+            <div class="roadmap-card__body">
+              <code>smallcode undo</code> must revert only what the agent itself changed — never a blanket
+              <code>git restore .</code> / <code>git clean -fd</code>, which would discard the user's own
+              uncommitted edits and untracked files too.
+            </div>
+          </div>
+          <div class="roadmap-card__section">
+            <div class="roadmap-card__label">Outcome + evidence</div>
+            <div class="roadmap-card__evidence">
+              <code>src/cli/commands/review.ts</code> records an agent-change manifest
+              (<code>.smallcode/agent-changes.json</code>) as the dirty-set delta captured before the run
+              minus the dirty set after — <code>recordAgentChanges</code> / <code>revertAgentChanges</code>
+              — so <code>undo</code> reverts exactly those paths. Dry-run by default; <code>--yes</code>
+              applies.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===== ALREADY-HAVE / REFUTED ===== -->
+    <section id="already-have" class="doc-section">
+      <h2 class="doc-section__heading">Already-have / already-refuted (do not re-propose)</h2>
+      <p>Carried over verbatim from <code>docs/harness-engineering-roadmap.md</code> so this list isn't re-litigated.</p>
+      <ul style="color: var(--text-secondary); line-height: 1.8; max-width: 78ch; padding-left: var(--space-5);">
+        <li><strong>Elision detection, forced minimal-PATCH, size-gated edit format</strong> — already built
+          (<code>src/edit/parser.ts</code>, <code>src/edit/repair.ts</code>, <code>src/edit/patch-function.ts</code>).
+          AST/hash-anchored protocols were already tested via HashPilot and rejected — "3B can't drive it."</li>
+        <li><strong>Line-anchored edits</strong> — explicitly tested and REJECTED (regression on both
+          suites); reducing decision surface for a 3B model helps, adding precision-demanding structure
+          doesn't.</li>
+        <li><strong>Model escalation ladder / Best-of-N</strong> — already built and CI-confirmed.</li>
+        <li><strong>Compile/module-error feedback</strong> — Dogfood gap #1 from project memory; already
+          closed except the non-TS-toolchain residual (see P1 #3 above).</li>
+        <li><strong>pass@k + bootstrap CIs, real-repo suites, forensic-task tooling</strong> — already built
+          and already matches or exceeds the rigor bar the awesome-list's Evals &amp; Verification section
+          recommends.</li>
+        <li><strong>LaMR (AST/CRF multi-rubric context pruning)</strong> — investigated, not recommended:
+          requires infra smallcode doesn't have; the existing lexical retrieval scorer is already 40/40 at
+          repo scale.</li>
+        <li><strong>GEPA prompt evolution</strong> — separately tried and shelved (overfits on a thin
+          held-out suite). Nothing here reopens it.</li>
+      </ul>
+    </section>
+
+  </div>
+</main>
+
+<!-- ═══════════════════════════════════════════
+     FOOTER
+═══════════════════════════════════════════ -->
+<footer class="sc-footer" role="contentinfo">
+  <div class="sc-footer__inner">
+    <span class="sc-footer__brand">smallcode &nbsp;·&nbsp; MIT License</span>
+    <nav aria-label="Footer navigation">
+      <ul class="sc-footer__links" role="list">
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="architecture.html">Architecture</a></li>
+        <li><a href="llms.html">LLM Reference</a></li>
+        <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
+      </ul>
+    </nav>
+    <span class="sc-footer__meta">Last updated: 2026-07-02</span>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════ -->
+<script>
+  const hamburger = document.querySelector('.nav-hamburger');
+  const drawer = document.getElementById('mobile-nav-roadmap');
+  if (hamburger && drawer) {
+    hamburger.addEventListener('click', () => {
+      const isOpen = drawer.classList.toggle('open');
+      hamburger.setAttribute('aria-expanded', String(isOpen));
+    });
+  }
+</script>
+
+</body>
+</html>

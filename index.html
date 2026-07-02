@@ -624,7 +624,7 @@
       <li><a href="index.html" class="active" aria-current="page">Home</a></li>
       <li><a href="docs/architecture.html">Architecture</a></li>
       <li><a href="docs/llms.html">LLM Reference</a></li>
-      <li><a href="docs/ROADMAP.md">Roadmap</a></li>
+      <li><a href="docs/roadmap.html">Roadmap</a></li>
     </ul>
     <div class="sc-nav__cta">
       <a href="https://github.com/bigknoxy/smallcode-jk" class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer">
@@ -641,7 +641,7 @@
   <a href="index.html">Home</a>
   <a href="docs/architecture.html">Architecture</a>
   <a href="docs/llms.html">LLM Reference</a>
-  <a href="docs/ROADMAP.md">Roadmap</a>
+  <a href="docs/roadmap.html">Roadmap</a>
   <a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
 </div>
 
@@ -975,7 +975,8 @@
       Easy first-30 subset scores 0.967 pass@1 / 1.000 pass@3.
       The run hit Ollama KV-cache slowdown over ~16h; affected problems were re-run on a fresh server
       via <code>scripts/rerun-timeouts.ts</code> and merged back. See
-      <a href="docs/ROADMAP.md">ROADMAP</a> for next steps (oracle best-of-N, AlphaCodium pre-solve, LiveCodeBench).
+      <a href="docs/roadmap.html">ROADMAP</a> for current status: lucky-pass scoring and behavioral
+      fingerprinting shipped, constrained decoding investigated and closed NO-GO.
     </p>
 
     <h3 style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; margin-bottom: var(--space-3); margin-top: var(--space-10); letter-spacing: 0.02em;">
@@ -1107,8 +1108,8 @@
 <span class="cmd">SMALLCODE_SUITE=realrepo SMALLCODE_TASK_FILTER=mri,dequal bun scripts/run-baseline.ts</span>
 <span class="cmd">FORENSIC_TASK=mri FORENSIC_N=5 SMALLCODE_MODEL=qwen2.5-coder:3b bun scripts/forensic-task.ts</span>
 
-<span class="comment"># Code a task in any repo</span>
-<span class="cmd">bun run index.ts run --task "Add input validation to src/api/handler.ts" --repo .</span>
+<span class="comment"># Code a task in any repo (task description is a positional, not a flag)</span>
+<span class="cmd">smallcode run "Add input validation to src/api/handler.ts" --repo .</span>
 
 <span class="comment"># Review what the agent changed, then undo it if you don't like it (safe: dry-run without --yes)</span>
 <span class="cmd">smallcode diff --repo .</span>
@@ -1203,8 +1204,11 @@
         <div class="feature-card__icon" aria-hidden="true">&#x2705;</div>
         <div class="feature-card__title">Review before write</div>
         <p class="feature-card__body">
-          With <code>sandbox.requireApproval</code> on, the agent shows you each proposed edit and asks
-          <code>y/N</code> before writing it. Nothing lands in your repo without your OK.
+          With <code>sandbox.requireApproval</code> on (the default), an interactive terminal shows you
+          each proposed edit and asks <code>y/N</code> before writing it. In a non-interactive run (CI,
+          piped, <code>--json</code>) there's no TTY to answer, so edits apply with a one-time notice —
+          review with <code>smallcode diff</code>, roll back with <code>smallcode undo</code>. Pass
+          <code>--yes</code> to apply without prompting even in a terminal.
         </p>
       </div>
 
@@ -1277,6 +1281,17 @@
         </p>
         <div class="doc-card__arrow">Read llms.html ↗</div>
       </a>
+
+      <a href="docs/roadmap.html" class="doc-card">
+        <div class="doc-card__eyebrow">Roadmap</div>
+        <div class="doc-card__title">What's next →</div>
+        <p class="doc-card__body">
+          Status board for the harness-engineering research pass: P0/P1/P2 items with DONE, INERT, and
+          NO-GO verdicts, each backed by evidence — what shipped, what was a valid negative result, and
+          what's still open.
+        </p>
+        <div class="doc-card__arrow">Read roadmap.html ↗</div>
+      </a>
     </div>
   </div>
 </section>
@@ -1291,11 +1306,11 @@
       <ul class="sc-footer__links" role="list">
         <li><a href="docs/architecture.html">Architecture</a></li>
         <li><a href="docs/llms.html">LLM Reference</a></li>
-        <li><a href="docs/ROADMAP.md">Roadmap</a></li>
+        <li><a href="docs/roadmap.html">Roadmap</a></li>
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Updated 2026-07-01</span>
+    <span class="sc-footer__meta">Updated 2026-07-02</span>
   </div>
 </footer>
 
