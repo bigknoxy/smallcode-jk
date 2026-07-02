@@ -21,6 +21,7 @@
 
 import { resolve } from "node:path";
 import type { MetricsSnapshot, SnapshotCI } from "../src/improve/types.ts";
+import { fingerprintDiff } from "../src/improve/fingerprint.ts";
 
 const HISTORY = resolve(import.meta.dir, "..", "evals", "metrics-history.jsonl");
 
@@ -138,6 +139,40 @@ function printComparison(a: MetricsSnapshot, b: MetricsSnapshot): void {
   console.log(
     "\nVerdict rule: CIs that do NOT overlap ⇒ significant (~p<0.05). Overlap ⇒ this n cannot resolve it; raise SMALLCODE_EVAL_N.\n",
   );
+
+  printFingerprint(a, b);
+}
+
+/**
+ * Behavioral fingerprint section (P1#4, AgentAssay idea). Complements the
+ * pass@k CI comparison above: DRIFT = same success rate, changed cost profile
+ * (more turns/tokens/retries/repairs to get there) — a class of change the
+ * pass@k CI test above cannot see by construction.
+ */
+function printFingerprint(a: MetricsSnapshot, b: MetricsSnapshot): void {
+  console.log(`${"═".repeat(78)}\nBEHAVIORAL FINGERPRINT (same success, different cost?)\n${"─".repeat(78)}`);
+
+  if (!a.perTaskBehavior || !b.perTaskBehavior) {
+    console.log(
+      "(no fingerprint data — one or both snapshots predate perTaskBehavior; rerun both with the current run-baseline to enable this comparison)\n",
+    );
+    return;
+  }
+
+  const { perTask, summary } = fingerprintDiff(a, b);
+  const notable = perTask.filter((t) => t.verdict !== "stable");
+
+  if (notable.length === 0) {
+    console.log("No behavioral drift or regression detected across shared tasks.\n");
+  } else {
+    for (const t of notable) {
+      const tag = t.verdict === "regress" ? "▼ REGRESS" : "◆ DRIFT  ";
+      console.log(`  ${tag}  ${t.taskId}`);
+      for (const note of t.notes) console.log(`      ${note}`);
+    }
+    console.log();
+  }
+  console.log(`  ${summary.message}\n`);
 }
 
 async function main(): Promise<void> {

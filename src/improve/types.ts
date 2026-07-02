@@ -74,6 +74,31 @@ export interface MetricsSnapshot {
   bestOfN?: number;
   /** Mean BoN attempts spent per trial across the run (cost; undefined when off). */
   avgAttemptsUsed?: number;
+  /** Per-task behavioral/cost fingerprint (P1#4 AgentAssay-style drift detection).
+   * Optional — absent on snapshots recorded before this field existed; readers
+   * MUST treat a missing entry as "no behavioral data," not zero. */
+  perTaskBehavior?: Record<string, TaskBehavior>;
+}
+
+/**
+ * Per-task behavioral fingerprint: cost/process dims alongside pass@1, so two
+ * runs with statistically-identical pass@k can still be compared for "same
+ * success, different cost" drift (see src/improve/fingerprint.ts).
+ */
+export interface TaskBehavior {
+  /** pass@1 point estimate for this task in this run (duplicated from
+   * perTaskPassAt1 for convenience so TaskBehavior is self-contained). */
+  passAt1: number;
+  /** Mean transcript turns per trial. */
+  avgTurns: number;
+  /** Mean total tokens per trial. */
+  avgTokens: number;
+  /** repaired / appliedEdits across trials (0 when no edits applied). */
+  repairRate: number;
+  /** Fraction of trials that hit ≥1 think-only truncation. */
+  thinkOnlyRate: number;
+  /** Mean Best-of-N attempts spent per trial (undefined when BoN off). */
+  avgAttemptsUsed?: number;
 }
 
 export interface MetricsHistory {
