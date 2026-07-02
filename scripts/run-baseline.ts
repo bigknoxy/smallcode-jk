@@ -31,7 +31,7 @@ import { defaultRegistry } from "../src/models/registry.ts";
 import { createProvider } from "../src/provider/factory.ts";
 import { buildEscalationLadder } from "../src/agent/escalation.ts";
 import { ReasoningHandler } from "../src/reasoning/handler.ts";
-import type { MetricsSnapshot } from "../src/improve/types.ts";
+import type { MetricsSnapshot, TaskBehavior } from "../src/improve/types.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -688,6 +688,22 @@ async function main(): Promise<void> {
               Math.max(allMetrics.length, 1),
           }
         : {}),
+      // Per-task behavioral fingerprint (P1#4) — cost dims already computed
+      // above per task; just reshape into TaskBehavior. repairRate/thinkOnlyRate
+      // guard the /0 case (no edits applied / n=0).
+      perTaskBehavior: Object.fromEntries(
+        allMetrics.map((m): [string, TaskBehavior] => [
+          m.taskId,
+          {
+            passAt1: m.passAt1,
+            avgTurns: m.avgTurns,
+            avgTokens: m.avgTokens,
+            repairRate: m.appliedEdits > 0 ? m.repaired / m.appliedEdits : 0,
+            thinkOnlyRate: m.n > 0 ? m.trialsWithTruncation / m.n : 0,
+            ...(m.avgAttemptsUsed !== undefined ? { avgAttemptsUsed: m.avgAttemptsUsed } : {}),
+          },
+        ]),
+      ),
     };
     await appendMetricsSnapshot(snapshot);
 
