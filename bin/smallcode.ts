@@ -35,7 +35,7 @@ Usage:
   smallcode chat [--repo <path>] [--model <id>]   # interactive multi-task session
   smallcode diff [--repo <path>]            # show what the agent changed
   smallcode undo [--repo <path>] [--yes]    # revert the agent's changes (dry-run without --yes)
-  smallcode eval run <suite-dir> [--model <id>] [--trials <n>] [--output json|text]
+  smallcode eval run <suite-dir> [--model <id>] [--trials <n>] [--output json|text] [--save-transcripts]
   smallcode eval gate <suite-dir> [--threshold 0.9] [--allow-delta 0.05]
   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>] [--force]
   smallcode config list-models
@@ -139,6 +139,7 @@ try {
         const outputRaw = (typeof flags["output"] === "string" ? flags["output"] : undefined);
         const output = (outputRaw === "json" || outputRaw === "text") ? outputRaw : undefined;
         const configPath = (typeof flags["config"] === "string" ? flags["config"] : undefined);
+        const saveTranscripts = flags["save-transcripts"] === true;
 
         // Resolve model: flag > config activeModel
         let resolvedModel = model;
@@ -154,6 +155,7 @@ try {
           suite: suiteDir,
           model: resolvedModel,
           configPath,
+          saveTranscripts,
           trials,
           output,
         });
