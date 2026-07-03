@@ -802,7 +802,12 @@ flowchart TD
         recency-refresh fix is not an operator flip, so mutation-repair can't reach it), a discriminating
         <code>csv-quote</code> <strong>0.50 [.13–.88]</strong>, a graded <code>toposort-cycle</code>
         <strong>0.88 [.63–1.00]</strong>, and five the 7b still aces. A suite that reads all-1.00 measures
-        nothing; this restores a gradient the next harness lever can move.
+        nothing; this restores a gradient the next harness lever can move. And it already moved one:
+        <code>lru-recency</code>'s transcripts show the 7b localizes perfectly but writes a consistent
+        read-after-delete ordering bug (right shape, wrong order) ~9/10 of the time, so
+        <strong>Best-of-N diversity (BoN=5) lifts it 0.00 → 0.38</strong> [.00–.75] with no new code — the
+        confirmed next lever for hard multi-line-structural tasks (see
+        <a href="harness-engineering-roadmap.md" style="color: var(--text-accent);">harness roadmap P0</a>).
         Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code> and swap models with
         <code>SMALLCODE_MODEL=qwen2.5-coder:3b</code> (or <code>:7b</code>). Honest framing: the Qwen
         coders ace several real-lib bugs (klona) where the reasoning model scored 0/10; the remaining
