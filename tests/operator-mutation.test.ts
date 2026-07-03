@@ -90,12 +90,130 @@ describe("enumerateComparisonMutations — single-occurrence isolation", () => {
   it("flips exactly one of two identical operators per candidate", () => {
     const source = "if (a === b && c === d) {}";
     const { mutations } = enumerateComparisonMutations(source);
-    expect(mutations.length).toBe(2);
-    for (const m of mutations) {
+    // Extended module now also emits a logical (&&->||) candidate for this
+    // source, so filter to the eq-invert candidates this test targets.
+    const eqMutations = mutations.filter((m) => m.kind === "eq-invert");
+    expect(eqMutations.length).toBe(2);
+    for (const m of eqMutations) {
       const count = (m.candidate.match(/!==/g) ?? []).length;
       expect(count).toBe(1);
       const eqCount = (m.candidate.match(/(?<!!)===/g) ?? []).length;
       expect(eqCount).toBe(1);
+    }
+  });
+});
+
+describe("enumerateComparisonMutations — logical flips", () => {
+  it("flips && to ||", () => {
+    const { mutations } = enumerateComparisonMutations("return a && b");
+    expect(mutations.length).toBe(1);
+    const m = mutations[0]!;
+    expect(m.kind).toBe("logical");
+    expect(m.candidate).toBe("return a || b");
+  });
+
+  it("flips || to &&", () => {
+    const { mutations } = enumerateComparisonMutations("a || b");
+    expect(mutations.length).toBe(1);
+    const m = mutations[0]!;
+    expect(m.kind).toBe("logical");
+    expect(m.candidate).toBe("a && b");
+  });
+});
+
+describe("enumerateComparisonMutations — arithmetic flips", () => {
+  it("flips + to -", () => {
+    const { mutations } = enumerateComparisonMutations("x + y");
+    expect(mutations.length).toBe(1);
+    const m = mutations[0]!;
+    expect(m.kind).toBe("arith");
+    expect(m.candidate).toBe("x - y");
+  });
+
+  it("flips - to +", () => {
+    const { mutations } = enumerateComparisonMutations("x - y");
+    expect(mutations.length).toBe(1);
+    const m = mutations[0]!;
+    expect(m.kind).toBe("arith");
+    expect(m.candidate).toBe("x + y");
+  });
+});
+
+describe("enumerateComparisonMutations — compound/increment SKIP tokens", () => {
+  it("skips ++, --, +=, -= and produces zero mutations when no bare +/- remain", () => {
+    const result = enumerateComparisonMutations("i++; j += 1; k--; m -= 2;");
+    expect(result.mutations.length).toBe(0);
+    expect(result.totalFound).toBe(0);
+  });
+
+  it("skips i++ individually", () => {
+    const result = enumerateComparisonMutations("i++");
+    expect(result.mutations.length).toBe(0);
+  });
+
+  it("skips k-- individually", () => {
+    const result = enumerateComparisonMutations("k--");
+    expect(result.mutations.length).toBe(0);
+  });
+
+  it("skips a += b individually", () => {
+    const result = enumerateComparisonMutations("a += b");
+    expect(result.mutations.length).toBe(0);
+  });
+
+  it("skips a -= b individually", () => {
+    const result = enumerateComparisonMutations("a -= b");
+    expect(result.mutations.length).toBe(0);
+  });
+
+  it("skips j+=1 with no spacing", () => {
+    const result = enumerateComparisonMutations("j+=1");
+    expect(result.mutations.length).toBe(0);
+  });
+});
+
+describe("enumerateComparisonMutations — bitwise not matched", () => {
+  it("produces zero mutations for bare bitwise | and &", () => {
+    expect(enumerateComparisonMutations("a | b").mutations.length).toBe(0);
+    expect(enumerateComparisonMutations("a & b").mutations.length).toBe(0);
+  });
+
+  it("still matches doubled logical || and &&", () => {
+    expect(enumerateComparisonMutations("a || b").mutations.length).toBe(1);
+    expect(enumerateComparisonMutations("a && b").mutations.length).toBe(1);
+  });
+});
+
+describe("enumerateComparisonMutations — priority across all classes", () => {
+  it("orders eq-invert, then logical, then arith for a === b && c + d", () => {
+    const { mutations } = enumerateComparisonMutations("a === b && c + d");
+    expect(mutations.map((m) => m.kind)).toEqual(["eq-invert", "logical", "arith"]);
+  });
+
+  it("orders boundary/relational before logical and arith for i < n && i + 1", () => {
+    const { mutations } = enumerateComparisonMutations("i < n && i + 1");
+    const kinds = mutations.map((m) => m.kind);
+    const logicalIdx = kinds.indexOf("logical");
+    const arithIdx = kinds.indexOf("arith");
+    const boundaryIdx = kinds.indexOf("boundary");
+    const relIdx = kinds.indexOf("rel-invert");
+    expect(boundaryIdx).toBeGreaterThanOrEqual(0);
+    expect(relIdx).toBeGreaterThanOrEqual(0);
+    expect(logicalIdx).toBeGreaterThan(boundaryIdx);
+    expect(logicalIdx).toBeGreaterThan(relIdx);
+    expect(arithIdx).toBeGreaterThan(logicalIdx);
+  });
+});
+
+describe("enumerateComparisonMutations — arith single-occurrence isolation", () => {
+  it("flips exactly one of two + occurrences per candidate", () => {
+    const { mutations } = enumerateComparisonMutations("a + b + c");
+    expect(mutations.length).toBe(2);
+    for (const m of mutations) {
+      const minusCount = (m.candidate.match(/-/g) ?? []).length;
+      const plusCount = (m.candidate.match(/\+/g) ?? []).length;
+      expect(minusCount).toBe(1);
+      expect(plusCount).toBe(1);
     }
   });
 });

@@ -36,10 +36,16 @@ export interface OperatorMutation {
   candidate: string;
 }
 
-// Per-operator flip table. `rank` orders candidates globally: 0 = equality
-// inversion (most common wrong-operator bug, and the safest single-char class),
-// 1 = boundary off-by-one (`<`↔`<=`), 2 = relational inversion (`<`↔`>=`). Lower
-// rank is tried first so the cheapest/likeliest fix wins before costlier ones.
+// Per-operator flip table. `rank` orders candidates globally so the cheapest/
+// likeliest/safest fix is tried first:
+//   0 equality inversion (`===`↔`!==`) — commonest wrong-operator bug, safest
+//   1 boundary off-by-one (`<`↔`<=`)
+//   2 relational inversion (`<`↔`>=`)
+//   3 logical (`&&`↔`||`)          — small clean token set; the exact class the
+//     mri model kept mis-writing when it over-rewrote a comparison fix
+//   4 arithmetic (`+`↔`-`)         — classic sign/delta bug; most COMMON token in
+//     real code, so ranked last (tried only after the tighter classes) and the
+//     first to be shed by the candidate cap on a large file
 const FLIPS: Record<string, Array<{ to: string; rank: number; kind: string }>> = {
   "===": [{ to: "!==", rank: 0, kind: "eq-invert" }],
   "!==": [{ to: "===", rank: 0, kind: "eq-invert" }],
@@ -63,16 +69,27 @@ const FLIPS: Record<string, Array<{ to: string; rank: number; kind: string }>> =
     { to: ">", rank: 1, kind: "boundary" },
     { to: "<", rank: 2, kind: "rel-invert" },
   ],
+  "&&": [{ to: "||", rank: 3, kind: "logical" }],
+  "||": [{ to: "&&", rank: 3, kind: "logical" }],
+  "+": [{ to: "-", rank: 4, kind: "arith" }],
+  "-": [{ to: "+", rank: 4, kind: "arith" }],
 };
 
-// Tokens matched-and-consumed but NEVER mutated: shift operators and the arrow.
-// Matching them explicitly (longest-first, ahead of the bare `<`/`>` alternatives)
-// stops us from mis-reading the `>` of `=>` or a `<` of `<<` as a comparison.
-const SKIP = new Set(["<<", ">>", "=>"]);
+// Tokens matched-and-consumed but NEVER mutated. Matching them explicitly
+// (longest-first, ahead of the single-char alternatives) stops us from mis-reading
+// a compound token's piece as an operator: the `>` of `=>`, a `<` of `<<`, or the
+// `+`/`-` of `++`/`--`/`+=`/`-=`. Without this a `+=` would be flipped to `-=`
+// (mangling an assignment) and `i++` to `i+-` (a syntax error) — both wasted
+// candidates at best, so we consume-and-skip them whole.
+const SKIP = new Set(["<<", ">>", "=>", "++", "--", "+=", "-="]);
 
-// Longest-first alternation so `===` wins over `==`, `<=` over `<`, and the SKIP
-// tokens (`<<`,`>>`,`=>`) are consumed whole rather than leaving a stray `<`/`>`.
-const OP_RE = /===|!==|==|!=|<=|>=|<<|>>|=>|<|>/g;
+// Longest-first alternation so multi-char tokens win over their single-char
+// pieces (`===` over `==`, `<=` over `<`, `++`/`+=` over `+`, `&&` before a bare
+// `+`) and the SKIP tokens are consumed whole rather than leaving a stray operator.
+// Note: bare `|` (bitwise-or) and `&` (bitwise-and) are intentionally NOT matched —
+// only the doubled logical forms `||`/`&&` are, so `a | b` and `x |= y` are left
+// untouched.
+const OP_RE = /===|!==|==|!=|<=|>=|<<|>>|=>|&&|\|\||\+\+|--|\+=|-=|\+|-|<|>/g;
 
 export interface EnumerateResult {
   /** Priority-ordered, capped list of single-operator-flip candidates. */
