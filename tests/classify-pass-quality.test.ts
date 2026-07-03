@@ -147,4 +147,75 @@ describe("classifyPassQuality", () => {
     expect(classified.length).toBe(1);
     expect(classified[0]?.transcript.outcome).toBe("passed");
   });
+
+  it("classifies a passing transcript with a mutationRepair turn as rescued, not lucky/solid/ideal", () => {
+    // The model's own turns all failed; the harness's deterministic
+    // operator-mutation repair flipped a comparison operator and produced the
+    // green result. This is not the model's trajectory at all.
+    const turns = [
+      makeTurn({ turn: 1, failureSignature: "sig-A" }),
+      makeTurn({ turn: 2, failureSignature: "sig-A" }),
+      makeTurn({
+        turn: 3,
+        mutationRepair: { label: "src/index.js:90 !== -> ===", line: 90, attempts: 20 },
+      }),
+    ];
+    const result = classifyPassQuality(makeTranscript(turns));
+    expect(result.quality).toBe("rescued");
+    expect(
+      result.signals.some(
+        (s) =>
+          s.startsWith("harness-rescue:") &&
+          s.includes('"src/index.js:90 !== -> ==="') &&
+          s.includes("20 candidates"),
+      ),
+    ).toBe(true);
+  });
+
+  it("aggregates model-solve-rate, rescued-rate, and lucky-rate correctly", () => {
+    // 2 model-solves for task-a (1 ideal, 1 lucky via never-localized) + 1
+    // rescued. lucky-rate must be 1/2 over MODEL-SOLVED runs, not 1/3 over
+    // all passing runs.
+    const idealTurns = [makeTurn({ turn: 1, applyResults: appliedEdit })];
+    const luckyTurns = [
+      makeTurn({ turn: 1, failureSignature: "sig-A" }),
+      makeTurn({ turn: 2, failureSignature: "sig-B" }),
+      makeTurn({ turn: 3, applyResults: appliedEdit }),
+    ];
+    const rescuedTurns = [
+      makeTurn({ turn: 1, failureSignature: "sig-A" }),
+      makeTurn({
+        turn: 2,
+        mutationRepair: { label: "x === y", line: 12, attempts: 4 },
+      }),
+    ];
+
+    const classified = classifyTranscripts([
+      makeTranscript(idealTurns),
+      makeTranscript(luckyTurns),
+      makeTranscript(rescuedTurns),
+    ]);
+
+    expect(classified.map((c) => c.quality).sort()).toEqual(["ideal", "lucky", "rescued"]);
+
+    const ideal = classified.filter((c) => c.quality === "ideal").length;
+    const solid = classified.filter((c) => c.quality === "solid").length;
+    const lucky = classified.filter((c) => c.quality === "lucky").length;
+    const rescued = classified.filter((c) => c.quality === "rescued").length;
+
+    const modelSolved = ideal + solid + lucky;
+    const totalPassing = modelSolved + rescued;
+
+    expect(modelSolved).toBe(2);
+    expect(rescued).toBe(1);
+    expect(totalPassing).toBe(3);
+
+    const modelSolveRate = modelSolved / totalPassing;
+    const rescuedRate = rescued / totalPassing;
+    const luckyRate = lucky / modelSolved;
+
+    expect(modelSolveRate).toBeCloseTo(2 / 3);
+    expect(rescuedRate).toBeCloseTo(1 / 3);
+    expect(luckyRate).toBeCloseTo(1 / 2);
+  });
 });
