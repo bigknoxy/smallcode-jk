@@ -384,11 +384,15 @@ graph TD
         handing the small model the <em>where</em> it cannot localize itself. Naturally suppressed for
         value-mismatch failures (their trace points at the test line, not the bug). An upper-bound
         <strong>probe</strong> (<code>SMALLCODE_R2_FORCE_LINE=relpath:line</code>, measurement-only, never a
-        shipped default) forces that same window onto a given line for value-mismatch failures too: on the
-        <code>mri</code> floor task it moved plain 7b from <strong>0/5 → 1/5</strong> where 32b + Best-of-2
-        got 0/5 — evidence that externalized localization is <em>necessary</em> (7b never lands the line
-        unaided) but not <em>sufficient</em> (given the line, 7b still over-rewrites the expression and
-        breaks the short-circuit logic 4/5 of the time — the residual wall is expression semantics).
+        shipped default) forces that same window onto a given line for value-mismatch failures too. It was
+        used to probe the <code>mri</code> floor task (bug = one operator on <code>src/index.js:90</code>):
+        an initial n=5 read gave 7b 1/5 with the line handed, but an n=8 re-run scored <strong>0/8</strong>
+        (pooled ≈1/13, within noise of zero) — the 1/5 was an underpowered draw, not a real lift. Neither
+        capacity (32b + line = 0/5) nor a minimal-edit constraint (7b 0/8) moved it either. The mri wall is
+        genuine model incomprehension of a short-circuit idiom (<code>A || (cond) || consume</code>): both 7b
+        and 32b, even pointed at the exact line, rewrite the one-operator fix into <code>&amp;&amp;</code>/ternary
+        forms that break it. Lesson: read floor-task pass rates at n≥8 before claiming a lift; the remaining
+        un-tried lever is harness-side operator-mutation repair, not model-side prompting.
       </p>
       <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
@@ -1333,7 +1337,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-02</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-03</span>
   </div>
 </footer>
 
