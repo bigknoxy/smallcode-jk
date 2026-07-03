@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-lru-recency_1",
+  "desc": "In src/index.js, the LRU cache factory createLRU's get(key) function does not refresh recency on a cache hit — it just returns map.get(key). A correct LRU must move a key to the most-recently-used end of the underlying Map whenever it is read, so it isn't wrongly evicted as if it were old. Fix get() so that on a hit it deletes and re-inserts the entry (guarded by a has-check) before returning its value, so tests/lru.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-lru-recency_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/lru.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "lru", "structural"],
+  "reference_solution": "realrepo-lru-recency_1-solution/"
+}

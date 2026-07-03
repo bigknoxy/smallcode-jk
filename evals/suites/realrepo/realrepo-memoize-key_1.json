@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-memoize-key_1",
+  "desc": "In src/index.js, the memoize(fn) wrapper's makeKey helper builds the cache key from only the first argument (String(args[0])), so calls with different trailing arguments collide and wrongly return a stale cached result. Fix makeKey so the cache key is derived from ALL of the call's arguments (e.g. args.map(String).join('|')), so tests/memoize.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-memoize-key_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/memoize.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "memoize", "structural"],
+  "reference_solution": "realrepo-memoize-key_1-solution/"
+}

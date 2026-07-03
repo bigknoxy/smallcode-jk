@@ -89,8 +89,17 @@ function makeTargetContext(): ContextBundle {
 }
 
 let testDir: string;
+let priorMutationRepair: string | undefined;
 
 beforeEach(async () => {
+  // This suite exercises the loop's drift-anchoring, which is orthogonal to the
+  // default-on operator-mutation repair. Left enabled, the repair pass fires
+  // after this deliberately-unsolved fix-mode run (locked target, still-failing
+  // oracle) and appends its synthetic turn, breaking the exact turn-count
+  // assertions below. Disable it so the loop behavior is measured in isolation
+  // (same guard the eval-bestofn-runner suite uses).
+  priorMutationRepair = process.env["SMALLCODE_MUTATION_REPAIR"];
+  process.env["SMALLCODE_MUTATION_REPAIR"] = "0";
   testDir = join(tmpdir(), `smallcode-drift-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(join(testDir, "src"), { recursive: true });
   await mkdir(join(testDir, "tests"), { recursive: true });
@@ -104,6 +113,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (priorMutationRepair === undefined) delete process.env["SMALLCODE_MUTATION_REPAIR"];
+  else process.env["SMALLCODE_MUTATION_REPAIR"] = priorMutationRepair;
   await rm(testDir, { recursive: true, force: true });
 });
 

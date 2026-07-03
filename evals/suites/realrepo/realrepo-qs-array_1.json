@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-qs-array_1",
+  "desc": "In src/index.js, the query-string parser's assign helper never checks for a trailing `[]` on a key, so repeated bracket-array keys like a[]=1&a[]=2 just overwrite the same property instead of collecting into an array. Fix assign so keys ending in `[]` are detected, the suffix is stripped, and values are pushed into an array (initialized on first sight) so tests/qsarray.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-qs-array_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/qsarray.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "qslite", "parsing"],
+  "reference_solution": "realrepo-qs-array_1-solution/"
+}

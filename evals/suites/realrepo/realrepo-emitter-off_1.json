@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-emitter-off_1",
+  "desc": "In src/core.js, the mitt-style event emitter's off(type, handler) function looks up the handler with handlers.indexOf(handler) and then unconditionally calls handlers.splice(i, 1). When the given handler was never registered for that type, indexOf returns -1, and splice(-1, 1) wrongly removes the LAST registered handler instead of doing nothing. Fix off() in src/core.js so it only splices when the handler was actually found (guard on i !== -1), so that tests/emitter.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-emitter-off_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/emitter.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "emitter", "multifile", "guard-clause"],
+  "reference_solution": "realrepo-emitter-off_1-solution/"
+}
