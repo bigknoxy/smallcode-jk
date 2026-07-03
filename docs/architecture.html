@@ -805,9 +805,16 @@ flowchart TD
         nothing; this restores a gradient the next harness lever can move. And it already moved one:
         <code>lru-recency</code>'s transcripts show the 7b localizes perfectly but writes a consistent
         read-after-delete ordering bug (right shape, wrong order) ~9/10 of the time, so
-        <strong>Best-of-N diversity (BoN=5) lifts it 0.00 → 0.38</strong> [.00–.75] with no new code — the
-        confirmed next lever for hard multi-line-structural tasks (see
+        <strong>Best-of-N diversity (BoN=5) lifts it 0.00 → 0.38</strong> [.13–.75] (CI-significant) with no
+        new code — a lever for hard multi-line-structural tasks (see
         <a href="harness-engineering-roadmap.md" style="color: var(--text-accent);">harness roadmap P0</a>).
+        But the lucky-pass audit (<code>scripts/classify-pass-quality.ts</code>) flags all of those BoN
+        solves as <strong>lucky</strong> — blind resampling until one attempt lands the right order, no
+        targeted diagnosis. BoN buys pass-rate, not comprehension: it is a brute-force diversity crutch
+        (same category as operator-mutation repair), not a model-capability gain. The same audit
+        attributes every <code>mri</code> pass to the harness (5/5 <strong>rescued</strong>, 0% model-solve)
+        while <code>modwrap</code>/<code>nullmerge</code> are genuine model solves — the model-solved vs
+        harness-rescued split that binary pass@1 hides.
         Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code> and swap models with
         <code>SMALLCODE_MODEL=qwen2.5-coder:3b</code> (or <code>:7b</code>). Honest framing: the Qwen
         coders ace several real-lib bugs (klona) where the reasoning model scored 0/10; the remaining

@@ -13,6 +13,15 @@
  * and is purely additive. See classifyPassQuality() below for the exact
  * (documented, conservative) signals used and their known limits.
  *
+ * ATTRIBUTION SPLIT (model-solved vs harness-rescued): a passing transcript
+ * is "rescued" iff any turn carries `TurnRecord.mutationRepair` — the
+ * harness's deterministic operator-mutation repair (brute-force flip a
+ * comparison operator, re-run the real oracle) solved the task AFTER the
+ * model itself failed. This check runs FIRST, before the lucky/solid/ideal
+ * logic, and is mutually exclusive with those three: a rescued run's
+ * trajectory quality is moot, because the model never actually solved it.
+ * Lucky/solid/ideal semantics for genuinely model-solved runs are UNCHANGED.
+ *
  * Usage:
  *   bun scripts/classify-pass-quality.ts [--repo <path>] [--task <taskId>] [--json]
  *
@@ -59,7 +68,7 @@ const IDEAL_MAX_TURNS = 3;
 // Pure classification
 // ---------------------------------------------------------------------------
 
-export type PassQuality = "lucky" | "solid" | "ideal";
+export type PassQuality = "lucky" | "solid" | "ideal" | "rescued";
 
 export interface PassQualityResult {
   quality: PassQuality;
@@ -85,6 +94,23 @@ export interface PassQualityResult {
 export function classifyPassQuality(t: Transcript): PassQualityResult {
   const turns = t.turns;
   const signals: string[] = [];
+
+  // --- Attribution gate: harness-rescued, checked FIRST -----------------
+  // A turn carrying `mutationRepair` is a SYNTHETIC turn the harness appended
+  // after the model's own turns all failed: deterministic brute-force
+  // operator-mutation repair found the fix, not the model. This is not a
+  // trajectory-quality signal — it overrides lucky/solid/ideal entirely,
+  // because there is no model trajectory to judge; the model didn't solve it.
+  const rescueTurn = turns.find((turn) => turn.mutationRepair !== undefined);
+  if (rescueTurn?.mutationRepair !== undefined) {
+    const { label, attempts } = rescueTurn.mutationRepair;
+    return {
+      quality: "rescued",
+      signals: [
+        `harness-rescue: operator-mutation repair solved it (label "${label}", ${attempts} candidates) — the model did not`,
+      ],
+    };
+  }
 
   // --- Lucky signal (a): churn — ≥N revert cycles, same failureSignature ---
   // throughout (retrying without the diagnosis actually changing).
@@ -200,6 +226,7 @@ interface TaskTally {
   ideal: number;
   solid: number;
   lucky: number;
+  rescued: number;
 }
 
 function tallyByTask(
@@ -212,6 +239,7 @@ function tallyByTask(
       ideal: 0,
       solid: 0,
       lucky: 0,
+      rescued: 0,
     };
     existing[quality] += 1;
     byTask.set(transcript.taskId, existing);
@@ -219,9 +247,36 @@ function tallyByTask(
   return [...byTask.values()].sort((a, b) => a.taskId.localeCompare(b.taskId));
 }
 
+/** Total passing runs the MODEL actually solved (excludes harness-rescued). */
+function modelSolved(t: TaskTally): number {
+  return t.ideal + t.solid + t.lucky;
+}
+
+/** Total passing runs, including harness-rescued. */
+function totalPassing(t: TaskTally): number {
+  return modelSolved(t) + t.rescued;
+}
+
+/** model-solve rate = model-solved / total passing (excludes rescued from numerator). */
+function modelSolveRate(t: TaskTally): number {
+  const total = totalPassing(t);
+  return total === 0 ? 0 : modelSolved(t) / total;
+}
+
+/** rescued rate = rescued / total passing. */
+function rescuedRate(t: TaskTally): number {
+  const total = totalPassing(t);
+  return total === 0 ? 0 : t.rescued / total;
+}
+
+/**
+ * lucky-rate = lucky / model-solved (NOT total passing) — rescued runs are
+ * not model trajectories at all, so folding them into the denominator would
+ * dilute (understate) how lucky the model's OWN solves actually are.
+ */
 function luckyRate(t: TaskTally): number {
-  const total = t.ideal + t.solid + t.lucky;
-  return total === 0 ? 0 : t.lucky / total;
+  const solved = modelSolved(t);
+  return solved === 0 ? 0 : t.lucky / solved;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,35 +310,51 @@ function padStart(s: string, len: number): string {
 
 function printTable(tallies: TaskTally[]): void {
   const COL1 = 36;
-  const COL2 = 7;
-  const COL3 = 7;
-  const COL4 = 7;
-  const COL5 = 10;
-  const sep = `${"-".repeat(COL1)}-+-${"-".repeat(COL2)}-+-${"-".repeat(COL3)}-+-${"-".repeat(COL4)}-+-${"-".repeat(COL5)}`;
+  const COL2 = 6;
+  const COL3 = 6;
+  const COL4 = 6;
+  const COL5 = 8;
+  const COL6 = 11;
+  const COL7 = 12;
+  const sep = `${"-".repeat(COL1)}-+-${"-".repeat(COL2)}-+-${"-".repeat(COL3)}-+-${"-".repeat(COL4)}-+-${"-".repeat(COL5)}-+-${"-".repeat(COL6)}-+-${"-".repeat(COL7)}`;
 
   console.log(
-    `\n${padEnd("task-id", COL1)} | ${padEnd("ideal", COL2)} | ${padEnd("solid", COL3)} | ${padEnd("lucky", COL4)} | ${"lucky-rate"}`,
+    `\n${padEnd("task-id", COL1)} | ${padEnd("ideal", COL2)} | ${padEnd("solid", COL3)} | ${padEnd("lucky", COL4)} | ${padEnd("rescued", COL5)} | ${padEnd("lucky-rate", COL6)} | ${"model-solve%"}`,
   );
   console.log(sep);
 
   let totalIdeal = 0;
   let totalSolid = 0;
   let totalLucky = 0;
+  let totalRescued = 0;
 
   for (const t of tallies) {
     totalIdeal += t.ideal;
     totalSolid += t.solid;
     totalLucky += t.lucky;
+    totalRescued += t.rescued;
     console.log(
-      `${padEnd(t.taskId, COL1)} | ${padStart(String(t.ideal), COL2)} | ${padStart(String(t.solid), COL3)} | ${padStart(String(t.lucky), COL4)} | ${(luckyRate(t) * 100).toFixed(1)}%`,
+      `${padEnd(t.taskId, COL1)} | ${padStart(String(t.ideal), COL2)} | ${padStart(String(t.solid), COL3)} | ${padStart(String(t.lucky), COL4)} | ${padStart(String(t.rescued), COL5)} | ${padStart((luckyRate(t) * 100).toFixed(1) + "%", COL6)} | ${(modelSolveRate(t) * 100).toFixed(1)}%`,
     );
   }
 
   console.log(sep);
-  const overall: TaskTally = { taskId: "OVERALL", ideal: totalIdeal, solid: totalSolid, lucky: totalLucky };
+  const overall: TaskTally = {
+    taskId: "OVERALL",
+    ideal: totalIdeal,
+    solid: totalSolid,
+    lucky: totalLucky,
+    rescued: totalRescued,
+  };
   console.log(
-    `${padEnd("OVERALL", COL1)} | ${padStart(String(totalIdeal), COL2)} | ${padStart(String(totalSolid), COL3)} | ${padStart(String(totalLucky), COL4)} | ${(luckyRate(overall) * 100).toFixed(1)}%`,
+    `${padEnd("OVERALL", COL1)} | ${padStart(String(totalIdeal), COL2)} | ${padStart(String(totalSolid), COL3)} | ${padStart(String(totalLucky), COL4)} | ${padStart(String(totalRescued), COL5)} | ${padStart((luckyRate(overall) * 100).toFixed(1) + "%", COL6)} | ${(modelSolveRate(overall) * 100).toFixed(1)}%`,
   );
+  console.log(
+    `\nlegend: rescued = the harness's deterministic operator-mutation repair solved it, not the model ` +
+      `(excluded from lucky/solid/ideal and from lucky-rate's denominator). ` +
+      `model-solve% = (ideal+solid+lucky) / total passing. rescued-rate = rescued / total passing.`,
+  );
+  console.log(`overall rescued-rate: ${(rescuedRate(overall) * 100).toFixed(1)}%`);
 }
 
 async function main(): Promise<void> {
@@ -343,22 +414,59 @@ async function main(): Promise<void> {
 
   const tallies = tallyByTask(classified);
   const overall: TaskTally = tallies.reduce(
-    (acc, t) => ({ taskId: "OVERALL", ideal: acc.ideal + t.ideal, solid: acc.solid + t.solid, lucky: acc.lucky + t.lucky }),
-    { taskId: "OVERALL", ideal: 0, solid: 0, lucky: 0 },
+    (acc, t) => ({
+      taskId: "OVERALL",
+      ideal: acc.ideal + t.ideal,
+      solid: acc.solid + t.solid,
+      lucky: acc.lucky + t.lucky,
+      rescued: acc.rescued + t.rescued,
+    }),
+    { taskId: "OVERALL", ideal: 0, solid: 0, lucky: 0, rescued: 0 },
   );
 
   if (asJson) {
-    const tasksObj: Record<string, { ideal: number; solid: number; lucky: number; luckyRate: number }> = {};
+    const tasksObj: Record<
+      string,
+      {
+        ideal: number;
+        solid: number;
+        lucky: number;
+        rescued: number;
+        luckyRate: number;
+        modelSolveRate: number;
+        rescuedRate: number;
+      }
+    > = {};
     for (const t of tallies) {
-      tasksObj[t.taskId] = { ideal: t.ideal, solid: t.solid, lucky: t.lucky, luckyRate: luckyRate(t) };
+      tasksObj[t.taskId] = {
+        ideal: t.ideal,
+        solid: t.solid,
+        lucky: t.lucky,
+        rescued: t.rescued,
+        luckyRate: luckyRate(t),
+        modelSolveRate: modelSolveRate(t),
+        rescuedRate: rescuedRate(t),
+      };
     }
     console.log(
       JSON.stringify({
         message: "heuristic process-quality audit, not a correctness metric",
+        legend:
+          "rescued = the harness's deterministic operator-mutation repair solved it, not the model. " +
+          "modelSolveRate = (ideal+solid+lucky) / total passing (excludes rescued). " +
+          "rescuedRate = rescued / total passing. luckyRate = lucky / model-solved (excludes rescued from denominator).",
         transcriptsDir,
         totalPassingClassified: classified.length,
         tasks: tasksObj,
-        overall: { ideal: overall.ideal, solid: overall.solid, lucky: overall.lucky, luckyRate: luckyRate(overall) },
+        overall: {
+          ideal: overall.ideal,
+          solid: overall.solid,
+          lucky: overall.lucky,
+          rescued: overall.rescued,
+          luckyRate: luckyRate(overall),
+          modelSolveRate: modelSolveRate(overall),
+          rescuedRate: rescuedRate(overall),
+        },
       }),
     );
   } else {
