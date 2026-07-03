@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-modwrap-arith_1",
+  "desc": "In src/index.js, the safe-modulo wrap-index helper has an inverted arithmetic operator: it subtracts len instead of adding it, so negative indices are never wrapped into the valid [0, len) range. Fix the single arithmetic operator on the return line so that tests/wrapindex.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-modwrap-arith_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/wrapindex.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "modwrap", "arithmetic"],
+  "reference_solution": "realrepo-modwrap-arith_1-solution/"
+}

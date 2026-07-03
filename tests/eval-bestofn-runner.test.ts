@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { runTask } from "../src/eval/task-runner.ts";
 import type { AgentConfig } from "../src/agent/types.ts";
 import type { LoopDependencies } from "../src/agent/loop.ts";
@@ -123,9 +123,20 @@ function makeOpts(bestOfN: number) {
   };
 }
 
+// Isolate BoN mechanics from harness-side operator-mutation repair (default ON).
+// These tests drive the REAL loop with a buggy `add()` (`a - b`); with repair on,
+// the post-loop pass would flip `-`→`+` and rescue every attempt, short-circuiting
+// the temp-sweep this test exists to exercise. Repair has its own tests — disable
+// it here so BoN behavior is measured in isolation.
+const priorMutationRepair = process.env["SMALLCODE_MUTATION_REPAIR"];
 beforeEach(() => {
   tempsSeen.length = 0;
   winningTemp = Number.NaN;
+  process.env["SMALLCODE_MUTATION_REPAIR"] = "0";
+});
+afterEach(() => {
+  if (priorMutationRepair === undefined) delete process.env["SMALLCODE_MUTATION_REPAIR"];
+  else process.env["SMALLCODE_MUTATION_REPAIR"] = priorMutationRepair;
 });
 
 test("BoN trial short-circuits on the first deterministic-green attempt", async () => {

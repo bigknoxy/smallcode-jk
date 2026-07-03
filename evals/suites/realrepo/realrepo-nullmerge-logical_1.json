@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-nullmerge-logical_1",
+  "desc": "In src/index.js, the coalesce-first-non-null helper has a wrong logical connective: it returns null when EITHER argument is null instead of only when BOTH are null, so a single non-null argument is discarded. Fix the single logical operator on the if-condition so that tests/coalesce.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-nullmerge-logical_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/coalesce.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "nullmerge", "logical"],
+  "reference_solution": "realrepo-nullmerge-logical_1-solution/"
+}
