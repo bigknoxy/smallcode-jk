@@ -249,13 +249,41 @@ export async function revertFiles(
 }
 
 /**
+ * Recover the PRISTINE (pre-model) content of the target file from turn history.
+ * The revert system stamps `originalContent` on the FIRST applyResult that modified
+ * each file (its content before that first edit), so the earliest turn that applied
+ * an edit to `targetPath` holds the file exactly as the model FOUND it. Returns null
+ * when the model never applied an edit to the target — in which case the on-disk
+ * file is itself still pristine. Honors `effectivePath` (a path-typo rescue may have
+ * redirected the write). Pure; exported for testing.
+ */
+export function pristineTargetContent(state: AgentState, targetPath: string): string | null {
+  for (const turn of state.turns) {
+    for (const r of turn.applyResults) {
+      if (r.status !== "applied") continue;
+      if ((r.effectivePath ?? r.filePath) !== targetPath) continue;
+      if (r.originalContent !== undefined) return r.originalContent;
+    }
+  }
+  return null;
+}
+
+/**
  * Harness-side operator-mutation repair (I/O half; the pure enumerator is in
  * repair/operator-mutation.ts). Last-resort pass when the model loop ended UNSOLVED
- * in fix-mode with a locked fix-target: brute-force every single comparison-operator
- * flip in that file, run the real oracle on each, keep the FIRST that goes fully
- * green. Deterministic, can't fake-green (requires a full-green verdict), and every
- * non-winning candidate is reverted so the file is left either fixed or byte-identical
- * to how the model left it. Returns the winning mutation label, or null on no fix.
+ * in fix-mode with a locked fix-target: brute-force every single operator flip in
+ * that file, run the real oracle on each, keep the FIRST that goes fully green.
+ *
+ * Mutates the PRISTINE (pre-model) file FIRST, then the current on-disk version. The
+ * model often mangles the target on the way to failing — e.g. rewriting a `||`
+ * short-circuit idiom into `&&`/ternary — so no single-operator flip on its wreck
+ * reaches green, but the same flip on the ORIGINAL does. Trying pristine-first
+ * recovers exactly that case (the mri ~0.3 miss tail); the current version is still
+ * tried in case the model left a near-miss the pristine base wouldn't reach.
+ *
+ * Deterministic, can't fake-green (requires a full-green verdict); every non-winning
+ * candidate is reverted so the file is left either fixed or byte-identical to how the
+ * model left it. Returns the winning mutation label (with its base), or null.
  */
 async function runOperatorMutationRepair(
   state: AgentState,
@@ -265,31 +293,51 @@ async function runOperatorMutationRepair(
 ): Promise<{ label: string; line: number; attempts: number } | null> {
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
-  const original = await readFileFn(targetRel);
-  if (original === null) return null;
+  const current = await readFileFn(targetRel);
+  if (current === null) return null;
 
-  const { mutations, totalFound, truncated } = enumerateComparisonMutations(
-    original,
-    env.mutationRepairMax,
-  );
-  if (mutations.length === 0) return null;
-  if (truncated) {
+  // Bases to mutate, in priority order: pristine (if the model changed the file)
+  // first, then the current on-disk version.
+  const pristine = pristineTargetContent(state, targetRel);
+  const bases: Array<{ text: string; base: string }> = [];
+  if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
+  bases.push({ text: current, base: "current" });
+
+  // Priority-ordered, deduped candidate list across both bases, capped in TOTAL.
+  // Skip any candidate equal to the current file (already known to fail) or already
+  // queued from an earlier base.
+  const cap = env.mutationRepairMax;
+  const seen = new Set<string>([current]);
+  const candidates: Array<{ candidate: string; label: string; line: number; base: string }> = [];
+  let totalAcross = 0;
+  for (const { text, base } of bases) {
+    const { mutations, totalFound } = enumerateComparisonMutations(text, cap);
+    totalAcross += totalFound;
+    for (const m of mutations) {
+      if (candidates.length >= cap) break;
+      if (seen.has(m.candidate)) continue;
+      seen.add(m.candidate);
+      candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
+    }
+  }
+  if (candidates.length === 0) return null;
+  if (totalAcross > candidates.length) {
     console.error(
-      `[mutation-repair] ${targetRel}: ${totalFound} operator candidates found, capped to ${mutations.length} (SMALLCODE_MUTATION_REPAIR_MAX). Some flips not tried.`,
+      `[mutation-repair] ${targetRel}: ${totalAcross} operator candidate(s) across pristine+current, trying ${candidates.length} (cap ${cap}). Some flips not tried.`,
     );
   }
 
   let attempts = 0;
-  for (const m of mutations) {
+  for (const c of candidates) {
     attempts++;
-    await writeFileFn(targetRel, m.candidate);
+    await writeFileFn(targetRel, c.candidate);
     const verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
     if (verdict.outcome === "solved") {
       // Leave the winning mutation on disk — it IS the fix.
-      return { label: m.label, line: m.line, attempts };
+      return { label: `${c.label} (${c.base})`, line: c.line, attempts };
     }
     // Miss: restore the file to exactly how the model left it before trying next.
-    await writeFileFn(targetRel, original);
+    await writeFileFn(targetRel, current);
   }
   return null;
 }
