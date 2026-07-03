@@ -395,6 +395,21 @@ graph TD
         un-tried lever is harness-side operator-mutation repair, not model-side prompting.
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Harness-side operator-mutation repair</strong>
+        (<code>SMALLCODE_MUTATION_REPAIR=1</code>, off by default): a last-resort pass that fires only when
+        the model loop finishes a fix-mode run (red baseline) UNSOLVED with a locked target file. It enumerates
+        every single comparison-operator flip in that file (<code>enumerateComparisonMutations</code> in
+        <code>src/repair/operator-mutation.ts</code> — pure, priority-ordered: equality inversions, then
+        boundary off-by-one, then relational inversion, capped by <code>SMALLCODE_MUTATION_REPAIR_MAX</code>,
+        default 60), runs the real tiered oracle on each candidate, and keeps the first one that goes fully
+        green, reverting every miss. It exists because the mri wrong-operator wall above showed that no
+        model-side lever — exact-line localization, 32b escalation, or a minimal-edit prompt — could fix a
+        single-comparison-operator bug; the operator space is small and the oracle is deterministic, so the
+        harness brute-forces it instead of asking the model to. The pass is deterministic and cannot
+        fake-green (it requires a full-green oracle verdict), and it only runs on runs that already failed,
+        so it can never slow down or destabilize a successful one.
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
         diagnostic (strips timings, paths, hex addrs) into a stable hash. When
         <code>STALL_LIMIT=2</code> consecutive turns produce the same signature, the next turn's

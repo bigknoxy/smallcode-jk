@@ -68,6 +68,14 @@ export interface TurnRecord {
    */
   failureLocation?: { file: string; line: number; window: string };
   /**
+   * Set on the synthetic turn recorded when harness-side operator-mutation repair
+   * (SMALLCODE_MUTATION_REPAIR) solved the task after the model loop failed. Names
+   * the winning single-operator flip, its line, and how many candidates were tried
+   * before it went green — so the solve is attributable to the harness, not the
+   * model, in transcripts and pass-quality classification.
+   */
+  mutationRepair?: { label: string; line: number; attempts: number };
+  /**
    * Set when this turn's applied edit was ROLLED BACK because it regressed
    * previously-green tests. `newFailures` lists the tests that flipped red. The
    * edited files have been restored to their pre-turn content, so the next

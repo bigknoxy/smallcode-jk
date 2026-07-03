@@ -8,7 +8,8 @@ import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
-import { captureTestBaseline, escalateBrokenClean, runTieredOracle } from "@/verify/oracle.ts";
+import { captureTestBaseline, escalateBrokenClean, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
+import { enumerateComparisonMutations } from "@/repair/operator-mutation.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
@@ -245,6 +246,52 @@ export async function revertFiles(
   for (const [filePath, content] of originals) {
     await writeFileFn(filePath, content);
   }
+}
+
+/**
+ * Harness-side operator-mutation repair (I/O half; the pure enumerator is in
+ * repair/operator-mutation.ts). Last-resort pass when the model loop ended UNSOLVED
+ * in fix-mode with a locked fix-target: brute-force every single comparison-operator
+ * flip in that file, run the real oracle on each, keep the FIRST that goes fully
+ * green. Deterministic, can't fake-green (requires a full-green verdict), and every
+ * non-winning candidate is reverted so the file is left either fixed or byte-identical
+ * to how the model left it. Returns the winning mutation label, or null on no fix.
+ */
+async function runOperatorMutationRepair(
+  state: AgentState,
+  testBaseline: TestBaseline,
+  readFileFn: (p: string) => Promise<string | null>,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+): Promise<{ label: string; line: number; attempts: number } | null> {
+  const targetRel = state.lockedTargetPath;
+  if (targetRel === undefined) return null;
+  const original = await readFileFn(targetRel);
+  if (original === null) return null;
+
+  const { mutations, totalFound, truncated } = enumerateComparisonMutations(
+    original,
+    env.mutationRepairMax,
+  );
+  if (mutations.length === 0) return null;
+  if (truncated) {
+    console.error(
+      `[mutation-repair] ${targetRel}: ${totalFound} operator candidates found, capped to ${mutations.length} (SMALLCODE_MUTATION_REPAIR_MAX). Some flips not tried.`,
+    );
+  }
+
+  let attempts = 0;
+  for (const m of mutations) {
+    attempts++;
+    await writeFileFn(targetRel, m.candidate);
+    const verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
+    if (verdict.outcome === "solved") {
+      // Leave the winning mutation on disk — it IS the fix.
+      return { label: m.label, line: m.line, attempts };
+    }
+    // Miss: restore the file to exactly how the model left it before trying next.
+    await writeFileFn(targetRel, original);
+  }
+  return null;
 }
 
 export async function runLoop(
@@ -899,6 +946,44 @@ export async function runLoop(
       state.status = "max_turns";
       await saveState(state, statePath); // FIX #5: persist max_turns so state.json never shows "running"
       break;
+    }
+  }
+
+  // Harness-side operator-mutation repair (SMALLCODE_MUTATION_REPAIR, default off).
+  // Last resort: the model loop ended UNSOLVED in fix-mode (red baseline) with a
+  // locked fix-target. For the wrong-comparison-operator bug class the mri
+  // forensics mapped, NO model-side lever moves the needle (R2 line-handing, 32b,
+  // minimal-edit all ~0) — but the operator space is tiny and the oracle is
+  // deterministic, so the harness brute-forces it: flip each comparison operator
+  // in the target file, run the real oracle, keep the first fully-green candidate.
+  // Only fires on failing runs, so it never slows a successful one.
+  if (env.mutationRepair && !state.verified && fixModeBaseline && state.lockedTargetPath !== undefined) {
+    const repaired = await runOperatorMutationRepair(state, testBaseline, readFileFn, writeFileFn);
+    if (repaired !== null) {
+      console.error(
+        `[mutation-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+      );
+      for (const g of state.goals) g.status = "done";
+      state.status = "done";
+      state.verified = true;
+      addTurn(state, {
+        turn: state.turns.length + 1,
+        goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "mutation-repair",
+        prompt: "",
+        rawResponse: "",
+        answer: `[harness] operator-mutation repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
+        toolCalls: [],
+        toolResults: [],
+        editBlocks: [],
+        applyResults: [
+          { filePath: state.lockedTargetPath, status: "applied", diff: repaired.label },
+        ],
+        promptTokens: 0,
+        completionTokens: 0,
+        timestamp: Date.now(),
+        mutationRepair: { label: repaired.label, line: repaired.line, attempts: repaired.attempts },
+      } as TurnRecord);
+      await saveState(state, statePath);
     }
   }
 
