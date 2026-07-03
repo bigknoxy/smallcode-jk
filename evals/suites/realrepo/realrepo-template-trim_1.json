@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-template-trim_1",
+  "desc": "In src/tokenize.js, the `tokenize` function that parses `{{ var }}` spans does not trim the whitespace surrounding the captured variable name, so a key like ' name ' (with spaces) never matches the data object's 'name' property and renders empty. Fix `tokenize` in src/tokenize.js so the extracted key is trimmed before being stored on the token, so that tests/microtmpl.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-template-trim_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/microtmpl.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "template", "string-parsing", "multifile"],
+  "reference_solution": "realrepo-template-trim_1-solution/"
+}

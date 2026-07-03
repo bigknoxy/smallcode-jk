@@ -756,7 +756,7 @@ flowchart TD
         </div>
       </div>
       <p>
-        The <code>realrepo</code> suite (14 tasks) evaluates the harness on REAL vendored libraries —
+        The <code>realrepo</code> suite (22 tasks) evaluates the harness on REAL vendored libraries —
         <a href="https://github.com/lukeed/klona" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/klona</a>
         (deep-clone, 5 tasks incl. Map deep-clone),
         <a href="https://github.com/lukeed/dequal" style="color: var(--text-accent);" target="_blank" rel="noopener noreferrer">lukeed/dequal</a>
@@ -781,6 +781,28 @@ flowchart TD
         integrity-checked by <code>scripts/validate-realrepo-tasks.ts</code> (base fails, fix passes,
         retrieval targets a real fn). Tasks require genuine multi-file retrieval and correct reasoning
         about library internals, beyond the synthetic textkit fixtures.
+      </p>
+      <p>
+        <strong>Difficulty tier — 8 hard tasks (2026-07-03)</strong> added to de-saturate the stick once
+        operator-mutation repair drove the base suite to ~1.00. Each is built to defeat BOTH levers that
+        made the base suite easy: they have no single obvious file and no single-operator fix.
+        <strong>Four are multi-file deep-localization</strong> — the bug hides in a helper the public
+        <code>index.js</code> only delegates to: <code>emitter-off</code> (mitt-style emitter, unguarded
+        <code>indexOf(-1)</code> splice drops the last handler), <code>csv-quote</code> (CSV lexer misses the
+        RFC-4180 <code>""</code> escape), <code>toposort-cycle</code> (pre-order vs post-order DFS emit),
+        <code>template-trim</code> (mustache key not trimmed).
+        <strong>Four are single-file multi-line structural fixes</strong> — immune to operator-mutation
+        repair because the fix is 2+ lines, not one token: <code>lru-recency</code> (<code>get</code> never
+        refreshes recency), <code>memoize-key</code> (cache key built from the first arg only),
+        <code>qs-array</code> (<code>a[]=</code> bracket arrays collapse to the last value),
+        <code>semver-prerelease</code> (semver §11 prerelease precedence inverted).
+        Baseline (qwen-7b, n=8, mutation-repair default-on — the exact config that drove the base suite to
+        ~1.00) pools these 8 at <strong>0.80 [.69–.89]</strong> with real spread: a fresh hard floor
+        <code>lru-recency</code> <strong>0.00</strong> (the model hits the turn cap and the multi-line
+        recency-refresh fix is not an operator flip, so mutation-repair can't reach it), a discriminating
+        <code>csv-quote</code> <strong>0.50 [.13–.88]</strong>, a graded <code>toposort-cycle</code>
+        <strong>0.88 [.63–1.00]</strong>, and five the 7b still aces. A suite that reads all-1.00 measures
+        nothing; this restores a gradient the next harness lever can move.
         Run with <code>SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</code> and swap models with
         <code>SMALLCODE_MODEL=qwen2.5-coder:3b</code> (or <code>:7b</code>). Honest framing: the Qwen
         coders ace several real-lib bugs (klona) where the reasoning model scored 0/10; the remaining

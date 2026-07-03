@@ -1173,9 +1173,12 @@ function add(a: number, b: number): number { return a + b; }
 <span class="comment"># wrong-direction findLast) — reserved for measuring generalization (GEPA); never used for tuning</span>
 <span class="cmd">SMALLCODE_SUITE=edit-reliability-heldout bun scripts/run-baseline.ts</span>
 
-<span class="comment"># realrepo = 12 vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam,</span>
-<span class="comment"># tinycalc — all MIT, zero-dep) with one seeded bug each + authored bun:test oracles — tests</span>
-<span class="comment"># real-world coding (multi-file retrieval, library internals) beyond the synthetic textkit fixtures</span>
+<span class="comment"># realrepo = 22 tasks over vendored real libs (lukeed/klona, dequal, mri, clsx, dset, regexparam,</span>
+<span class="comment"># tinycalc — all MIT, zero-dep) + a hard tier of 8 (2026-07-03) built to de-saturate the stick:</span>
+<span class="comment"># 4 multi-file deep-localization (emitter-off, csv-quote, toposort-cycle, template-trim) + 4</span>
+<span class="comment"># single-file multi-line structural fixes immune to operator-mutation repair (lru-recency,</span>
+<span class="comment"># memoize-key, qs-array, semver-prerelease). Each has one seeded bug + authored bun:test oracle —</span>
+<span class="comment"># tests real-world coding (multi-file retrieval, library internals) beyond synthetic textkit fixtures</span>
 <span class="cmd">SMALLCODE_SUITE=realrepo bun scripts/run-baseline.ts</span>
 <span class="comment"># Validate every realrepo task is sound: BASE fails (bug real), BASE+solution passes (fix real),</span>
 <span class="comment"># pickTargetFunction aims at a real fn in each buggy file. No model — fast, deterministic, CI-safe.</span>

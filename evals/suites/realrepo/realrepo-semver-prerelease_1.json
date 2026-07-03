@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-semver-prerelease_1",
+  "desc": "In src/index.js, the comparePrerelease helper has the semver §11 prerelease-precedence rule inverted: a version WITHOUT a prerelease tag should always be GREATER than the same version WITH one, but the current code treats a missing prerelease as smaller. Fix comparePrerelease so a missing prerelease wins, and when both sides have prereleases they are compared identifier-by-identifier (numeric identifiers compared numerically) so tests/semverprerelease.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-semver-prerelease_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/semverprerelease.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "semvercmp", "comparison"],
+  "reference_solution": "realrepo-semver-prerelease_1-solution/"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-toposort-cycle_1",
+  "desc": "In src/graph.js, the DFS `visit` function used by the topological sort pushes each node into the result array as soon as it's marked visited (pre-order), instead of after recursing into its dependencies (post-order). This means a node can appear before its own prerequisites in the output. Fix `visit` in src/graph.js so that a node is only appended to `result` after all of its dependency children have been visited, so that tests/toposort.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-toposort-cycle_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/toposort.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "toposort", "graph", "multifile"],
+  "reference_solution": "realrepo-toposort-cycle_1-solution/"
+}

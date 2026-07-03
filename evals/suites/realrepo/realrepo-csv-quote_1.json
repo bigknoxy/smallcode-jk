@@ -1,0 +1,9 @@
+{
+  "id": "realrepo-csv-quote_1",
+  "desc": "In src/lexer.js, the parseLine(line) scanner handles quoted CSV fields but does not handle RFC-4180 escaped double-quotes (\"\" inside a quoted field represents a literal \"). It closes the field on the first quote of the pair, mis-splitting the rest of the line. Fix parseLine() in src/lexer.js so that inside a quoted field, a \" immediately followed by another \" appends a single literal \" and advances past both characters (a lookahead branch), so that tests/csvlite.test.ts passes.",
+  "setup": { "repoFixture": "realrepo-csv-quote_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/csvlite.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["realrepo", "csv", "multifile", "lexer"],
+  "reference_solution": "realrepo-csv-quote_1-solution/"
+}
