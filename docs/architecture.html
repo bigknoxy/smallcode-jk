@@ -396,7 +396,8 @@ graph TD
       </p>
       <p>
         <strong style="color: var(--text-primary);">Harness-side operator-mutation repair</strong>
-        (<code>SMALLCODE_MUTATION_REPAIR=1</code>, off by default): a last-resort pass that fires only when
+        (<code>SMALLCODE_MUTATION_REPAIR</code>, <strong>default on</strong>; set <code>=0</code> to disable): a
+        last-resort pass that fires only when
         the model loop finishes a fix-mode run (red baseline) UNSOLVED with a locked target file. It enumerates
         every single comparison-operator flip in that file (<code>enumerateComparisonMutations</code> in
         <code>src/repair/operator-mutation.ts</code> — pure, priority-ordered: equality inversions, then
@@ -407,7 +408,10 @@ graph TD
         single-comparison-operator bug; the operator space is small and the oracle is deterministic, so the
         harness brute-forces it instead of asking the model to. The pass is deterministic and cannot
         fake-green (it requires a full-green oracle verdict), and it only runs on runs that already failed,
-        so it can never slow down or destabilize a successful one.
+        so it can never slow down or destabilize a successful one. A/B (7b, no probe): it lifted the mri
+        floor from <strong>0.00 → 0.88</strong> (non-overlapping CIs — significant), took the realrepo suite
+        from 0.90 to ~0.95, and nudged edit-reliability 0.99 → 1.00 with zero regression — which is why it is
+        now on by default.
       </p>
       <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
@@ -1029,7 +1033,7 @@ flowchart TD
               <td class="td-name">qwen2.5-coder:7b</td>
               <td>realrepo (12 tasks, n=10)</td>
               <td><span class="badge badge-green">0.88</span></td>
-              <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs). Cracks dset/regexparam; mri-flags still 0.10 (localization ceiling).</td>
+              <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs). Cracks dset/regexparam; mri-flags 0.10 model-only (wrong-operator wall). With operator-mutation repair (default on) the default 7b harness reaches 0.94 overall and mri 0.00 → 0.70.</td>
             </tr>
             <tr>
               <td class="td-name">qwen-3b / qwen-7b</td>
