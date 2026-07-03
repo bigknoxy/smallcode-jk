@@ -10,6 +10,7 @@ import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
 import { captureTestBaseline, escalateBrokenClean, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
 import { enumerateComparisonMutations } from "@/repair/operator-mutation.ts";
+import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
@@ -269,6 +270,30 @@ export function pristineTargetContent(state: AgentState, targetPath: string): st
 }
 
 /**
+ * Recover the model's MOST-RECENT applied content for the target from turn history
+ * (the `newContent` of the last turn that edited `targetPath`), even if that edit
+ * was subsequently REVERTED off disk for regressing green tests. This is the mirror
+ * of pristineTargetContent: a structural bug the model writes (e.g. the read-after-
+ * delete ordering mistake) that stores a wrong value regresses previously-green
+ * tests, so the loop reverts it — leaving disk pristine while the model's actual
+ * structural attempt survives ONLY here. Both the RAD hint and statement-repair
+ * must inspect this content, not disk, or they never see the pattern. Returns null
+ * when the model never applied an edit to the target. Pure; exported for testing.
+ */
+export function latestAttemptContent(state: AgentState, targetPath: string): string | null {
+  for (let i = state.turns.length - 1; i >= 0; i--) {
+    const results = state.turns[i]?.applyResults ?? [];
+    for (let j = results.length - 1; j >= 0; j--) {
+      const r = results[j]!;
+      if (r.status !== "applied") continue;
+      if ((r.effectivePath ?? r.filePath) !== targetPath) continue;
+      if (r.newContent !== undefined) return r.newContent;
+    }
+  }
+  return null;
+}
+
+/**
  * Harness-side operator-mutation repair (I/O half; the pure enumerator is in
  * repair/operator-mutation.ts). Last-resort pass when the model loop ended UNSOLVED
  * in fix-mode with a locked fix-target: brute-force every single operator flip in
@@ -337,6 +362,55 @@ async function runOperatorMutationRepair(
       return { label: `${c.label} (${c.base})`, line: c.line, attempts };
     }
     // Miss: restore the file to exactly how the model left it before trying next.
+    await writeFileFn(targetRel, current);
+  }
+  return null;
+}
+
+/**
+ * Harness-side statement-repair (SMALLCODE_STATEMENT_REPAIR, default off).
+ * Mirrors runOperatorMutationRepair for a DISJOINT bug shape: the read-after-delete
+ * ordering bug (`X.delete(K); X.set(K, X.get(K))`) that a sub-14B model localizes
+ * perfectly yet writes with the read AFTER the delete, so it re-inserts undefined.
+ * The operator-mutation space can't touch it (no operator flip fixes an ordering
+ * mistake). repairReadAfterDelete deterministically hoists the read into a temp
+ * before the delete for a SINGLE unambiguous finding; we run the real oracle on
+ * that candidate and keep it only if it goes fully green (can't fake-green),
+ * reverting otherwise so the file is left either fixed or byte-identical.
+ */
+async function runStatementRepair(
+  state: AgentState,
+  testBaseline: TestBaseline,
+  readFileFn: (p: string) => Promise<string | null>,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+): Promise<{ label: string; line: number; attempts: number } | null> {
+  const targetRel = state.lockedTargetPath;
+  if (targetRel === undefined) return null;
+  const current = await readFileFn(targetRel);
+  if (current === null) return null;
+
+  // Bases to repair, in priority order. The model's read-after-delete edit stores
+  // undefined and regresses green tests, so the loop REVERTS it — disk is left
+  // pristine (no delete to hoist) while the structural attempt survives only in
+  // turn history. So try the model's latest attempt content FIRST, then current
+  // disk. Mirror of operator-mutation's pristine-first multi-base strategy.
+  const attempt = latestAttemptContent(state, targetRel);
+  const bases: string[] = [];
+  if (attempt !== null && attempt !== current) bases.push(attempt);
+  bases.push(current);
+
+  let attempts = 0;
+  for (const base of bases) {
+    const rep = repairReadAfterDelete(base);
+    if (rep === null) continue;
+    attempts++;
+    await writeFileFn(targetRel, rep.candidate);
+    const verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
+    if (verdict.outcome === "solved") {
+      // Leave the hoisted candidate on disk — it IS the fix.
+      return { label: rep.label, line: rep.line, attempts };
+    }
+    // Miss: restore the file to exactly how the model left it before the next base.
     await writeFileFn(targetRel, current);
   }
   return null;
@@ -923,6 +997,33 @@ export async function runLoop(
       }
     }
 
+    // SMALLCODE_RAD_HINT (model-side lever): when this turn failed and its edit
+    // left a read-after-delete ordering bug (`X.delete(K); X.set(K, X.get(K))`)
+    // on the locked target, stash a targeted hint so the NEXT prompt surfaces it
+    // and the MODEL reorders the read. Purely a prompt signal — NOT a harness
+    // rescue, so any resulting pass stays attributed to the model. Mirrors the
+    // failureLocation computation above and the same conditional-spread on addTurn.
+    let readAfterDelete: { object: string; key: string; line: number; hint: string } | undefined;
+    if (env.radHint && verdict?.outcome === "failing" && state.lockedTargetPath !== undefined) {
+      // Detect on the model's ATTEMPTED content this turn, NOT disk: a read-after-
+      // delete edit that stores undefined regresses green tests and is reverted off
+      // disk (disk goes back to pristine), so the pattern survives only in this
+      // turn's applyResults newContent. Fall back to disk when the target wasn't
+      // edited this turn (e.g. an off-target turn) but was left in a bad state earlier.
+      const attempt =
+        applyResults.find(
+          (a) => a.newContent !== undefined && (a.effectivePath ?? a.filePath) === state.lockedTargetPath,
+        )?.newContent ??
+        latestAttemptContent(state, state.lockedTargetPath) ??
+        (await readFileFn(state.lockedTargetPath));
+      if (attempt) {
+        const f = detectReadAfterDelete(attempt)[0];
+        if (f !== undefined) {
+          readAfterDelete = { object: f.object, key: f.key, line: f.deleteLine, hint: f.hint };
+        }
+      }
+    }
+
     const turn: TurnRecord = {
       turn: state.turns.length + 1,
       goalId: goal.id,
@@ -942,6 +1043,7 @@ export async function runLoop(
       ...(turnAnswerNow && { answerNow: true }),
       ...(verdict?.diagnostic && { diagnostic: verdict.diagnostic }),
       ...(failureLocation && { failureLocation }),
+      ...(readAfterDelete && { readAfterDelete }),
       ...(revertedNewFailures && { reverted: { newFailures: revertedNewFailures } }),
     };
 
@@ -1020,6 +1122,44 @@ export async function runLoop(
         prompt: "",
         rawResponse: "",
         answer: `[harness] operator-mutation repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
+        toolCalls: [],
+        toolResults: [],
+        editBlocks: [],
+        applyResults: [
+          { filePath: state.lockedTargetPath, status: "applied", diff: repaired.label },
+        ],
+        promptTokens: 0,
+        completionTokens: 0,
+        timestamp: Date.now(),
+        mutationRepair: { label: repaired.label, line: repaired.line, attempts: repaired.attempts },
+      } as TurnRecord);
+      await saveState(state, statePath);
+    }
+  }
+
+  // Harness-side statement-repair (SMALLCODE_STATEMENT_REPAIR, default off).
+  // Second last-resort pass for a DISJOINT bug shape from operator-mutation: the
+  // read-after-delete ordering bug (`X.delete(K); X.set(K, X.get(K))`) that no
+  // operator flip fixes. Guarded by `!state.verified` so it never runs if the
+  // model loop OR operator-mutation already solved the task. Deterministically
+  // hoists the read before the delete, runs the real oracle, keeps it if fully
+  // green — recorded as a harness rescue (mutationRepair) so pass-quality
+  // classification attributes it to the harness, not the model.
+  if (env.statementRepair && !state.verified && fixModeBaseline && state.lockedTargetPath !== undefined) {
+    const repaired = await runStatementRepair(state, testBaseline, readFileFn, writeFileFn);
+    if (repaired !== null) {
+      console.error(
+        `[statement-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+      );
+      for (const g of state.goals) g.status = "done";
+      state.status = "done";
+      state.verified = true;
+      addTurn(state, {
+        turn: state.turns.length + 1,
+        goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "statement-repair",
+        prompt: "",
+        rawResponse: "",
+        answer: `[harness] statement-repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
         toolCalls: [],
         toolResults: [],
         editBlocks: [],

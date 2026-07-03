@@ -764,9 +764,10 @@
           <li>Think-only recovery — when a small model burns its budget reasoning and emits no answer, the next turn is re-prompted to skip thinking and act immediately</li>
           <li>Throughput watchdog — auto-heals KV-cache decay on long runs</li>
           <li>Best-of-N + strategy-seeded diversity — closes variance gap</li>
+          <li>Read-after-delete repair — two opt-in levers crack the <code>lru-recency</code> ordering floor: <code>SMALLCODE_RAD_HINT</code> (model-side <code>## STATEMENT ORDER BUG</code> hint makes the model reorder the statements) and <code>SMALLCODE_STATEMENT_REPAIR</code> (harness-side deterministic hoist), each lifting pass@1 0.13 → 1.00 (7b, n=8). RAD_HINT is the first model-side lever to move a genuine realrepo floor (audit modelSolveRate 1.0); STATEMENT_REPAIR is a harness rescue</li>
           <li>GEPA prompt-optimization seam — evolve better prompts automatically</li>
           <li>Offline skill distillation — mine passing sessions into a seed skill block injected alongside the system prompt</li>
-          <li>Real-repo eval layer — 22 tasks on vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + a 2-file tinycalc, plus seeded arithmetic/logical operator bugs) with authored bun:test oracles, not only synthetic fixtures; every task integrity-checked by scripts/validate-realrepo-tasks.ts. A hard tier of 8 tasks (2026-07-03) de-saturates the stick — 4 multi-file deep-localization (emitter-off, csv-quote, toposort-cycle, template-trim) + 4 single-file multi-line structural fixes immune to operator-mutation repair (lru-recency, memoize-key, qs-array, semver-prerelease); each has no single obvious file and no single-operator fix</li>
+          <li>Real-repo eval layer — 22 tasks on vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + a 2-file tinycalc, plus seeded arithmetic/logical operator bugs) with authored bun:test oracles, not only synthetic fixtures; every task integrity-checked by scripts/validate-realrepo-tasks.ts. A hard tier of 8 tasks (2026-07-03) de-saturates the stick — 4 multi-file deep-localization (emitter-off, csv-quote, toposort-cycle, template-trim) + 4 single-file multi-line structural fixes immune to operator-mutation repair (lru-recency, memoize-key, qs-array, semver-prerelease); each has no single obvious file and no single-operator fix. The lru-recency read-after-delete floor (0.13) is since CRACKED to 1.00 by two new opt-in levers — SMALLCODE_RAD_HINT (model-side) and SMALLCODE_STATEMENT_REPAIR (harness-side)</li>
           <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.70 / 0.88 model-only (12 tasks, n=10; 7b SIGNIFICANT over 3b — the new dset/regexparam tasks are the CI-significant discriminators). The mri-flags task was a hard 0/10 for 3b, 7b AND 32b — a genuine wrong-operator wall no model-side lever cracked — until deterministic operator-mutation repair (default on) solved it, lifting qwen-7b realrepo to 0.94 overall</li>
         </ul>
       </div>
@@ -1315,7 +1316,7 @@
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Updated 2026-07-02</span>
+    <span class="sc-footer__meta">Updated 2026-07-03</span>
   </div>
 </footer>
 

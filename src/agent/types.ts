@@ -67,6 +67,11 @@ export interface TurnRecord {
    * SMALLCODE_LOCALIZE is enabled and a source frame was present.
    */
   failureLocation?: { file: string; line: number; window: string };
+  /** SMALLCODE_RAD_HINT: set when this failing turn left a read-after-delete
+   *  ordering bug on the locked target. The next prompt surfaces `hint` so the
+   *  MODEL reorders it. Purely a prompt signal — NOT a harness rescue, so passes
+   *  stay attributed to the model in pass-quality classification. */
+  readAfterDelete?: { object: string; key: string; line: number; hint: string };
   /**
    * Set on the synthetic turn recorded when harness-side operator-mutation repair
    * (SMALLCODE_MUTATION_REPAIR) solved the task after the model loop failed. Names
