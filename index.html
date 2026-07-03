@@ -742,7 +742,7 @@
           and rerunning the realrepo suite (12 tasks, n=10): <strong style="color: var(--text-primary);">qwen-3b 0.70, qwen-7b 0.88</strong> model-only.
           The harness then goes further: deterministic operator-mutation repair (default on) brute-forces the wrong-comparison-operator
           bug class that <em>no</em> model-side lever cracks, lifting qwen-7b realrepo to <strong style="color: var(--text-primary);">0.94</strong>
-          (the <code>mri</code> floor task 0.00 → 0.70) with zero regression — the harness, not a bigger model, doing the work.
+          (the <code>mri</code> floor task 0.00 → 1.00 — the repair mutates the pristine pre-model file, recovering the trials where the model mangled the target) with zero regression — the harness, not a bigger model, doing the work.
           VibeThinker still supported via <code>SMALLCODE_MODEL=vibethinker-3b</code>.
         </p>
         <p>
@@ -1019,7 +1019,7 @@
             <td class="td-name">qwen2.5-coder:7b</td>
             <td>realrepo (12 tasks, n=10) — <strong>default harness</strong></td>
             <td class="td-pass">0.94</td>
-            <td>With deterministic operator-mutation repair (default on): brute-forces the wrong-comparison-operator bug class no model-side lever cracks. Lifts mri-flags 0.00 → 0.70 and the suite 0.88 → 0.94 [.90–.97], 12/12 tasks nonzero, zero regression, no false-solves (full-green oracle gate).</td>
+            <td>With deterministic operator-mutation repair (default on): brute-forces the wrong-operator bug class no model-side lever cracks. Lifts mri-flags 0.00 → 1.00 (mutating the pristine pre-model file recovers trials the model mangled) and the suite 0.88 → 0.94+ [.90–.97], all tasks nonzero, zero regression, no false-solves (full-green oracle gate).</td>
           </tr>
         </tbody>
       </table>

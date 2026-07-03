@@ -404,7 +404,15 @@ graph TD
         inversions, then boundary off-by-one, then relational inversion), then logical (<code>&amp;&amp;</code>↔<code>||</code>),
         then arithmetic (<code>+</code>↔<code>-</code>), capped by <code>SMALLCODE_MUTATION_REPAIR_MAX</code>,
         default 60), runs the real tiered oracle on each candidate, and keeps the first one that goes fully
-        green, reverting every miss. It exists because the mri wrong-operator wall above showed that no
+        green, reverting every miss. Candidates are now enumerated against the <strong>pristine pre-model
+        target file first</strong>, then the current on-disk version (deduped, pristine-first ordering) —
+        recovered via <code>pristineTargetContent</code>, which reads the <code>originalContent</code> the
+        revert system already stamps on the first edit to each file in turn history. This matters because a
+        model that fails a wrong-operator bug often mangles the target on the way down (e.g. rewriting a
+        <code>||</code> short-circuit idiom into <code>&amp;&amp;</code>/ternary forms), and a single-operator
+        flip on that wreck can't reach green even though the same flip on the original file can; the current
+        version is still tried as a fallback. The winning candidate's label now names its base, e.g.
+        <code>!== -&gt; === (original)</code>. It exists because the mri wrong-operator wall above showed that no
         model-side lever — exact-line localization, 32b escalation, or a minimal-edit prompt — could fix a
         single-comparison-operator bug; the operator space is small and the oracle is deterministic, so the
         harness brute-forces it instead of asking the model to. The pass is deterministic and cannot
@@ -1038,7 +1046,7 @@ flowchart TD
               <td class="td-name">qwen2.5-coder:7b</td>
               <td>realrepo (12 tasks, n=10)</td>
               <td><span class="badge badge-green">0.88</span></td>
-              <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs). Cracks dset/regexparam; mri-flags 0.10 model-only (wrong-operator wall). With operator-mutation repair (default on) the default 7b harness reaches 0.94 overall and mri 0.00 → 0.70.</td>
+              <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs). Cracks dset/regexparam; mri-flags 0.10 model-only (wrong-operator wall). With operator-mutation repair (default on) the default 7b harness reaches 0.94+ overall and mri 0.00 → 1.00 (mutating the pristine pre-model file recovers trials the model mangled).</td>
             </tr>
             <tr>
               <td class="td-name">qwen-3b / qwen-7b</td>
