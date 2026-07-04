@@ -326,7 +326,8 @@ describe("Lever A — read-after-delete hint stashing", () => {
   });
 
   it("does not stash readAfterDelete when SMALLCODE_RAD_HINT is OFF", async () => {
-    delete process.env["SMALLCODE_RAD_HINT"];
+    // Default is ON since v1.7.1, so opt OUT explicitly to exercise the off path.
+    process.env["SMALLCODE_RAD_HINT"] = "0";
     delete process.env["SMALLCODE_STATEMENT_REPAIR"];
     await setupRepo();
     const { state, deps, statePath } = makeRun();

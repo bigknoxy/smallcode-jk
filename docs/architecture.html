@@ -424,7 +424,7 @@ graph TD
       </p>
       <p>
         <strong style="color: var(--text-primary);">Read-after-delete repair</strong>
-        (<code>SMALLCODE_RAD_HINT</code> + <code>SMALLCODE_STATEMENT_REPAIR</code>, <strong>both default off</strong>):
+        (<code>SMALLCODE_RAD_HINT</code> <strong>default on</strong> since v1.7.1 + <code>SMALLCODE_STATEMENT_REPAIR</code> <strong>default off</strong>):
         a disjoint-bug-shape sibling of operator-mutation repair, for a statement-<em>ordering</em> mistake that no
         operator flip can fix. The pure <code>src/repair/read-after-delete.ts</code> mirrors
         <code>src/repair/operator-mutation.ts</code> (no AST, no deps): <code>detectReadAfterDelete(source)</code>
@@ -447,7 +447,13 @@ graph TD
         (contrast <code>mri</code>, where only the harness operator-mutation rescue worked); <code>STATEMENT_REPAIR=1</code>
         lifted it to <strong>1.00 [1.00–1.00]</strong> (8/8), every solve logged
         <code>[statement-repair] SOLVED src/index.js via read-after-delete hoist</code>, audit
-        <strong>rescuedRate 1.0, model 0</strong>.
+        <strong>rescuedRate 1.0, model 0</strong>. <code>RAD_HINT</code> was promoted to default-on
+        (v1.7.1) after a full 22-task realrepo A/B (7b, n=8) showed the detector fires on the
+        <code>lru-recency</code> pattern <em>only</em> (0 fires across the other 21 tasks / 176 trials) — inert
+        everywhere else; the two other-task swings in that A/B (<code>toposort-cycle</code> 1.00→0.63,
+        <code>csv-quote</code> 0.63→0.13) were confirmed sampling noise by a lever-off control rerun
+        (<code>toposort-cycle</code> redrew 0.88, <code>csv-quote</code> 0.50). <code>STATEMENT_REPAIR</code>
+        stays opt-in (it never fired in the suite once the hint solved <code>lru-recency</code> first).
       </p>
       <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
@@ -1440,7 +1446,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-03</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-04</span>
   </div>
 </footer>
 
