@@ -506,7 +506,10 @@ flowchart TD
     TOOLLOCK -- yes --> TOOLREJECT[skip write, feedback:\nEdit REJECTED — fixes only target]
     TOOLREJECT --> ORACLE
     TOOLLOCK -- no --> EXECTOOLS[executeTool for each call\nread_file · write_file · run_command · run_tests]
-    EXECTOOLS --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
+    EXECTOOLS --> IMPORTGATE{SMALLCODE_IMPORT_GATE\nedit added an import that\ndoes not resolve?\npackage.json deps + fs + Bun.resolveSync}
+    IMPORTGATE -- yes --> IMPORTREVERT[revert file to pre-edit content\nfeed IMPORT ERROR — does not resolve\navailable deps: …]
+    IMPORTREVERT --> ORACLE
+    IMPORTGATE -- "no / gate off" --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
     ORACLE --> REGRESSED{verdict.regressed?\nnewFailures present OR\ntotal red > baseline red OR\nR4: introduced load/compile error\n(SMALLCODE_VALIDATE_EDIT, default on)}
     REGRESSED -- yes --> REVERT[revertFiles\nrestore pre-turn content\nvia ApplyResult.effectivePath\n+ originalContent\nfold stall signature onto prior turn]
     REVERT --> WARNMODEL[feed revert notice to next turn\nYour edit was REVERTED — broke\ntests that were passing before]
@@ -550,8 +553,29 @@ flowchart TD
     style ANCHOR fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
     style TOOLLOCK fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
     style TOOLREJECT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
+    style IMPORTGATE fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
+    style IMPORTREVERT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
         </div>
       </div>
+      <p>
+        <strong style="color: var(--text-primary);">Static import-resolution gate</strong>
+        (<code>SMALLCODE_IMPORT_GATE</code>, opt-in — Lever 2, the proactive fix for the dogfood
+        <code>std/strings</code> hallucinated-import failure). A small model invents a module that does not
+        exist, and the only feedback — R4's <code>Cannot find module</code> — arrives only after a full test
+        run, and only when a test imports the edited file, so the model loops re-emitting the same invented
+        import. This gate runs right after an edit lands and before the oracle: it extracts the import
+        specifiers the edit INTRODUCED (<code>extractImportSpecifiers</code> in
+        <code>src/verify/import-check.ts</code>) and resolves each against ground truth — relative paths via
+        <code>Bun.resolveSync</code> from the file's directory, bare packages against <code>package.json</code>
+        deps + <code>node_modules</code>, builtins always OK. Any specifier that does not resolve reverts that
+        file to its pre-edit content and feeds the model a targeted
+        <code>IMPORT ERROR — 'std/strings' does not resolve … this repo's dependencies are: …</code> that
+        NAMES the deps that exist — a crisper, earlier, more actionable signal than a raw module-not-found.
+        Conservative (a declared dep or any Bun-resolvable specifier passes) to keep false-rejects near zero;
+        only NEW imports on an existing file are checked (test/brand-new files skipped). It is the semantic
+        sibling of the syntactic edit-format validation — grounding an edit in the symbols that actually
+        exist, which needs zero model capability to work.
+      </p>
       <p>
         <strong style="color: var(--text-primary);">Final-state regression guard</strong>
         (<code>SMALLCODE_FINAL_STATE_GUARD</code>, opt-in — the "never leave the repo worse than you found
