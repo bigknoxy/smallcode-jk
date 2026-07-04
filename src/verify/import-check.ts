@@ -9,6 +9,7 @@
 // available deps: …" message. Pure extraction is separated from filesystem
 // resolution so the parser is unit-testable without a repo.
 
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 /** Node builtins that resolve without a dependency (with or without the node: prefix). */
@@ -102,10 +103,14 @@ async function readDeclaredDeps(repoRoot: string): Promise<Set<string>> {
  * zero on a lever meant to ship default-off then promote:
  *   • builtin → always OK.
  *   • relative/absolute → Bun.resolveSync from the editing file's directory.
- *   • bare → OK if its package-root is DECLARED in package.json (installed-or-not
- *     is not our concern — a declared dep is a real intent), else Bun.resolveSync
- *     from repoRoot (catches installed-but-undeclared). Only when BOTH fail is it
- *     flagged unresolved — the hallucinated-module signal.
+ *   • bare → OK if its package-root is DECLARED in package.json (a declared dep
+ *     is real intent, installed-or-not), OR physically present in THIS repo's
+ *     node_modules. Only when both fail is it flagged — the hallucinated-module
+ *     signal. Deliberately NOT `Bun.resolveSync` for bare specifiers: that also
+ *     succeeds via Bun's GLOBAL install cache (~/.bun/install/cache), so a
+ *     hallucinated import that happens to be cached machine-wide would sail
+ *     through though it is not a dependency of this repo — a false-negative the
+ *     live-fire validation caught on an undeclared `slugify`.
  */
 export function resolveSpecifier(
   spec: string,
@@ -115,6 +120,9 @@ export function resolveSpecifier(
 ): boolean {
   if (isBuiltinSpecifier(spec)) return true;
   if (isRelativeSpecifier(spec)) {
+    // Relative/absolute → the filesystem, from the editing file's dir. This is
+    // already repo-local (no global-cache leak) and gets Bun's extension/index
+    // resolution for free.
     try {
       Bun.resolveSync(spec, path.dirname(fromAbsFile));
       return true;
@@ -122,14 +130,10 @@ export function resolveSpecifier(
       return false;
     }
   }
-  // Bare package specifier.
-  if (declaredDeps.has(packageRootOf(spec))) return true;
-  try {
-    Bun.resolveSync(spec, repoRoot);
-    return true;
-  } catch {
-    return false;
-  }
+  // Bare package specifier — resolve ONLY against this repo, never the machine.
+  const root = packageRootOf(spec);
+  if (declaredDeps.has(root)) return true;
+  return existsSync(path.join(repoRoot, "node_modules", root));
 }
 
 export interface ImportCheckResult {

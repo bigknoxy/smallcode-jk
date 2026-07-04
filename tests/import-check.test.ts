@@ -92,6 +92,13 @@ describe("resolveSpecifier (fs-backed)", () => {
   it("a hallucinated bare module does not resolve", () => {
     expect(resolveSpecifier("std/strings", join(repo, "src/x.ts"), repo, new Set(["mri"]))).toBe(false);
   });
+  it("an undeclared package does NOT resolve even if it's in Bun's global cache (live-fire regression)", () => {
+    // `slugify` is commonly present in ~/.bun/install/cache, so Bun.resolveSync
+    // would succeed machine-wide — but it is not a dependency of THIS repo, so
+    // the gate must still flag it. Guards against the global-cache false-negative
+    // the live-fire caught.
+    expect(resolveSpecifier("slugify", join(repo, "src/x.ts"), repo, new Set(["mri"]))).toBe(false);
+  });
 });
 
 describe("checkNewImports (integration, real repo)", () => {
