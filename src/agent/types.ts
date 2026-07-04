@@ -143,6 +143,17 @@ export interface AgentState {
    * file each turn) keeps getting rejected forever, same as before.
    */
   offTargetStreak?: { path: string; count: number };
+  /**
+   * Final-state guard (SMALLCODE_FINAL_STATE_GUARD): set when the run ended
+   * UNSOLVED and the end-of-run disk state was STRICTLY WORSE than the run-start
+   * baseline, so every file the agent touched was reverted to pristine (and any
+   * brand-new files it created were deleted) to honor the "never leave the repo
+   * worse than found" guarantee. `newFailures` lists the tests that had
+   * regressed; `startRed`/`endRed` are the baseline vs pre-revert red counts.
+   * Absent on solved runs and on unsolved-but-not-worse runs (partial progress
+   * is kept).
+   */
+  finalStateReverted?: { newFailures: string[]; startRed: number; endRed: number; filesRestored: number };
 }
 
 export interface Candidate {

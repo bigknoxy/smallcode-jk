@@ -26,7 +26,7 @@ afterEach(restore);
 
 describe("ENV_REGISTRY", () => {
   it("has 16 entries", () => {
-    expect(ENV_REGISTRY.length).toBe(16);
+    expect(ENV_REGISTRY.length).toBe(17);
   });
 
   it("every env getter name appears in ENV_REGISTRY", () => {
@@ -48,6 +48,7 @@ describe("ENV_REGISTRY", () => {
       "SMALLCODE_MUTATION_REPAIR_MAX",
       "SMALLCODE_RAD_HINT",
       "SMALLCODE_STATEMENT_REPAIR",
+      "SMALLCODE_FINAL_STATE_GUARD",
     ];
     for (const name of expected) {
       expect(registryNames.has(name)).toBe(true);

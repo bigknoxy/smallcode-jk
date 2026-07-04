@@ -528,7 +528,15 @@ flowchart TD
     MAXCHECK -- yes --> MAXED([status: max_turns])
     MAXCHECK -- no --> GOAL
 
+    MAXED --> FINALGUARD{SMALLCODE_FINAL_STATE_GUARD\nrun UNSOLVED AND recaptured\nend state worse than baseline?\nhigher red OR new failing test}
+    FINALGUARD -- yes --> FINALREVERT[restore every touched file to pristine\npristineRunSnapshot + revertFiles\ndelete brand-new files created\nnever leave repo worse than found]
+    FINALGUARD -- no, keep as-is --> ENDUNSOLVED([end: unsolved])
+    FINALREVERT --> ENDUNSOLVED
+
     style START fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
+    style FINALGUARD fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
+    style FINALREVERT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
+    style ENDUNSOLVED fill:#450a0a,stroke:#dc2626,color:#fca5a5
     style DONE fill:#14532d,stroke:#16a34a,color:#bbf7d0
     style MAXED fill:#450a0a,stroke:#dc2626,color:#fca5a5
     style ORACLE fill:#451a03,stroke:#d97706,color:#fcd34d
@@ -544,6 +552,25 @@ flowchart TD
     style TOOLREJECT fill:#3f1d1d,stroke:#b91c1c,color:#fecaca
         </div>
       </div>
+      <p>
+        <strong style="color: var(--text-primary);">Final-state regression guard</strong>
+        (<code>SMALLCODE_FINAL_STATE_GUARD</code>, opt-in — the "never leave the repo worse than you found
+        it" guarantee that dogfooding exposed as missing). The per-turn revert above catches regressions
+        <em>during</em> the loop, but it cannot roll back a brand-new file the model created (no pre-edit
+        content to restore) and does not re-check the whole-run end state. So a wandering / partial run
+        could exit with more red on disk than it started. This guard runs absolutely last — after the model
+        loop AND every repair pass — and only when the run ended <strong>UNSOLVED</strong>. It recaptures
+        the full <code>bun test</code> baseline on the final disk state and compares to the run-START
+        baseline (<code>finalStateWorseThanBaseline</code>): if the repo is strictly worse (higher red count
+        OR a test failing now that was green/absent at baseline), it restores every file the agent touched
+        to its pristine pre-model content (<code>pristineRunSnapshot</code> — the whole-run generalization
+        of <code>pristineTargetContent</code> — plus <code>revertFiles</code>) and deletes any brand-new
+        files it created, then re-verifies the restore reached ≤ baseline
+        (<code>[final-state-guard] reverted N file(s) …</code>, recorded on
+        <code>state.finalStateReverted</code>). It is <strong>eval-neutral by construction</strong>: it
+        fires only on unsolved runs and reverts to the seeded-bug START state, so an unsolved trial stays
+        unsolved (pass/fail unchanged) — it removes broken residue, it never manufactures a pass.
+      </p>
       <p>
         <strong style="color: var(--text-primary);">Off-task-drift guard</strong> (dogfood #1 blocker,
         found via 2 live 7b runs: turn 1 lands a wrong edit on the correct target file, then turns 2-8

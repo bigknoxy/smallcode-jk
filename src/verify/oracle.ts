@@ -200,6 +200,29 @@ export function captureTestBaseline(repoRoot: string): TestBaseline {
   };
 }
 
+/**
+ * Final-state regression decision (pure). Given the run-START baseline and a
+ * freshly-recaptured END baseline, is the repo STRICTLY WORSE than the agent
+ * found it? "Worse" = a higher total red count OR a test that is failing now but
+ * was green (or absent) at baseline — the same dual signal runTieredOracle uses
+ * per turn (`countRegression || newFailures`), applied once to the whole run's
+ * end state. Powers the final-state guard's "never leave the repo worse than
+ * found" guarantee: a run that never reached green AND ended worse is reverted
+ * wholesale to pristine.
+ *
+ * NOT worse: equal or reduced red count with no NEW failing ids (partial
+ * progress toward the fix is preserved — only a net regression reverts).
+ * `newFailures` lists the ids that regressed, for the report. Exported for testing.
+ */
+export function finalStateWorseThanBaseline(
+  baseline: TestBaseline,
+  final: TestBaseline,
+): { worse: boolean; newFailures: string[] } {
+  const newFailures = [...final.failingIds].filter((id) => !baseline.failingIds.has(id));
+  const countRegression = final.redCount > baseline.redCount;
+  return { worse: countRegression || newFailures.length > 0, newFailures };
+}
+
 function runBunTest(repoRoot: string): { state: TestState; result: CheckResult } {
   const start = Date.now();
   const proc = Bun.spawnSync(["bun", "test"], { cwd: repoRoot, timeout: 120_000 });

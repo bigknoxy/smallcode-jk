@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path, { sep } from "node:path";
 import { env } from "@/config/env.ts";
 import type { ContextBundle } from "@/context/types.ts";
@@ -8,7 +8,7 @@ import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
-import { captureTestBaseline, escalateBrokenClean, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
+import { captureTestBaseline, escalateBrokenClean, finalStateWorseThanBaseline, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
 import { enumerateComparisonMutations } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
@@ -270,6 +270,36 @@ export function pristineTargetContent(state: AgentState, targetPath: string): st
 }
 
 /**
+ * Run-level pristine snapshot for the final-state guard. Walks turn history and,
+ * for every file the agent ever applied an edit to, recovers the content it had
+ * BEFORE the agent's first edit (the earliest applyResult's `originalContent`)
+ * — the whole-run generalization of {@link pristineTargetContent}. Files whose
+ * first applied edit had no `originalContent` are brand-NEW (the agent created
+ * them), returned separately so the guard can DELETE rather than restore them.
+ * Restoring `originals` + deleting `created` returns the working tree to exactly
+ * the state the agent found it in. Pure; exported for testing.
+ */
+export function pristineRunSnapshot(state: AgentState): {
+  originals: Map<string, string>;
+  created: string[];
+} {
+  const originals = new Map<string, string>();
+  const created = new Set<string>();
+  const seen = new Set<string>();
+  for (const turn of state.turns) {
+    for (const r of turn.applyResults) {
+      if (r.status !== "applied") continue;
+      const key = r.effectivePath ?? r.filePath;
+      if (seen.has(key)) continue; // first edit per path wins — it holds the pristine state
+      seen.add(key);
+      if (r.originalContent !== undefined) originals.set(key, r.originalContent);
+      else created.add(key); // brand-new file: no pre-edit content existed
+    }
+  }
+  return { originals, created: [...created] };
+}
+
+/**
  * Recover the model's MOST-RECENT applied content for the target from turn history
  * (the `newContent` of the last turn that edited `targetPath`), even if that edit
  * was subsequently REVERTED off disk for regressing green tests. This is the mirror
@@ -414,6 +444,59 @@ async function runStatementRepair(
     await writeFileFn(targetRel, current);
   }
   return null;
+}
+
+/**
+ * Final-state regression guard (SMALLCODE_FINAL_STATE_GUARD). Runs LAST, after the
+ * model loop and every repair pass, only when the run ended UNSOLVED. Recaptures
+ * the full test baseline on the FINAL disk state and, if the repo is strictly
+ * WORSE than the run-start baseline, reverts every file the agent touched to its
+ * pristine pre-model content and deletes any brand-new files it created — the
+ * "never leave the repo worse than found" guarantee that dogfooding exposed as
+ * missing (a wandering/partial run could exit with more red than it started).
+ *
+ * Eval-neutral by construction: it fires only on unsolved runs and restores the
+ * seeded-bug START state, so an unsolved trial stays unsolved (pass/fail
+ * unchanged) — it removes broken residue, it never manufactures a pass. After
+ * reverting it recaptures once to CONFIRM the restore reached ≤ baseline and logs
+ * the honest before/after. Records `state.finalStateReverted` on a real revert.
+ * Returns true iff it reverted. Deterministic; model-agnostic.
+ */
+export async function runFinalStateGuard(
+  state: AgentState,
+  testBaseline: TestBaseline,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+): Promise<boolean> {
+  // No test signal at baseline → nothing to compare a "worse" against.
+  if (!testBaseline.hadAnyTests) return false;
+
+  const finalState = captureTestBaseline(state.repoRoot);
+  const { worse, newFailures } = finalStateWorseThanBaseline(testBaseline, finalState);
+  if (!worse) return false;
+
+  const { originals, created } = pristineRunSnapshot(state);
+  if (originals.size === 0 && created.length === 0) return false; // agent changed nothing on disk
+
+  await revertFiles(originals, writeFileFn);
+  for (const rel of created) {
+    const abs = safeResolve(state.repoRoot, rel);
+    if (abs !== null) await rm(abs, { force: true });
+  }
+
+  const restored = captureTestBaseline(state.repoRoot);
+  console.error(
+    `[final-state-guard] reverted ${originals.size + created.length} file(s): run ended UNSOLVED and worse than baseline ` +
+      `(red ${testBaseline.redCount}→${finalState.redCount}${newFailures.length ? `, new failures: ${newFailures.join(", ")}` : ""}). ` +
+      `Restored to pristine (red now ${restored.redCount}).`,
+  );
+
+  state.finalStateReverted = {
+    newFailures,
+    startRed: testBaseline.redCount,
+    endRed: finalState.redCount,
+    filesRestored: originals.size + created.length,
+  };
+  return true;
 }
 
 export async function runLoop(
@@ -1171,6 +1254,19 @@ export async function runLoop(
         timestamp: Date.now(),
         mutationRepair: { label: repaired.label, line: repaired.line, attempts: repaired.attempts },
       } as TurnRecord);
+      await saveState(state, statePath);
+    }
+  }
+
+  // Final-state regression guard (SMALLCODE_FINAL_STATE_GUARD, default off). Runs
+  // absolutely last, only when the run is still UNSOLVED after the model loop AND
+  // every repair pass: if the end-of-run disk state is strictly worse than the
+  // run-start baseline, revert every touched file to pristine so the run can
+  // never leave the repo worse than it found it. No-op on solved runs (green
+  // disk is never worse) and on unsolved-but-not-worse runs (partial progress is
+  // preserved). Eval-neutral: an unsolved trial stays unsolved either way.
+  if (env.finalStateGuard && !state.verified) {
+    if (await runFinalStateGuard(state, testBaseline, writeFileFn)) {
       await saveState(state, statePath);
     }
   }
