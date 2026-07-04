@@ -175,6 +175,21 @@ export function buildTurnPrompt(
       parts.push("```");
     }
 
+    // SMALLCODE_RAD_HINT: the model's last edit left a read-after-delete ordering
+    // bug (`X.delete(K); X.set(K, X.get(K))`) on the locked target — it reads the
+    // key AFTER deleting it, so it re-inserts undefined. Surface the precomputed
+    // hint (leading) plus one directive so the MODEL reorders the read before the
+    // delete. Only rendered when the diagnostic block renders (renderFailure gate
+    // + not answerNow), same as the BUG LOCATION block above.
+    if (failingTurn!.readAfterDelete) {
+      const rad = failingTurn!.readAfterDelete;
+      parts.push(`\n## STATEMENT ORDER BUG — reads a deleted key`);
+      parts.push(rad.hint);
+      parts.push(
+        `Read the value into a variable BEFORE the \`delete\`, then re-set from that variable — do not call \`.get()\` after \`.delete()\`.`,
+      );
+    }
+
     // Off-task-drift re-anchor (dogfood #1 blocker): a confident single edit
     // target + a still-failing test is the strongest signal the harness has that
     // this turn should stay on ONE file. The loop (loop.ts) already refuses to
