@@ -8,6 +8,7 @@ import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
+import { checkNewImports, formatImportRejection } from "@/verify/import-check.ts";
 import { captureTestBaseline, escalateBrokenClean, finalStateWorseThanBaseline, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
 import { enumerateComparisonMutations } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
@@ -826,6 +827,42 @@ export async function runLoop(
         output: "",
         error: EXPLORE_REJECT_MESSAGE,
       });
+    }
+
+    // SMALLCODE_IMPORT_GATE (Lever 2, default off): reject HALLUCINATED imports
+    // BEFORE the oracle. For each FILE:/PATCH: edit that landed on an existing
+    // source file, resolve the specifiers the edit INTRODUCED against ground
+    // truth (package.json deps + node_modules + the filesystem). Any that don't
+    // resolve (the dogfood `std/strings` invention) revert that file to its
+    // pre-edit content and feed the model a targeted "does not resolve; available
+    // deps: …" message — a crisper, earlier signal than R4's post-test-run
+    // "Cannot find module", which the model looped on. Only new imports on an
+    // existing file are checked; brand-new files (no originalContent) and test
+    // files are skipped.
+    if (env.importGate && applyResults.length > 0) {
+      for (const r of applyResults) {
+        if (r.status !== "applied" || r.newContent === undefined || r.originalContent === undefined) continue;
+        const rel = r.effectivePath ?? r.filePath;
+        if (isTestFilePath(rel)) continue;
+        const check = await checkNewImports(r.originalContent, r.newContent, rel, state.repoRoot);
+        if (check.unresolved.length === 0) continue;
+        // Ground the edit out: restore the pre-edit content so the next turn does
+        // not build on a non-resolving import, and the oracle sees pristine.
+        try {
+          await writeFileFn(rel, r.originalContent);
+        } catch {
+          // Restore failure is non-fatal — leave the edit and let R4 catch it.
+        }
+        console.error(
+          `[import-gate] reverted ${rel}: unresolved import(s) ${check.unresolved.join(", ")}.`,
+        );
+        toolResults.push({
+          name: "write_file",
+          success: false,
+          output: "",
+          error: formatImportRejection(rel, check),
+        });
+      }
     }
 
     // The `write_file` TOOL call writes straight to disk (tools.ts) and — unlike
