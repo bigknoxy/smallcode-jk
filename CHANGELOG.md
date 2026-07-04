@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.7.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.6.0...v1.7.0) (2026-07-04)
+
+
+### Features
+
+* **agent:** phase-gated tool access (P0[#2](https://github.com/bigknoxy/smallcode-jk/issues/2), opt-in SMALLCODE_PHASE_GATE, default off) ([#96](https://github.com/bigknoxy/smallcode-jk/issues/96)) ([f4b69e9](https://github.com/bigknoxy/smallcode-jk/commit/f4b69e9ba80d0506df7caa7543bd5ae3751cf2d5))
+* **agent:** R2 upper-bound probe — SMALLCODE_R2_FORCE_LINE; proves localization moves the mri floor ([#106](https://github.com/bigknoxy/smallcode-jk/issues/106)) ([4508ae1](https://github.com/bigknoxy/smallcode-jk/commit/4508ae1b6f56b6d2921dc9225addfa67cd4d3f60))
+* **cli:** single-shot escalate-on-failure — retry a bigger local model when the small one fails ([#89](https://github.com/bigknoxy/smallcode-jk/issues/89)) ([33d374b](https://github.com/bigknoxy/smallcode-jk/commit/33d374bd7097c8c3031552dbc1f20ba1a5223d46))
+* **eval:** behavioral fingerprinting — catch cost drift invisible to pass@k (P1[#4](https://github.com/bigknoxy/smallcode-jk/issues/4)) ([#99](https://github.com/bigknoxy/smallcode-jk/issues/99)) ([e75428b](https://github.com/bigknoxy/smallcode-jk/commit/e75428b802b9c4589ac4e34b7d0cc919ec52899f))
+* **eval:** eval run --save-transcripts — persist per-trial transcripts ([#95](https://github.com/bigknoxy/smallcode-jk/issues/95)) ([#102](https://github.com/bigknoxy/smallcode-jk/issues/102)) ([3ed3025](https://github.com/bigknoxy/smallcode-jk/commit/3ed3025c783ca2fe76cb98d26560f9cec961c368))
+* **eval:** lucky-pass audit — model-solved vs harness-rescued attribution + first audit findings ([#114](https://github.com/bigknoxy/smallcode-jk/issues/114)) ([b1146ec](https://github.com/bigknoxy/smallcode-jk/commit/b1146ecaeb01cc53835fb989e6b4f43755b5b776))
+* **eval:** lucky-pass process-quality scoring over stored transcripts (P0) ([#93](https://github.com/bigknoxy/smallcode-jk/issues/93)) ([f4cf2dc](https://github.com/bigknoxy/smallcode-jk/commit/f4cf2dc4556a0f143f8736e6c192bad13f642fda))
+* **eval:** realrepo hard tier — 8 de-saturating tasks (multi-file localization + multi-line structural) ([#112](https://github.com/bigknoxy/smallcode-jk/issues/112)) ([4c49121](https://github.com/bigknoxy/smallcode-jk/commit/4c4912111b06fdf4250fc6f7cafa0682eccf2552))
+* **eval:** repair-path telemetry — measure the edit-format payoff ceiling (baseline 0%) ([#98](https://github.com/bigknoxy/smallcode-jk/issues/98)) ([1e153da](https://github.com/bigknoxy/smallcode-jk/commit/1e153da09321795406d970e470f2a57567712fc0))
+* **repair:** crack the lru-recency floor — model-side RAD hint + harness statement-repair ([#115](https://github.com/bigknoxy/smallcode-jk/issues/115)) ([9d42c0d](https://github.com/bigknoxy/smallcode-jk/commit/9d42c0d603f8228e3f789a22bbc028aaaf97b1da))
+* **repair:** extend operator-mutation repair to logical (&&↔||) + arithmetic (+↔-) ([#110](https://github.com/bigknoxy/smallcode-jk/issues/110)) ([24cb1fb](https://github.com/bigknoxy/smallcode-jk/commit/24cb1fb19f986bd2547732aee7abd25a7949c949))
+* **repair:** flip SMALLCODE_MUTATION_REPAIR default ON — regression-clean, realrepo 0.88→0.94 ([#109](https://github.com/bigknoxy/smallcode-jk/issues/109)) ([6fb6739](https://github.com/bigknoxy/smallcode-jk/commit/6fb6739aed989f1e25d653129e229874be0194b4))
+* **repair:** harness-side operator-mutation repair — cracks the mri floor 0.00→0.88 (CI-significant) ([#108](https://github.com/bigknoxy/smallcode-jk/issues/108)) ([08e44a0](https://github.com/bigknoxy/smallcode-jk/commit/08e44a09b910bbe9d618770d67343d1b9ed34438))
+* **repair:** mutate the pristine pre-model file first — lifts mri 0.70→1.00 ([#111](https://github.com/bigknoxy/smallcode-jk/issues/111)) ([7d8cdc0](https://github.com/bigknoxy/smallcode-jk/commit/7d8cdc0274d41cfdc396555c51b1264070b6af1e))
+
+
+### Bug Fixes
+
+* **cli:** apply edits headlessly instead of auto-declining when requireApproval is on ([#91](https://github.com/bigknoxy/smallcode-jk/issues/91)) ([#100](https://github.com/bigknoxy/smallcode-jk/issues/100)) ([4d77249](https://github.com/bigknoxy/smallcode-jk/commit/4d772498657c61a1b31c27a1efd1d9195ed4611b))
+* **eval:** lucky-pass — clean diagnose→fix is Ideal, not Lucky (dequal forensic) ([#105](https://github.com/bigknoxy/smallcode-jk/issues/105)) ([40f1379](https://github.com/bigknoxy/smallcode-jk/commit/40f1379e10b164e49ce985dd6a5448d1f1a6309f))
+* **eval:** lucky-pass — clean instant solves are Ideal, not Lucky ([#94](https://github.com/bigknoxy/smallcode-jk/issues/94)) ([d13eb71](https://github.com/bigknoxy/smallcode-jk/commit/d13eb71d9a78964c80ab845b8191a1fffc52e4e5))
+* **eval:** run real trials in eval run/gate — --save-transcripts works from CLI ([#95](https://github.com/bigknoxy/smallcode-jk/issues/95) follow-up) ([#104](https://github.com/bigknoxy/smallcode-jk/issues/104)) ([7f8e377](https://github.com/bigknoxy/smallcode-jk/commit/7f8e3772e86122a72fe267d181cc48739ab42986))
+
 ## [1.6.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.5.0...v1.6.0) (2026-07-02)
 
 
