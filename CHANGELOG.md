@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.7.0...v1.8.0) (2026-07-04)
+
+
+### Features
+
+* **repair:** default SMALLCODE_RAD_HINT on — read-after-delete hint validated suite-wide ([#116](https://github.com/bigknoxy/smallcode-jk/issues/116)) ([20d7144](https://github.com/bigknoxy/smallcode-jk/commit/20d71442bbcc2c6340fae239eeefabe7c93452f6))
+
 ## [1.7.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.6.0...v1.7.0) (2026-07-04)
 
 
