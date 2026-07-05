@@ -131,7 +131,8 @@ describe("Lever 2 — import gate through runLoop", () => {
   });
 
   it("leaves the hallucinated import on disk when the gate is OFF (R4 handles it later)", async () => {
-    delete process.env["SMALLCODE_IMPORT_GATE"];
+    // Default is ON since 2026-07-05, opt out explicitly (unset would now mean ON).
+    process.env["SMALLCODE_IMPORT_GATE"] = "0";
     await setupRepo();
     const { state, deps, statePath } = makeRun([
       `FILE: ${TARGET}\n\`\`\`ts\n${HALLUCINATED}\`\`\`\nTOOL: finish {"summary": "used std/strings"}`,

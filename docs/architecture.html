@@ -559,8 +559,11 @@ flowchart TD
       </div>
       <p>
         <strong style="color: var(--text-primary);">Static import-resolution gate</strong>
-        (<code>SMALLCODE_IMPORT_GATE</code>, opt-in — Lever 2, the proactive fix for the dogfood
-        <code>std/strings</code> hallucinated-import failure). A small model invents a module that does not
+        (<code>SMALLCODE_IMPORT_GATE</code>, <strong>default ON since 2026-07-05</strong>, set <code>=0</code>
+        to disable — Lever 2, the proactive fix for the dogfood
+        <code>std/strings</code> hallucinated-import failure; promoted after live-fire validation: caught +
+        reverted a real 3B hallucinated <code>slugify</code> import, zero false-fires, with the global-cache
+        resolver fix). A small model invents a module that does not
         exist, and the only feedback — R4's <code>Cannot find module</code> — arrives only after a full test
         run, and only when a test imports the edited file, so the model loops re-emitting the same invented
         import. This gate runs right after an edit lands and before the oracle: it extracts the import
@@ -578,8 +581,10 @@ flowchart TD
       </p>
       <p>
         <strong style="color: var(--text-primary);">Final-state regression guard</strong>
-        (<code>SMALLCODE_FINAL_STATE_GUARD</code>, opt-in — the "never leave the repo worse than you found
-        it" guarantee that dogfooding exposed as missing). The per-turn revert above catches regressions
+        (<code>SMALLCODE_FINAL_STATE_GUARD</code>, <strong>default ON since 2026-07-05</strong>, set
+        <code>=0</code> to disable — the "never leave the repo worse than you found
+        it" guarantee that dogfooding exposed as missing; promoted after validation: eval-neutral, realrepo
+        subset pooled pass@1 0.90 = baseline). The per-turn revert above catches regressions
         <em>during</em> the loop, but it cannot roll back a brand-new file the model created (no pre-edit
         content to restore) and does not re-check the whole-run end state. So a wandering / partial run
         could exit with more red on disk than it started. This guard runs absolutely last — after the model
@@ -1497,7 +1502,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-04</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-05</span>
   </div>
 </footer>
 
