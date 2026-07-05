@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.8.0...v1.9.0) (2026-07-05)
+
+
+### Features
+
+* **config:** default-on for final-state guard + import gate (validated) ([#121](https://github.com/bigknoxy/smallcode-jk/issues/121)) ([43afe08](https://github.com/bigknoxy/smallcode-jk/commit/43afe0831245edd346c4b3666cdc03a091479006))
+* **repair:** final-state regression guard — never leave the repo worse than found (opt-in) ([#118](https://github.com/bigknoxy/smallcode-jk/issues/118)) ([2895fe9](https://github.com/bigknoxy/smallcode-jk/commit/2895fe98c5a7667e90223ab8d83bed15a088f2b8))
+* **verify:** static import-resolution gate — kill hallucinated imports before they cost a turn (opt-in) ([#119](https://github.com/bigknoxy/smallcode-jk/issues/119)) ([5894ac3](https://github.com/bigknoxy/smallcode-jk/commit/5894ac37dea5509f4d63eb6305afc203bb159632))
+
 ## [1.8.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.7.0...v1.8.0) (2026-07-04)
 
 
