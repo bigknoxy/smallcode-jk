@@ -171,3 +171,38 @@ describe("env.targetLock (default ON)", () => {
     expect(env.targetLock).toBe(false);
   });
 });
+
+// Default ON since 2026-07-05 (promoted after validation): eval-neutral,
+// realrepo subset pooled pass@1 0.90 = baseline.
+describe("env.finalStateGuard (default ON since 2026-07-05)", () => {
+  it("unset -> true", () => {
+    delete process.env["SMALLCODE_FINAL_STATE_GUARD"];
+    expect(env.finalStateGuard).toBe(true);
+  });
+  it('"0" -> false', () => {
+    process.env["SMALLCODE_FINAL_STATE_GUARD"] = "0";
+    expect(env.finalStateGuard).toBe(false);
+  });
+  it('"1" -> true', () => {
+    process.env["SMALLCODE_FINAL_STATE_GUARD"] = "1";
+    expect(env.finalStateGuard).toBe(true);
+  });
+});
+
+// Default ON since 2026-07-05 (promoted after validation): live-fire caught +
+// reverted a real 3B hallucinated `import ... from "slugify"`, zero
+// false-fires, with the global-cache resolver fix.
+describe("env.importGate (default ON since 2026-07-05)", () => {
+  it("unset -> true", () => {
+    delete process.env["SMALLCODE_IMPORT_GATE"];
+    expect(env.importGate).toBe(true);
+  });
+  it('"0" -> false', () => {
+    process.env["SMALLCODE_IMPORT_GATE"] = "0";
+    expect(env.importGate).toBe(false);
+  });
+  it('"1" -> true', () => {
+    process.env["SMALLCODE_IMPORT_GATE"] = "1";
+    expect(env.importGate).toBe(true);
+  });
+});
