@@ -676,7 +676,7 @@
         <div class="hero__stat-callout__value">0.828</div>
         <div class="hero__stat-callout__text">
           <strong>HumanEval-TS pass@1</strong>
-          Full 159 problems, k=3 (VibeThinker-3B origin baseline); qwen-7b realrepo (12 tasks, n=10): 0.94 with harness operator-mutation repair (default on), 0.88 model-only
+          Full 159 problems, k=3 (VibeThinker-3B origin baseline); qwen-7b realrepo (22 tasks, n=10, pooled n=220): 0.94 [.91–.97] with harness operator-mutation repair (default on), 0.90 [.85–.93] model-only
         </div>
       </div>
 
@@ -739,9 +739,9 @@
           <strong style="color: var(--text-primary);">0.828 HumanEval-TS pass@1</strong> baseline and revealed a
           "think-only" reasoning spiral (model burns its generation budget inside &lt;think&gt;, emits no code, 0/10 on some real-lib bugs).
           We confirmed the HARNESS, not the model, does the work by swapping to qwen2.5-coder:3b — same size, no think-only, 30-60x faster —
-          and rerunning the realrepo suite (12 tasks, n=10): <strong style="color: var(--text-primary);">qwen-3b 0.70, qwen-7b 0.88</strong> model-only.
+          and rerunning the realrepo suite (22 tasks, n=10, pooled n=220): <strong style="color: var(--text-primary);">qwen-3b 0.74 [.68–.80]</strong>, <strong style="color: var(--text-primary);">qwen-7b 0.90 [.85–.93]</strong> — model-only.
           The harness then goes further: deterministic operator-mutation repair (default on) brute-forces the wrong-comparison-operator
-          bug class that <em>no</em> model-side lever cracks, lifting qwen-7b realrepo to <strong style="color: var(--text-primary);">0.94</strong>
+          bug class that <em>no</em> model-side lever cracks, lifting qwen-7b realrepo to <strong style="color: var(--text-primary);">0.94 [.91–.97]</strong>
           (the <code>mri</code> floor task 0.00 → 1.00 — the repair mutates the pristine pre-model file, recovering the trials where the model mangled the target) with zero regression — the harness, not a bigger model, doing the work.
           VibeThinker still supported via <code>SMALLCODE_MODEL=vibethinker-3b</code>.
         </p>
@@ -770,7 +770,7 @@
           <li>GEPA prompt-optimization seam — evolve better prompts automatically</li>
           <li>Offline skill distillation — mine passing sessions into a seed skill block injected alongside the system prompt</li>
           <li>Real-repo eval layer — 22 tasks on vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + a 2-file tinycalc, plus seeded arithmetic/logical operator bugs) with authored bun:test oracles, not only synthetic fixtures; every task integrity-checked by scripts/validate-realrepo-tasks.ts. A hard tier of 8 tasks (2026-07-03) de-saturates the stick — 4 multi-file deep-localization (emitter-off, csv-quote, toposort-cycle, template-trim) + 4 single-file multi-line structural fixes immune to operator-mutation repair (lru-recency, memoize-key, qs-array, semver-prerelease); each has no single obvious file and no single-operator fix. The lru-recency read-after-delete floor (0.13) is since CRACKED to 1.00 by two new levers — SMALLCODE_RAD_HINT (model-side, default on) and SMALLCODE_STATEMENT_REPAIR (harness-side, opt-in)</li>
-          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.70 / 0.88 model-only (12 tasks, n=10; 7b SIGNIFICANT over 3b — the new dset/regexparam tasks are the CI-significant discriminators). The mri-flags task was a hard 0/10 for 3b, 7b AND 32b — a genuine wrong-operator wall no model-side lever cracked — until deterministic operator-mutation repair (default on) solved it, lifting qwen-7b realrepo to 0.94 overall</li>
+          <li>Model-agnostic — same harness, VibeThinker-3B &#8594; qwen2.5-coder:3b/7b, realrepo 0.74 [.68–.80] / 0.90 [.85–.93] model-only (22-task 3b-vs-7b, n=10, pooled n=220; 7b SIGNIFICANT over 3b — non-overlapping CIs). The mri-flags task was a hard 0/10 for 3b, 7b AND 32b — a genuine wrong-operator wall no model-side lever cracked — until deterministic operator-mutation repair (default on) solved it (mri 0.00 → 1.00 for both), lifting qwen-3b realrepo to 0.78 [.73–.84] and qwen-7b to 0.94 [.91–.97] overall</li>
         </ul>
       </div>
     </div>
@@ -1008,21 +1008,21 @@
           </tr>
           <tr>
             <td class="td-name">qwen2.5-coder:3b</td>
-            <td>realrepo (12 tasks, n=10)</td>
-            <td class="td-pass">0.70</td>
-            <td>Vendored real libraries (lukeed/klona, dequal, mri, clsx, dset, regexparam + tinycalc) with authored bun:test oracles. 11/12 nonzero.</td>
+            <td>realrepo (22 tasks, n=10, pooled n=220) — <strong>default harness</strong></td>
+            <td class="td-pass">0.78 [.73–.84]</td>
+            <td>Vendored real libraries with authored bun:test oracles. Default harness (operator-mutation repair on): 0.78 [.73–.84], all 22 tasks nonzero (repair cracks mri 0.00 → 1.00). Model-only (repair off): 0.74 [.68–.80], 20/22 nonzero (mri + dequal-multifile floor at 0.00). The smaller arm of the 3b-vs-7b comparison.</td>
           </tr>
           <tr>
             <td class="td-name">qwen2.5-coder:7b</td>
-            <td>realrepo (12 tasks, n=10) — model-only</td>
-            <td class="td-pass">0.88</td>
-            <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs); cracks dset/regexparam. mri-flags 0.10 here (wrong-operator wall, model-only).</td>
+            <td>realrepo (22 tasks, n=10, pooled n=220) — model-only</td>
+            <td class="td-pass">0.90 [.85–.93]</td>
+            <td>Larger arm, same harness, operator-mutation repair OFF. Only mri-flags floors (0.00, the wrong-operator wall, model-only); 21/22 tasks nonzero. Point 0.90 [.85–.93].</td>
           </tr>
           <tr>
             <td class="td-name">qwen2.5-coder:7b</td>
-            <td>realrepo (12 tasks, n=10) — <strong>default harness</strong></td>
-            <td class="td-pass">0.94</td>
-            <td>With deterministic operator-mutation repair (default on): brute-forces the wrong-operator bug class no model-side lever cracks. Lifts mri-flags 0.00 → 1.00 (mutating the pristine pre-model file recovers trials the model mangled) and the suite 0.88 → 0.94+ [.90–.97], all tasks nonzero, zero regression, no false-solves (full-green oracle gate).</td>
+            <td>realrepo (22 tasks, n=10, pooled n=220) — <strong>default harness</strong></td>
+            <td class="td-pass">0.94 [.91–.97]</td>
+            <td>With deterministic operator-mutation repair (default on): brute-forces the wrong-operator bug class no model-side lever cracks. Lifts mri-flags 0.00 → 1.00 (mutating the pristine pre-model file recovers trials the model mangled) and the suite 0.90 [.85–.93] → 0.94 [.91–.97], all 22 tasks nonzero, pass@10 1.00, zero regression, no false-solves (full-green oracle gate). At n=10 the mri task-level lift is unambiguous; the pooled suite CIs overlap (raise n to resolve the 4-pt suite delta).</td>
           </tr>
         </tbody>
       </table>

@@ -419,8 +419,8 @@ graph TD
         fake-green (it requires a full-green oracle verdict), and it only runs on runs that already failed,
         so it can never slow down or destabilize a successful one. A/B (7b, no probe): it lifted the mri
         floor from <strong>0.00 → 0.88</strong> (non-overlapping CIs — significant), took the realrepo suite
-        from 0.90 to ~0.95, and nudged edit-reliability 0.99 → 1.00 with zero regression — which is why it is
-        now on by default.
+        from 0.90 [.85–.93] to 0.94 [.91–.97] (22-task, 7b, n=10, pooled n=220), and nudged edit-reliability
+        0.99 → 1.00 with zero regression — which is why it is now on by default.
       </p>
       <p>
         <strong style="color: var(--text-primary);">Read-after-delete repair</strong>
@@ -1171,15 +1171,15 @@ flowchart TD
           <tbody>
             <tr>
               <td class="td-name">qwen2.5-coder:3b</td>
-              <td>realrepo (12 tasks, n=10)</td>
-              <td><span class="badge badge-green">0.70</span></td>
-              <td>Recommended production model. Aces klona tasks (10/10 1-turn) where VibeThinker was 0/10. 11/12 nonzero.</td>
+              <td>realrepo (22 tasks, n=10, pooled n=220)</td>
+              <td><span class="badge badge-green">0.78 [.73–.84]</span></td>
+              <td>Recommended production model. <strong>Default harness</strong> (operator-mutation repair on): 0.78 [.73–.84], all 22 tasks nonzero (repair cracks mri 0.00 → 1.00). <strong>Model-only</strong> (repair off): 0.74 [.68–.80], 20/22 nonzero (mri + dequal-multifile floor). Aces klona (10/10 1-turn) where VibeThinker was 0/10.</td>
             </tr>
             <tr>
               <td class="td-name">qwen2.5-coder:7b</td>
-              <td>realrepo (12 tasks, n=10)</td>
-              <td><span class="badge badge-green">0.88</span></td>
-              <td>Larger arm, same harness — SIGNIFICANT over 3b (non-overlapping CIs). Cracks dset/regexparam; mri-flags 0.10 model-only (wrong-operator wall). With operator-mutation repair (default on) the default 7b harness reaches 0.94+ overall and mri 0.00 → 1.00 (mutating the pristine pre-model file recovers trials the model mangled).</td>
+              <td>realrepo (22 tasks, n=10, pooled n=220)</td>
+              <td><span class="badge badge-green">0.94 [.91–.97]</span></td>
+              <td>Current full-suite baseline. <strong>Default harness</strong> (operator-mutation repair on): 0.94 [.91–.97], all 22 tasks nonzero, pass@10 1.00. <strong>Model-only</strong> (repair off): 0.90 [.85–.93], only mri-flags floors (0.00, the wrong-operator wall). Repair lifts mri 0.00 → 1.00; at n=10 the mri task lift is unambiguous while the pooled 0.90→0.94 suite delta's CIs overlap. The 12-task 0.88 model-only / SIGNIFICANT-over-3b result is the earlier 3b-vs-7b A/B.</td>
             </tr>
             <tr>
               <td class="td-name">qwen-3b / qwen-7b</td>
@@ -1382,7 +1382,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.70 (12 tasks, n=10). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.78 [.73–.84] default harness / 0.74 [.68–.80] model-only (22 tasks, n=10, pooled n=220). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder:7b</code></td>
@@ -1393,7 +1393,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.88 (12 tasks, n=10) — SIGNIFICANT over 3b. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.94 [.91–.97] default harness / 0.90 [.85–.93] model-only (22 tasks, n=10, pooled n=220). top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>vibethinker-3b</code></td>
@@ -1502,7 +1502,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-05</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-06</span>
   </div>
 </footer>
 
