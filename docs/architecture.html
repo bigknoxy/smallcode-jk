@@ -1171,9 +1171,9 @@ flowchart TD
           <tbody>
             <tr>
               <td class="td-name">qwen2.5-coder:3b</td>
-              <td>realrepo (12 tasks, n=10)</td>
-              <td><span class="badge badge-green">0.70</span></td>
-              <td>Recommended production model. Aces klona tasks (10/10 1-turn) where VibeThinker was 0/10. 11/12 nonzero.</td>
+              <td>realrepo (22 tasks, n=10, pooled n=220)</td>
+              <td><span class="badge badge-green">0.78 [.73–.84]</span></td>
+              <td>Recommended production model. <strong>Default harness</strong> (operator-mutation repair on): 0.78 [.73–.84], all 22 tasks nonzero (repair cracks mri 0.00 → 1.00). <strong>Model-only</strong> (repair off): 0.74 [.68–.80], 20/22 nonzero (mri + dequal-multifile floor). Aces klona (10/10 1-turn) where VibeThinker was 0/10.</td>
             </tr>
             <tr>
               <td class="td-name">qwen2.5-coder:7b</td>
@@ -1382,7 +1382,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.70 (12 tasks, n=10). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.78 [.73–.84] default harness / 0.74 [.68–.80] model-only (22 tasks, n=10, pooled n=220). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder:7b</code></td>

@@ -326,7 +326,7 @@ smallcode works with any model served on an OpenAI-compatible `/v1/chat/completi
 
 | Model ID | Context window | Temperature | Reasoning tags | Notes |
 |---|---|---|---|---|
-| `qwen2.5-coder:3b` | 32,768 tokens | 0.7 | — | **Recommended.** Apache-2.0. No think-only spiral. 30-60x faster than VibeThinker. realrepo pass@1: 0.52. Aces klona tasks where VibeThinker scored 0/10. |
+| `qwen2.5-coder:3b` | 32,768 tokens | 0.7 | — | **Recommended.** Apache-2.0. No think-only spiral. 30-60x faster than VibeThinker. realrepo pass@1: **0.78 [.73–.84]** default harness / 0.74 [.68–.80] model-only (22 tasks, n=10, pooled n=220). Aces klona tasks where VibeThinker scored 0/10. |
 | `qwen2.5-coder:7b` | 32,768 tokens | 0.7 | — | **Recommended (larger).** Apache-2.0. realrepo pass@1: **0.94 [.91–.97]** default harness / 0.90 [.85–.93] model-only (22 tasks, n=10, pooled n=220). Bigger model arm of the 3-way comparison. |
 | `qwen2.5-coder-14b` | 131,072 tokens | 0.7 | — | Highest quality of built-in profiles. Supports JSON schema and grammar-constrained output. |
 | `vibethinker-3b` | 65,536 tokens | 1.0 | `<think>` / `</think>` | Origin baseline. MIT license. Produced the 0.828 HumanEval-TS result. Think-only spiral on some real-lib bugs (0/10 klona). Still supported via `SMALLCODE_MODEL=vibethinker-3b`. |
@@ -335,7 +335,7 @@ Swap the active model per-run without editing config via `SMALLCODE_MODEL` (e.g.
 
 ### Why qwen?
 
-We built smallcode on VibeThinker-3B — it produced the 0.828 HumanEval-TS baseline and revealed a "think-only" reasoning spiral: the model burns its generation budget inside `<think>`, emits no code, scoring 0/10 on some real-lib bugs. We confirmed the HARNESS, not the model, does the work by swapping to qwen2.5-coder:3b — same 3B size, no think-only, 30-60x faster — and rerunning the realrepo suite: qwen-3b 0.52, qwen-7b 0.73 on the original suite; the current 22-task suite (n=10, pooled n=220) puts qwen-7b at **0.94 [.91–.97]** default harness / 0.90 [.85–.93] model-only. VibeThinker-3B remains the origin story and is still fully supported.
+We built smallcode on VibeThinker-3B — it produced the 0.828 HumanEval-TS baseline and revealed a "think-only" reasoning spiral: the model burns its generation budget inside `<think>`, emits no code, scoring 0/10 on some real-lib bugs. We confirmed the HARNESS, not the model, does the work by swapping to qwen2.5-coder:3b — same 3B size, no think-only, 30-60x faster — and rerunning the realrepo suite: qwen-3b 0.52, qwen-7b 0.73 on the original suite; the current 22-task suite (n=10, pooled n=220) puts qwen-3b at **0.78 [.73–.84]** default harness / 0.74 [.68–.80] model-only and qwen-7b at **0.94 [.91–.97]** default harness / 0.90 [.85–.93] model-only. VibeThinker-3B remains the origin story and is still fully supported.
 
 ---
 
