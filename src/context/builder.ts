@@ -370,16 +370,24 @@ export async function buildContext(
     let candidates = scoredFiles.filter((s) => s.score > 0 && !isTestPath(s.fileMap.path));
     // Decoy tie-breaker: when MORE than one source file could be the target
     // (the only case this matters — single-candidate repos are unaffected),
-    // prefer the file(s) the tests actually import. Layered ON TOP of the
-    // existing lexical order via a stable partition, so it only promotes an
-    // import-backed candidate above an equally/again-scored decoy; it never
-    // reorders within either group and never demotes a uniquely-scored winner.
+    // prefer the file(s) the tests actually import. This is a TRUE tie-break —
+    // it reorders ONLY within the top score tier, so it can promote an
+    // import-backed file above an equally-scored decoy but NEVER above a
+    // strictly higher-scored winner. Restricting to the top tier is what stops
+    // a test-imported barrel/wrapper (e.g. src/index.js re-exporting parseLine)
+    // from demoting the lower-level module that actually DEFINES the buggy
+    // function and carries the dominant PATH_MENTION score (src/lexer.js).
     if (candidates.length > 1) {
       const imported = await findTestImportedPaths(repoMap, repoRoot);
       if (imported.size > 0) {
-        const inTests = candidates.filter((c) => imported.has(c.fileMap.path));
-        const rest = candidates.filter((c) => !imported.has(c.fileMap.path));
-        if (inTests.length > 0) candidates = [...inTests, ...rest];
+        const topScore = candidates[0]!.score; // candidates are score-sorted desc
+        const topTier = candidates.filter((c) => c.score === topScore);
+        if (topTier.length > 1) {
+          const lower = candidates.filter((c) => c.score !== topScore);
+          const inTests = topTier.filter((c) => imported.has(c.fileMap.path));
+          const rest = topTier.filter((c) => !imported.has(c.fileMap.path));
+          if (inTests.length > 0) candidates = [...inTests, ...rest, ...lower];
+        }
       }
     }
     for (const cand of candidates) {

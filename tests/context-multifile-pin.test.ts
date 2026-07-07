@@ -47,6 +47,24 @@ describe("multi-file decoy disambiguation: dequal", () => {
   });
 });
 
+describe("barrel-wrapper disambiguation: csv-quote", () => {
+  // src/index.js is a thin wrapper: it imports parseLine from src/lexer.js and
+  // defines `parse` (map parseLine over lines). The bug + the fix live in
+  // src/lexer.js's parseLine. But the tests import ../src/index.js, so the
+  // test-import tie-breaker used to front-load index.js ahead of lexer.js —
+  // EVEN THOUGH the query names src/lexer.js verbatim (dominant PATH_MENTION
+  // score). The tie-breaker must stay a TRUE tie-break: never demote the
+  // uniquely-highest-scored, path-named winner below a lower-scored barrel.
+  const CSV_QUERY =
+    "In src/lexer.js, fix parseLine() to handle RFC-4180 escaped double-quotes " +
+    'inside a quoted field (a "" pair is one literal ")';
+
+  it("pins src/lexer.js (defines the buggy parseLine), NOT the test-imported src/index.js wrapper", async () => {
+    const pin = await pinFor("realrepo-csv-quote_1", CSV_QUERY);
+    expect(pin).toBe("src/lexer.js");
+  });
+});
+
 describe("no regression on existing fixtures", () => {
   it("single-file klona-array still pins src/index.js", async () => {
     const pin = await pinFor(
