@@ -422,6 +422,7 @@ export async function buildContext(
         format: chooseEditFormat(cand.fileMap.lineCount),
         ...(functionName ? { functionName } : {}),
         ...(functionLineCount !== undefined ? { functionLineCount } : {}),
+        ...(targetSym ? { functionStartLine: targetSym.line, functionEndLine: targetSym.endLine } : {}),
       };
       break;
     }

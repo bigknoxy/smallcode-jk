@@ -10,7 +10,7 @@ import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
 import { checkNewImports, formatImportRejection } from "@/verify/import-check.ts";
 import { captureTestBaseline, escalateBrokenClean, finalStateWorseThanBaseline, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
-import { enumerateComparisonMutations } from "@/repair/operator-mutation.ts";
+import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
@@ -376,6 +376,17 @@ async function runOperatorMutationRepair(
       candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
     }
   }
+  // Scope to the locked target function: an operator flip OUTSIDE the bug function
+  // that coincidentally greens a weakly-covered test is not a real fix. When the
+  // function range is unknown, keep every candidate (whole-file fallback).
+  const scoped = scopeMutationsToRange(candidates, state.lockedTargetRange);
+  if (state.lockedTargetRange !== undefined && scoped.length < candidates.length) {
+    console.error(
+      `[mutation-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${candidates.length - scoped.length} out-of-function flip(s) skipped.`,
+    );
+  }
+  candidates.length = 0;
+  candidates.push(...scoped);
   if (candidates.length === 0) return null;
   if (totalAcross > candidates.length) {
     console.error(
@@ -620,6 +631,10 @@ export async function runLoop(
     // drift can no longer relocate the enforcement target.
     if (state.lockedTargetPath === undefined && fixModeBaseline && context.targetFile !== undefined) {
       state.lockedTargetPath = context.targetFile.path;
+      const tf = context.targetFile;
+      if (tf.functionStartLine !== undefined && tf.functionEndLine !== undefined) {
+        state.lockedTargetRange = { startLine: tf.functionStartLine, endLine: tf.functionEndLine };
+      }
     }
     // `env.targetLock` is the escape hatch for a genuine multi-file task that
     // happens to also match fix-mode (SMALLCODE_TARGET_LOCK=0 disables

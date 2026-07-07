@@ -129,6 +129,14 @@ export interface AgentState {
    */
   lockedTargetPath?: string;
   /**
+   * Line span (1-based inclusive) of the LOCKED target function, captured ONCE
+   * alongside `lockedTargetPath` from the same turn's `context.targetFile`. Scopes
+   * operator-mutation repair to the bug function so an out-of-function operator flip
+   * can never be kept as a coincidental green. Absent when the target function was
+   * not identified (repair then falls back to whole-file enumeration).
+   */
+  lockedTargetRange?: { startLine: number; endLine: number };
+  /**
    * Retarget tracking (mis-pin self-correction follow-up): the CURRENT
    * consecutive streak of REJECTED off-target edit attempts, keyed to a
    * single path. When the model keeps attempting the SAME non-locked source
