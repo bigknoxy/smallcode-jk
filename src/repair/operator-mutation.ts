@@ -181,6 +181,10 @@ export function scopeMutationsToRange<T extends { line: number }>(
   items: T[],
   range: LineRange | undefined,
 ): T[] {
-  if (range === undefined) return items;
+  // Always return a FRESH array (never the input reference): callers mutate the
+  // returned list's backing array in place (e.g. `candidates.length = 0` then
+  // re-push), so aliasing the input would self-clear the result. A no-op range
+  // must still yield a distinct copy.
+  if (range === undefined) return [...items];
   return items.filter((m) => m.line >= range.startLine && m.line <= range.endLine);
 }

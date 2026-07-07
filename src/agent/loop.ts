@@ -1242,7 +1242,31 @@ export async function runLoop(
   // deterministic, so the harness brute-forces it: flip each comparison operator
   // in the target file, run the real oracle, keep the first fully-green candidate.
   // Only fires on failing runs, so it never slows a successful one.
-  if (env.mutationRepair && !state.verified && fixModeBaseline && state.lockedTargetPath !== undefined) {
+  // Gate: a compile/load red (missing export/module, syntax error, unresolved
+  // import) can NEVER be satisfied by flipping an operator or hoisting a
+  // statement in the target file — the symbol/parse failure survives every
+  // candidate. Firing anyway churns the full oracle over every flip for nothing
+  // (dogfood 2026-07-07: an add-a-function task whose red was `Export named
+  // 'wilsonCI' not found` burned ~36 suite runs across 2 rungs). Only brute-force
+  // when the baseline red is a genuine assertion/logic failure (loadError false).
+  if (
+    !state.verified &&
+    fixModeBaseline &&
+    state.lockedTargetPath !== undefined &&
+    testBaseline.loadError &&
+    (env.mutationRepair || env.statementRepair)
+  ) {
+    console.error(
+      `[repair] skipped operator/statement repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement flip can satisfy it.`,
+    );
+  }
+  if (
+    env.mutationRepair &&
+    !state.verified &&
+    fixModeBaseline &&
+    state.lockedTargetPath !== undefined &&
+    !testBaseline.loadError
+  ) {
     const repaired = await runOperatorMutationRepair(state, testBaseline, readFileFn, writeFileFn);
     if (repaired !== null) {
       console.error(
@@ -1280,7 +1304,13 @@ export async function runLoop(
   // hoists the read before the delete, runs the real oracle, keeps it if fully
   // green — recorded as a harness rescue (mutationRepair) so pass-quality
   // classification attributes it to the harness, not the model.
-  if (env.statementRepair && !state.verified && fixModeBaseline && state.lockedTargetPath !== undefined) {
+  if (
+    env.statementRepair &&
+    !state.verified &&
+    fixModeBaseline &&
+    state.lockedTargetPath !== undefined &&
+    !testBaseline.loadError
+  ) {
     const repaired = await runStatementRepair(state, testBaseline, readFileFn, writeFileFn);
     if (repaired !== null) {
       console.error(

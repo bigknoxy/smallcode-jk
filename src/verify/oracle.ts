@@ -123,7 +123,7 @@ export function parseRedCount(output: string): number {
  */
 export function hasLoadError(output: string): boolean {
   const cleaned = output.replace(/\x1b\[[0-9;]*m/g, "");
-  return /Cannot find (?:module|package)|error: Cannot find|SyntaxError|Transpilation failed|Parse error|Unhandled error between tests|error: Expected (?:";"|expression|"\)")/i.test(
+  return /Cannot find (?:module|package)|error: Cannot find|SyntaxError|Transpilation failed|Parse error|Unhandled error between tests|Export named .+ not found|error: Expected (?:";"|expression|"\)")/i.test(
     cleaned,
   );
 }

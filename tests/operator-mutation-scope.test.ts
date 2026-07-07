@@ -15,6 +15,19 @@ describe("scopeMutationsToRange", () => {
     expect(result).toEqual(items);
   });
 
+  test("returns a FRESH array even for an undefined range (no aliasing)", () => {
+    // Regression: the caller does `candidates.length = 0; candidates.push(...scoped)`.
+    // If the undefined-range path returned the SAME reference, clearing candidates
+    // would also empty scoped, so the re-push adds nothing and mutation-repair
+    // silently no-ops for any target without a locked function range (the 2026-07-07
+    // dogfood: an operator-fixable bug whose pin had no function range never fired).
+    const items = [{ line: 3 }, { line: 7 }];
+    const scoped = scopeMutationsToRange(items, undefined);
+    expect(scoped).not.toBe(items); // distinct reference
+    items.length = 0; // mutating the input must NOT affect the returned array
+    expect(scoped).toHaveLength(2);
+  });
+
   test("range that excludes everything returns []", () => {
     const items = [{ line: 3 }, { line: 7 }, { line: 12 }, { line: 40 }];
     const result = scopeMutationsToRange(items, { startLine: 100, endLine: 200 });

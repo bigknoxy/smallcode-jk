@@ -12,6 +12,13 @@ describe("R4 hasLoadError — load/compile signatures only", () => {
     expect(hasLoadError("SyntaxError: Unexpected token")).toBe(true);
     expect(hasLoadError("Transpilation failed")).toBe(true);
   });
+  test("detects a missing export (the dogfood 2026-07-07 wilsonCI red)", () => {
+    // A test importing a not-yet-implemented symbol. This must read as a
+    // compile/load error so the operator/statement repair passes SKIP it —
+    // no operator flip in the target can conjure a missing export.
+    expect(hasLoadError("SyntaxError: Export named 'wilsonCI' not found in module")).toBe(true);
+    expect(hasLoadError("Export named 'foo' not found in module '/x/y.ts'")).toBe(true);
+  });
   test("does NOT fire on a normal assertion failure", () => {
     expect(hasLoadError("(fail) adds numbers\nExpected: 5\nReceived: 6\n 1 fail")).toBe(false);
   });
