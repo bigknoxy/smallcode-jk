@@ -1255,11 +1255,16 @@ flowchart TD
           </p>
         </div>
         <div class="decision">
-          <strong>Why Ollama num_ctx=8192 (not 32K)?</strong>
+          <strong>Why does vibethinker-3b stay at num_ctx=8192 (not 32K)?</strong>
           <p>
-            Ollama defaults to num_ctx=2048, which is too small. 32K caused memory
-            pressure and swap on the eval machine, dropping generation speed from ~44 tok/s to
-            ~3 tok/s. 8K is sufficient for task prompt + chain-of-thought + answer and keeps speed high.
+            Ollama defaults to num_ctx=2048, which is too small. On the constrained eval machine
+            vibethinker-3b was profiled on, 32K caused memory pressure and swap, dropping generation
+            speed from ~44 tok/s to ~3 tok/s, so its profile keeps num_ctx=8192 (sufficient for task
+            prompt + chain-of-thought + answer on that box). The production <code>qwen2.5-coder:3b</code>
+            and <code>qwen2.5-coder:7b</code> profiles were raised to their native num_ctx=32768 (2026-07-08)
+            — that eval-machine caveat doesn't apply on modern hardware with ample unified memory (e.g.
+            Apple M5 Max / 48GB), and the old 8K value left only ~4K of usable prompt budget
+            (<code>num_ctx − max_tokens</code>), starving repo-context localization on large repos.
           </p>
         </div>
         <div class="decision">
@@ -1406,7 +1411,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.78 [.73–.84] default harness / 0.74 [.68–.80] model-only (22 tasks, n=10, pooled n=220). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model. Apache-2.0. No think-only spiral. realrepo 0.78 [.73–.84] default harness / 0.74 [.68–.80] model-only (22 tasks, n=10, pooled n=220). Aces klona (10/10) where VibeThinker was 0/10. top_k 20, num_ctx 32768.</td>
             </tr>
             <tr>
               <td><code>qwen2.5-coder:7b</code></td>
@@ -1417,7 +1422,7 @@ flowchart TD
               <td>4,096</td>
               <td>—</td>
               <td><span class="badge badge-green">Yes</span></td>
-              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.94 [.91–.97] default harness / 0.90 [.85–.93] model-only (22 tasks, n=10, pooled n=220). top_k 20, num_ctx 8192.</td>
+              <td><span class="badge badge-green">Recommended</span> Production model (larger). Apache-2.0. realrepo 0.94 [.91–.97] default harness / 0.90 [.85–.93] model-only (22 tasks, n=10, pooled n=220). top_k 20, num_ctx 32768.</td>
             </tr>
             <tr>
               <td><code>vibethinker-3b</code></td>

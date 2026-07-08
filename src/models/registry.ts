@@ -42,7 +42,8 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
     supportsGrammar: true,
     supportsJsonSchema: true,
     // No reasoningTags: non-reasoning instruct model emits the answer directly.
-    ollamaOptions: { num_ctx: 8_192 },
+    // Raised to the model's native 32K max (M5 Max / 48GB unified — abundant headroom).
+    ollamaOptions: { num_ctx: 32_768 },
     notes:
       "Qwen2.5-Coder-3B-Instruct, Apache-2.0. Control arm vs vibethinker-3b: same size, no <think> reasoning, so no truncation spiral. Recommended sampling temp 0.7 / top_p 0.8 / top_k 20.",
   },
@@ -61,7 +62,14 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
     },
     supportsGrammar: true,
     supportsJsonSchema: true,
-    ollamaOptions: { num_ctx: 8_192 },
+    // Raised to the model's native 32K max to stop starving localization on large
+    // repos: with max_tokens 4_096, an 8_192 num_ctx left only ~4K usable prompt
+    // tokens — nowhere near enough to see a 600+ file repo. This machine is an
+    // Apple M5 Max / 48GB unified memory, which fits 32K for a 7B Q4 model with
+    // abundant headroom (~13-21GB total). The old 8_192 was copied from the
+    // vibethinker-3b profile, whose 32K-caused-swap caveat is about a different,
+    // constrained eval machine and does not apply here.
+    ollamaOptions: { num_ctx: 32_768 },
     notes: "Qwen2.5-Coder-7B-Instruct, Apache-2.0. Larger arm of the 3-way comparison.",
   },
   {
