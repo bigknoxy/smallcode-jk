@@ -55,6 +55,23 @@ export interface WatchdogOptions {
    * Tests pass a fake clock so wall-time is fully deterministic.
    */
   now?: () => number;
+
+  /**
+   * Maximum prompt_tokens for a generation to be evaluated for throughput.
+   *
+   * Wall-clock tps (`completionTokens / wallMs`) is only a valid decode-speed
+   * signal when prompt-eval (prefill) time is a small fraction of the total
+   * request time. At large prompts (e.g. a 22K-token prompt under a raised
+   * `num_ctx`), prefill DOMINATES wall-clock, so this metric reads as
+   * severely "slow" even when decode throughput is perfectly healthy —
+   * falsely triggering a reload, which then forces the next request to
+   * cold-re-process the large prompt (even slower), producing a reload
+   * thrash-loop. Above this threshold the watchdog ABSTAINS from judging
+   * throughput rather than false-triggering. Default: 8192 (the context
+   * window size at which the wall-clock tps metric was originally
+   * validated).
+   */
+  maxPromptTokens?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,9 +97,13 @@ export class WatchdogProvider implements Provider {
   private readonly minTokens: number;
   private readonly reload: (model: string) => Promise<void>;
   private readonly now: () => number;
+  private readonly maxPromptTokens: number;
 
   /** Consecutive slow-generation counter. Reset to 0 on any fast generation. */
   private slowCount = 0;
+
+  /** Ensures the abstain notice is logged once per instance, not every turn. */
+  private abstainLogged = false;
 
   constructor(inner: Provider, opts: WatchdogOptions = {}) {
     this.inner = inner;
@@ -93,6 +114,7 @@ export class WatchdogProvider implements Provider {
     // Never call Date.now() or performance.now() directly in method bodies —
     // always use this.now() so tests can inject a fake clock.
     this.now = opts.now ?? (() => performance.now());
+    this.maxPromptTokens = opts.maxPromptTokens ?? env.watchdogMaxPrompt;
   }
 
   async complete(req: CompletionRequest): Promise<CompletionResponse> {
@@ -103,6 +125,23 @@ export class WatchdogProvider implements Provider {
     const wallMs = this.now() - startMs;
 
     const completionTokens = result.usage?.completionTokens ?? 0;
+    const promptTokens = result.usage?.promptTokens ?? 0;
+
+    // TODO: true decode-throughput decay detection at large context requires
+    // Ollama's native /api/chat timing fields (eval_count/eval_duration),
+    // which the current OpenAI-compat provider does not expose; until then
+    // we abstain rather than false-trigger on prefill-dominated wall-clock.
+    if (promptTokens > this.maxPromptTokens) {
+      if (!this.abstainLogged) {
+        this.abstainLogged = true;
+        process.stderr.write(
+          `[watchdog] abstaining: prompt ${promptTokens} tok exceeds max ${this.maxPromptTokens} — wall-clock tps confounded by prefill\n`,
+        );
+      }
+      // Abstain: do NOT increment and do NOT reset slowCount — invisible to
+      // the watchdog, exactly like the tiny-generation branch below.
+      return result;
+    }
 
     // Only evaluate successful completions with enough tokens to be meaningful.
     if (completionTokens >= this.minTokens) {
@@ -147,5 +186,5 @@ export class WatchdogProvider implements Provider {
 export function maybeWrapWatchdog(provider: Provider, opts?: WatchdogOptions): Provider {
   const enabled = env.watchdog;
   if (!enabled) return provider;
-  return new WatchdogProvider(provider, opts);
+  return new WatchdogProvider(provider, { maxPromptTokens: env.watchdogMaxPrompt, ...opts });
 }
