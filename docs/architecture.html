@@ -609,6 +609,20 @@ flowchart TD
         <code>state.finalStateReverted</code>). It is <strong>eval-neutral by construction</strong>: it
         fires only on unsolved runs and reverts to the seeded-bug START state, so an unsolved trial stays
         unsolved (pass/fail unchanged) — it removes broken residue, it never manufactures a pass.
+        <strong>Repair-pass throw containment</strong> (dogfood #3, 2026-07-08): the guard is only a
+        backstop if the loop actually reaches it. <code>runOperatorMutationRepair</code> and
+        <code>runStatementRepair</code> each call the real <code>bun test</code> oracle per candidate,
+        which can THROW (e.g. a timeout on a large repo) — an unguarded throw escaped
+        <code>runLoop</code> entirely, orphaning a half-tried candidate on disk AND skipping the guard
+        below it (no log, <code>finalStateReverted</code> stayed <code>null</code>). Both repair fns now
+        wrap their candidate loop in try/catch: on any throw they restore the file to the model's
+        pre-repair edit and return <code>null</code> (UNSOLVED) instead of propagating (logged
+        <code>[mutation-repair] … aborted …</code> / <code>[statement-repair] … aborted …</code>), and
+        <code>runLoop</code> additionally wraps both repair-pass blocks in one outer try/catch as
+        defense-in-depth — so the final-state guard is unconditionally reached even if a repair block
+        throws for any other reason. Both repair fns also take an injectable <code>runOracle</code> param
+        (test-only seam, defaults to <code>runTieredOracle</code>) so this contract is covered by a
+        deterministic unit test without a global module mock.
       </p>
       <p>
         <strong style="color: var(--text-primary);">Off-task-drift guard</strong> (dogfood #1 blocker,
@@ -1512,7 +1526,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-07</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-08</span>
   </div>
 </footer>
 

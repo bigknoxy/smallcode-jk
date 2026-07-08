@@ -7,11 +7,17 @@ import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
-import { failureSignature } from "@/verify/failure-extract.ts";
-import { checkNewImports, formatImportRejection } from "@/verify/import-check.ts";
-import { captureTestBaseline, escalateBrokenClean, finalStateWorseThanBaseline, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
 import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
+import { failureSignature } from "@/verify/failure-extract.ts";
+import { checkNewImports, formatImportRejection } from "@/verify/import-check.ts";
+import {
+  captureTestBaseline,
+  escalateBrokenClean,
+  finalStateWorseThanBaseline,
+  runTieredOracle,
+  type TestBaseline,
+} from "@/verify/oracle.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
@@ -47,7 +53,11 @@ const OFF_TARGET_RETARGET_THRESHOLD = 2;
  * off-target file each turn (genuine drift) keeps resetting the streak to 1
  * and is rejected forever, same as before this fix.
  */
-function trackOffTargetAttempt(state: AgentState, attemptedPath: string, currentTarget: string): string {
+function trackOffTargetAttempt(
+  state: AgentState,
+  attemptedPath: string,
+  currentTarget: string,
+): string {
   if (isOnTargetPath(attemptedPath, currentTarget)) {
     state.offTargetStreak = undefined;
     return currentTarget;
@@ -59,7 +69,8 @@ function trackOffTargetAttempt(state: AgentState, attemptedPath: string, current
     return currentTarget;
   }
   const prior = state.offTargetStreak;
-  const count = prior !== undefined && isOnTargetPath(prior.path, attemptedPath) ? prior.count + 1 : 1;
+  const count =
+    prior !== undefined && isOnTargetPath(prior.path, attemptedPath) ? prior.count + 1 : 1;
   if (count >= OFF_TARGET_RETARGET_THRESHOLD) {
     process.stderr.write(
       `[smallcode] retargeting lock: model persistently edits \`${attemptedPath}\` ≠ pinned \`${currentTarget}\` — retrieval likely mis-pinned; retargeting lock to \`${attemptedPath}\`\n`,
@@ -341,11 +352,14 @@ export function latestAttemptContent(state: AgentState, targetPath: string): str
  * candidate is reverted so the file is left either fixed or byte-identical to how the
  * model left it. Returns the winning mutation label (with its base), or null.
  */
-async function runOperatorMutationRepair(
+export async function runOperatorMutationRepair(
   state: AgentState,
   testBaseline: TestBaseline,
   readFileFn: (p: string) => Promise<string | null>,
   writeFileFn: (p: string, content: string) => Promise<void>,
+  // Injectable oracle (defaults to the real tiered oracle). Exposed only so tests
+  // can simulate a `bun test` timeout mid-repair without a global module mock.
+  runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
@@ -395,16 +409,32 @@ async function runOperatorMutationRepair(
   }
 
   let attempts = 0;
-  for (const c of candidates) {
-    attempts++;
-    await writeFileFn(targetRel, c.candidate);
-    const verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
-    if (verdict.outcome === "solved") {
-      // Leave the winning mutation on disk — it IS the fix.
-      return { label: `${c.label} (${c.base})`, line: c.line, attempts };
+  try {
+    for (const c of candidates) {
+      attempts++;
+      await writeFileFn(targetRel, c.candidate);
+      const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
+      if (verdict.outcome === "solved") {
+        // Leave the winning mutation on disk — it IS the fix.
+        return { label: `${c.label} (${c.base})`, line: c.line, attempts };
+      }
+      // Miss: restore the file to exactly how the model left it before trying next.
+      await writeFileFn(targetRel, current);
     }
-    // Miss: restore the file to exactly how the model left it before trying next.
-    await writeFileFn(targetRel, current);
+  } catch (err) {
+    // A candidate write or oracle run threw mid-loop (e.g. a `bun test` timeout on
+    // a large repo). Restore the file to how the model left it so we never orphan a
+    // half-tried candidate on disk, then hand off UNSOLVED — the final-state guard
+    // is the backstop. (Dogfood 2026-07-08: an unguarded throw here left a broken
+    // candidate on disk AND skipped the guard, leaving the repo worse than found.)
+    try {
+      await writeFileFn(targetRel, current);
+    } catch {
+      // best-effort restore
+    }
+    console.error(
+      `[mutation-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
+    );
   }
   return null;
 }
@@ -420,11 +450,12 @@ async function runOperatorMutationRepair(
  * that candidate and keep it only if it goes fully green (can't fake-green),
  * reverting otherwise so the file is left either fixed or byte-identical.
  */
-async function runStatementRepair(
+export async function runStatementRepair(
   state: AgentState,
   testBaseline: TestBaseline,
   readFileFn: (p: string) => Promise<string | null>,
   writeFileFn: (p: string, content: string) => Promise<void>,
+  runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
@@ -442,18 +473,32 @@ async function runStatementRepair(
   bases.push(current);
 
   let attempts = 0;
-  for (const base of bases) {
-    const rep = repairReadAfterDelete(base);
-    if (rep === null) continue;
-    attempts++;
-    await writeFileFn(targetRel, rep.candidate);
-    const verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
-    if (verdict.outcome === "solved") {
-      // Leave the hoisted candidate on disk — it IS the fix.
-      return { label: rep.label, line: rep.line, attempts };
+  try {
+    for (const base of bases) {
+      const rep = repairReadAfterDelete(base);
+      if (rep === null) continue;
+      attempts++;
+      await writeFileFn(targetRel, rep.candidate);
+      const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
+      if (verdict.outcome === "solved") {
+        // Leave the hoisted candidate on disk — it IS the fix.
+        return { label: rep.label, line: rep.line, attempts };
+      }
+      // Miss: restore the file to exactly how the model left it before the next base.
+      await writeFileFn(targetRel, current);
     }
-    // Miss: restore the file to exactly how the model left it before the next base.
-    await writeFileFn(targetRel, current);
+  } catch (err) {
+    // Same backstop as operator-mutation: a throw mid-candidate must never orphan a
+    // half-tried hoist on disk. Restore the model's edit and hand off UNSOLVED to
+    // the final-state guard. (Dogfood 2026-07-08.)
+    try {
+      await writeFileFn(targetRel, current);
+    } catch {
+      // best-effort restore
+    }
+    console.error(
+      `[statement-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
+    );
   }
   return null;
 }
@@ -569,7 +614,8 @@ export async function runLoop(
   // clean baseline (new-feature / no-test-yet task) never enforces the lock
   // even when a target happens to be pinned, since there's no "the fix goes
   // HERE" red signal to key off.
-  const fixModeBaseline = testBaseline.hadAnyTests && (testBaseline.failingIds.size > 0 || testBaseline.redCount > 0);
+  const fixModeBaseline =
+    testBaseline.hadAnyTests && (testBaseline.failingIds.size > 0 || testBaseline.redCount > 0);
 
   // Stall/redraft carry-forward: tracks whether the NEXT turn should be a redraft.
   let redraftNext = false;
@@ -629,7 +675,11 @@ export async function runLoop(
     // because the lock kept "moving" to follow the drift). Locking to
     // `state.lockedTargetPath` — set once below and never overwritten — means
     // drift can no longer relocate the enforcement target.
-    if (state.lockedTargetPath === undefined && fixModeBaseline && context.targetFile !== undefined) {
+    if (
+      state.lockedTargetPath === undefined &&
+      fixModeBaseline &&
+      context.targetFile !== undefined
+    ) {
       state.lockedTargetPath = context.targetFile.path;
       const tf = context.targetFile;
       if (tf.functionStartLine !== undefined && tf.functionEndLine !== undefined) {
@@ -789,7 +839,11 @@ export async function runLoop(
         // of being rejected forever. On-target/test-file blocks are no-ops.
         if (lockTargetPathForTurn !== undefined) {
           for (const block of editBlocks) {
-            lockTargetPathForTurn = trackOffTargetAttempt(state, block.filePath, lockTargetPathForTurn);
+            lockTargetPathForTurn = trackOffTargetAttempt(
+              state,
+              block.filePath,
+              lockTargetPathForTurn,
+            );
           }
         }
         try {
@@ -829,7 +883,8 @@ export async function runLoop(
         name: "write_file",
         success: false,
         output: "",
-        error: "The proposed edit was REJECTED by the user and NOT written. Revise the approach or stop.",
+        error:
+          "The proposed edit was REJECTED by the user and NOT written. Revise the approach or stop.",
       });
     }
 
@@ -856,7 +911,8 @@ export async function runLoop(
     // files are skipped.
     if (env.importGate && applyResults.length > 0) {
       for (const r of applyResults) {
-        if (r.status !== "applied" || r.newContent === undefined || r.originalContent === undefined) continue;
+        if (r.status !== "applied" || r.newContent === undefined || r.originalContent === undefined)
+          continue;
         const rel = r.effectivePath ?? r.filePath;
         if (isTestFilePath(rel)) continue;
         const check = await checkNewImports(r.originalContent, r.newContent, rel, state.repoRoot);
@@ -1106,7 +1162,8 @@ export async function runLoop(
       // Only surface locations inside the repo — never a node_modules/bun frame.
       if (abs.startsWith(path.resolve(state.repoRoot) + sep)) {
         failureLocation =
-          (await readFailureWindow(abs, verdict.diagnostic.sourceLine, state.repoRoot)) ?? undefined;
+          (await readFailureWindow(abs, verdict.diagnostic.sourceLine, state.repoRoot)) ??
+          undefined;
       }
     }
 
@@ -1126,8 +1183,7 @@ export async function runLoop(
       if (rel && Number.isFinite(forcedLine) && forcedLine > 0) {
         const abs = path.resolve(state.repoRoot, rel);
         if (abs.startsWith(path.resolve(state.repoRoot) + sep)) {
-          failureLocation =
-            (await readFailureWindow(abs, forcedLine, state.repoRoot)) ?? undefined;
+          failureLocation = (await readFailureWindow(abs, forcedLine, state.repoRoot)) ?? undefined;
         }
       }
     }
@@ -1147,7 +1203,9 @@ export async function runLoop(
       // edited this turn (e.g. an off-target turn) but was left in a bad state earlier.
       const attempt =
         applyResults.find(
-          (a) => a.newContent !== undefined && (a.effectivePath ?? a.filePath) === state.lockedTargetPath,
+          (a) =>
+            a.newContent !== undefined &&
+            (a.effectivePath ?? a.filePath) === state.lockedTargetPath,
         )?.newContent ??
         latestAttemptContent(state, state.lockedTargetPath) ??
         (await readFileFn(state.lockedTargetPath));
@@ -1260,84 +1318,112 @@ export async function runLoop(
       `[repair] skipped operator/statement repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement flip can satisfy it.`,
     );
   }
-  if (
-    env.mutationRepair &&
-    !state.verified &&
-    fixModeBaseline &&
-    state.lockedTargetPath !== undefined &&
-    !testBaseline.loadError
-  ) {
-    const repaired = await runOperatorMutationRepair(state, testBaseline, readFileFn, writeFileFn);
-    if (repaired !== null) {
-      console.error(
-        `[mutation-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+  // Both last-resort repair passes run inside ONE try/catch so a throw in either
+  // (a `bun test` timeout, an fs error, anything) can NEVER escape runLoop and skip
+  // the final-state guard below — the guard is the "never leave the repo worse than
+  // found" backstop and must always get to run. The repair fns already restore the
+  // model's edit on their own internal throws; this outer catch covers everything
+  // else in these blocks (addTurn/saveState) so the guard is unconditionally reached.
+  // (Dogfood 2026-07-08: an unguarded repair throw left the repo worse AND skipped
+  // the guard — no log, finalStateReverted null.)
+  try {
+    if (
+      env.mutationRepair &&
+      !state.verified &&
+      fixModeBaseline &&
+      state.lockedTargetPath !== undefined &&
+      !testBaseline.loadError
+    ) {
+      const repaired = await runOperatorMutationRepair(
+        state,
+        testBaseline,
+        readFileFn,
+        writeFileFn,
       );
-      for (const g of state.goals) g.status = "done";
-      state.status = "done";
-      state.verified = true;
-      addTurn(state, {
-        turn: state.turns.length + 1,
-        goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "mutation-repair",
-        prompt: "",
-        rawResponse: "",
-        answer: `[harness] operator-mutation repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
-        toolCalls: [],
-        toolResults: [],
-        editBlocks: [],
-        applyResults: [
-          { filePath: state.lockedTargetPath, status: "applied", diff: repaired.label },
-        ],
-        promptTokens: 0,
-        completionTokens: 0,
-        timestamp: Date.now(),
-        mutationRepair: { label: repaired.label, line: repaired.line, attempts: repaired.attempts },
-      } as TurnRecord);
-      await saveState(state, statePath);
+      if (repaired !== null) {
+        console.error(
+          `[mutation-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+        );
+        for (const g of state.goals) g.status = "done";
+        state.status = "done";
+        state.verified = true;
+        addTurn(state, {
+          turn: state.turns.length + 1,
+          goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "mutation-repair",
+          prompt: "",
+          rawResponse: "",
+          answer: `[harness] operator-mutation repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
+          toolCalls: [],
+          toolResults: [],
+          editBlocks: [],
+          applyResults: [
+            { filePath: state.lockedTargetPath, status: "applied", diff: repaired.label },
+          ],
+          promptTokens: 0,
+          completionTokens: 0,
+          timestamp: Date.now(),
+          mutationRepair: {
+            label: repaired.label,
+            line: repaired.line,
+            attempts: repaired.attempts,
+          },
+        } as TurnRecord);
+        await saveState(state, statePath);
+      }
     }
-  }
 
-  // Harness-side statement-repair (SMALLCODE_STATEMENT_REPAIR, default off).
-  // Second last-resort pass for a DISJOINT bug shape from operator-mutation: the
-  // read-after-delete ordering bug (`X.delete(K); X.set(K, X.get(K))`) that no
-  // operator flip fixes. Guarded by `!state.verified` so it never runs if the
-  // model loop OR operator-mutation already solved the task. Deterministically
-  // hoists the read before the delete, runs the real oracle, keeps it if fully
-  // green — recorded as a harness rescue (mutationRepair) so pass-quality
-  // classification attributes it to the harness, not the model.
-  if (
-    env.statementRepair &&
-    !state.verified &&
-    fixModeBaseline &&
-    state.lockedTargetPath !== undefined &&
-    !testBaseline.loadError
-  ) {
-    const repaired = await runStatementRepair(state, testBaseline, readFileFn, writeFileFn);
-    if (repaired !== null) {
-      console.error(
-        `[statement-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
-      );
-      for (const g of state.goals) g.status = "done";
-      state.status = "done";
-      state.verified = true;
-      addTurn(state, {
-        turn: state.turns.length + 1,
-        goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "statement-repair",
-        prompt: "",
-        rawResponse: "",
-        answer: `[harness] statement-repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
-        toolCalls: [],
-        toolResults: [],
-        editBlocks: [],
-        applyResults: [
-          { filePath: state.lockedTargetPath, status: "applied", diff: repaired.label },
-        ],
-        promptTokens: 0,
-        completionTokens: 0,
-        timestamp: Date.now(),
-        mutationRepair: { label: repaired.label, line: repaired.line, attempts: repaired.attempts },
-      } as TurnRecord);
-      await saveState(state, statePath);
+    // Harness-side statement-repair (SMALLCODE_STATEMENT_REPAIR, default off).
+    // Second last-resort pass for a DISJOINT bug shape from operator-mutation: the
+    // read-after-delete ordering bug (`X.delete(K); X.set(K, X.get(K))`) that no
+    // operator flip fixes. Guarded by `!state.verified` so it never runs if the
+    // model loop OR operator-mutation already solved the task. Deterministically
+    // hoists the read before the delete, runs the real oracle, keeps it if fully
+    // green — recorded as a harness rescue (mutationRepair) so pass-quality
+    // classification attributes it to the harness, not the model.
+    if (
+      env.statementRepair &&
+      !state.verified &&
+      fixModeBaseline &&
+      state.lockedTargetPath !== undefined &&
+      !testBaseline.loadError
+    ) {
+      const repaired = await runStatementRepair(state, testBaseline, readFileFn, writeFileFn);
+      if (repaired !== null) {
+        console.error(
+          `[statement-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+        );
+        for (const g of state.goals) g.status = "done";
+        state.status = "done";
+        state.verified = true;
+        addTurn(state, {
+          turn: state.turns.length + 1,
+          goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "statement-repair",
+          prompt: "",
+          rawResponse: "",
+          answer: `[harness] statement-repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
+          toolCalls: [],
+          toolResults: [],
+          editBlocks: [],
+          applyResults: [
+            { filePath: state.lockedTargetPath, status: "applied", diff: repaired.label },
+          ],
+          promptTokens: 0,
+          completionTokens: 0,
+          timestamp: Date.now(),
+          mutationRepair: {
+            label: repaired.label,
+            line: repaired.line,
+            attempts: repaired.attempts,
+          },
+        } as TurnRecord);
+        await saveState(state, statePath);
+      }
     }
+  } catch (err) {
+    // A repair pass threw; log and fall through UNSOLVED so the guard still runs.
+    console.error(
+      `[repair] pass aborted (${err instanceof Error ? err.message : String(err)}) — handing off to the final-state guard.`,
+    );
   }
 
   // Final-state regression guard (SMALLCODE_FINAL_STATE_GUARD, default off). Runs
