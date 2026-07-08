@@ -450,7 +450,7 @@
           <tbody>
             <tr><td><code>openai-client.ts</code></td><td>OpenAI-compatible HTTP client. Sends <code>POST /chat/completions</code>. Forwards <code>ollamaOptions</code> as the <code>options</code> field. Handles streaming.</td></tr>
             <tr><td><code>factory.ts</code></td><td><code>createProvider(config, registry)</code> — returns an <code>OpenAICompatibleClient</code>, wrapped by <code>maybeWrapWatchdog</code> (on unless <code>SMALLCODE_WATCHDOG=0</code>). Extension point for future backends.</td></tr>
-            <tr><td><code>watchdog.ts</code></td><td><code>WatchdogProvider</code> — wraps a <code>Provider</code>, measures real-generation throughput (<code>completionTokens</code> / wall-time). After <code>consecutiveSlow</code> (2) gens below <code>thresholdTps</code> (20 tok/s), runs <code>ollama stop &lt;model&gt;</code> to defrag the KV-cache; next call reloads at full speed. Ignores errored + sub-<code>minTokens</code> (64) gens; never probes (single-slot-safe). Injectable <code>reload</code>/<code>now</code>.</td></tr>
+            <tr><td><code>watchdog.ts</code></td><td><code>WatchdogProvider</code> — wraps a <code>Provider</code>, measures real-generation throughput (<code>completionTokens</code> / wall-time). After <code>consecutiveSlow</code> (2) gens below <code>thresholdTps</code> (20 tok/s), runs <code>ollama stop &lt;model&gt;</code> to defrag the KV-cache; next call reloads at full speed. Ignores errored + sub-<code>minTokens</code> (64) gens; never probes (single-slot-safe). Injectable <code>reload</code>/<code>now</code>. <strong>Prompt-size abstain:</strong> wall-clock tps folds in Ollama's prompt-eval (prefill) time, which the OpenAI-compat endpoint doesn't let us subtract out (no <code>eval_duration</code>) — at large prompts (e.g. 22K tok under a raised <code>num_ctx</code>) prefill dominates wall-clock and falsely reads as decode decay, triggering a reload → cold re-prefill → thrash-loop. When <code>promptTokens &gt; maxPromptTokens</code> (default 8192, <code>SMALLCODE_WATCHDOG_MAX_PROMPT</code>) the watchdog ABSTAINS — same invisible treatment as sub-<code>minTokens</code> gens — instead of false-triggering.</td></tr>
             <tr><td><code>sampler.ts</code></td><td>Sampling utilities — top-p/top-k post-processing helpers.</td></tr>
             <tr><td><code>types.ts</code></td><td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ChatMessage</code>, <code>TokenUsage</code>, <code>StreamChunk</code>, <code>ProviderError</code>.</td></tr>
           </tbody>
@@ -511,7 +511,7 @@
           <tbody>
             <tr><td><code>loader.ts</code></td><td><code>loadConfig(path?)</code> — search <code>smallcode.config.json</code> then <code>.smallcode.json</code>. Parse+validate with Zod. <code>loadConfigFromEnv()</code> — read <code>SMALLCODE_BASE_URL</code> and <code>SMALLCODE_MODEL</code>.</td></tr>
             <tr><td><code>types.ts</code></td><td>Zod schemas: <code>SmallcodeConfigSchema</code>, <code>ProviderConfigSchema</code>, <code>SandboxConfigSchema</code>, <code>EvalConfigSchema</code>. TypeScript inferred types.</td></tr>
-            <tr><td><code>env.ts</code></td><td>Central typed registry of core-runtime env flags: <code>env</code> (live getters, read <code>process.env</code> per-call so tests can set/unset) + <code>ENV_REGISTRY: EnvVarDoc[]</code> (name/parse/default/description metadata) for the <code>smallcode config env</code> discoverability command — replaces scattered raw <code>process.env</code> reads for <code>SMALLCODE_LOCALIZE</code>, <code>VALIDATE_EDIT</code>, <code>STATIC_CONFIDENCE</code>, <code>DIFF_EDIT</code>, <code>DIFF_MIN_FN</code>, <code>TARGET_PIN</code>, <code>GRADER_RETRIES</code>, <code>WATCHDOG</code>, <code>TARGET_LOCK</code>, <code>R2_FORCE_LINE</code>, MUTATION_REPAIR, MUTATION_REPAIR_MAX, RAD_HINT, STATEMENT_REPAIR.</td></tr>
+            <tr><td><code>env.ts</code></td><td>Central typed registry of core-runtime env flags: <code>env</code> (live getters, read <code>process.env</code> per-call so tests can set/unset) + <code>ENV_REGISTRY: EnvVarDoc[]</code> (name/parse/default/description metadata) for the <code>smallcode config env</code> discoverability command — replaces scattered raw <code>process.env</code> reads for <code>SMALLCODE_LOCALIZE</code>, <code>VALIDATE_EDIT</code>, <code>STATIC_CONFIDENCE</code>, <code>DIFF_EDIT</code>, <code>DIFF_MIN_FN</code>, <code>TARGET_PIN</code>, <code>GRADER_RETRIES</code>, <code>WATCHDOG</code>, <code>WATCHDOG_MAX_PROMPT</code>, <code>TARGET_LOCK</code>, <code>R2_FORCE_LINE</code>, MUTATION_REPAIR, MUTATION_REPAIR_MAX, RAD_HINT, STATEMENT_REPAIR.</td></tr>
           </tbody>
         </table>
       </div>
@@ -878,6 +878,12 @@ function add(a: number, b: number): number { return a + b; }
               <td>on</td>
               <td><code>provider/factory.ts</code></td>
               <td>Set <code>0</code> to disable the throughput watchdog (auto <code>ollama stop</code> on KV-cache decay)</td>
+            </tr>
+            <tr>
+              <td><code>SMALLCODE_WATCHDOG_MAX_PROMPT</code></td>
+              <td>8192</td>
+              <td><code>provider/watchdog.ts</code></td>
+              <td>Watchdog abstains from its throughput judgement when a request's prompt exceeds this many tokens — above this, wall-clock tok/s is dominated by prefill/prompt-eval and cannot detect decode decay, so abstaining prevents false reload-loops at large <code>num_ctx</code></td>
             </tr>
             <tr>
               <td><code>SMALLCODE_LOCALIZE</code></td>

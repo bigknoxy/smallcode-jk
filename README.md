@@ -170,7 +170,7 @@ chmod +x scripts/ollama-serve.sh
 scripts/ollama-serve.sh   # drop-in replacement for `ollama serve`
 ```
 
-The throughput watchdog (`SMALLCODE_WATCHDOG`, on by default) also detects decay automatically and unloads/reloads the model mid-session, but starting with the optimised flags defers the first decay event considerably.
+The throughput watchdog (`SMALLCODE_WATCHDOG`, on by default) also detects decay automatically and unloads/reloads the model mid-session, but starting with the optimised flags defers the first decay event considerably. Its wall-clock tok/s metric is only reliable while the prompt stays under `SMALLCODE_WATCHDOG_MAX_PROMPT` tokens (default 8192) — above that, Ollama's prompt-eval (prefill) time dominates wall-clock and the watchdog abstains from judging throughput rather than false-triggering a reload (avoids a reload/re-prefill thrash-loop at large `num_ctx`).
 
 ### llama.cpp
 

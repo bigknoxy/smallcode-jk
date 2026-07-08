@@ -1324,7 +1324,7 @@ flowchart TD
             <tr>
               <td class="td-name">Provider</td>
               <td><code>src/provider/</code></td>
-              <td>OpenAI-compatible HTTP client for chat completions and streaming. <code>ProviderError</code> for retryable error classification. Forwards <code>ollamaOptions</code> verbatim. <code>WatchdogProvider</code> wraps the client and auto-runs <code>ollama stop</code> when real-generation throughput decays below 20 tok/s for 2 consecutive gens (KV-cache fragmentation self-heal).</td>
+              <td>OpenAI-compatible HTTP client for chat completions and streaming. <code>ProviderError</code> for retryable error classification. Forwards <code>ollamaOptions</code> verbatim. <code>WatchdogProvider</code> wraps the client and auto-runs <code>ollama stop</code> when real-generation throughput decays below 20 tok/s for 2 consecutive gens (KV-cache fragmentation self-heal). Wall-clock tps folds in prompt-eval (prefill) time, which this OpenAI-compat endpoint can't separate out (no <code>eval_duration</code>); above <code>maxPromptTokens</code> (default 8192, <code>SMALLCODE_WATCHDOG_MAX_PROMPT</code>) the watchdog abstains instead of false-triggering a reload thrash-loop at large <code>num_ctx</code>.</td>
               <td><code>Provider</code>, <code>CompletionRequest</code>, <code>CompletionResponse</code>, <code>ProviderError</code>, <code>createProvider</code>, <code>WatchdogProvider</code></td>
             </tr>
             <tr>

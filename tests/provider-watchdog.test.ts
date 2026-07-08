@@ -39,6 +39,20 @@ function fakeResponse(completionTokens: number): CompletionResponse {
   };
 }
 
+/** Build a fake CompletionResponse with controllable completionTokens AND promptTokens. */
+function fakeResponseWithPrompt(completionTokens: number, promptTokens: number): CompletionResponse {
+  return {
+    rawContent: "hello",
+    model: "test-model",
+    finishReason: "stop",
+    usage: {
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+    },
+  };
+}
+
 /**
  * Build a fake inner Provider.
  * Each call to complete() returns responses from the queue in order.
@@ -449,6 +463,91 @@ describe("WatchdogProvider — stream passthrough", () => {
       if (!chunk.done) chunks.push(chunk.delta);
     }
     expect(chunks).toEqual(["hi"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Test: prompt-size-aware abstain (prefill confound)
+// ---------------------------------------------------------------------------
+
+describe("WatchdogProvider — maxPromptTokens abstain", () => {
+  test("slow gens with promptTokens ABOVE maxPromptTokens never trigger reload (abstain)", async () => {
+    const reloadCalls: string[] = [];
+    // 64 tokens in 10000 ms = 6.4 tok/s — below threshold of 20, but
+    // promptTokens (20000) exceeds maxPromptTokens (8192), so the watchdog
+    // must abstain from judging throughput at all.
+    const provider = new WatchdogProvider(
+      makeFakeProvider([
+        fakeResponseWithPrompt(64, 20_000),
+        fakeResponseWithPrompt(64, 20_000),
+        fakeResponseWithPrompt(64, 20_000),
+      ]),
+      {
+        ...DEFAULTS,
+        maxPromptTokens: 8192,
+        now: makeFakeClock(10_000),
+        reload: async (m) => { reloadCalls.push(m); },
+      },
+    );
+
+    await provider.complete(BASE_REQ);
+    await provider.complete(BASE_REQ);
+    await provider.complete(BASE_REQ);
+
+    expect(reloadCalls).toHaveLength(0);
+  });
+
+  test("same slow sequence with promptTokens AT/BELOW maxPromptTokens still triggers reload (regression guard)", async () => {
+    const reloadCalls: string[] = [];
+    // Same 6.4 tok/s slow sequence, but promptTokens (8192) is at the max —
+    // small-prompt decay detection must still work unchanged.
+    const provider = new WatchdogProvider(
+      makeFakeProvider([
+        fakeResponseWithPrompt(64, 8192),
+        fakeResponseWithPrompt(64, 8192),
+      ]),
+      {
+        ...DEFAULTS,
+        maxPromptTokens: 8192,
+        now: makeFakeClock(10_000),
+        reload: async (m) => { reloadCalls.push(m); },
+      },
+    );
+
+    await provider.complete(BASE_REQ);
+    expect(reloadCalls).toHaveLength(0); // first slow — counter = 1
+
+    await provider.complete(BASE_REQ);
+    expect(reloadCalls).toHaveLength(1); // second slow — counter hits 2 → reload
+  });
+
+  test("an abstaining large-prompt call does not reset slowCount (abstain is invisible, not a reset)", async () => {
+    const reloadCalls: string[] = [];
+    // slow small-prompt (count=1), slow large-prompt (abstain — invisible),
+    // slow small-prompt (count=2 → reload). If the abstain incorrectly reset
+    // the counter, the third call would only reach count=1 and never reload.
+    const provider = new WatchdogProvider(
+      makeFakeProvider([
+        fakeResponseWithPrompt(64, 100),     // slow, small prompt — counted
+        fakeResponseWithPrompt(64, 20_000),  // slow, large prompt — abstain
+        fakeResponseWithPrompt(64, 100),     // slow, small prompt — counted
+      ]),
+      {
+        ...DEFAULTS,
+        maxPromptTokens: 8192,
+        now: makeFakeClock(10_000), // 64/10s = 6.4 tok/s < 20 for every call
+        reload: async (m) => { reloadCalls.push(m); },
+      },
+    );
+
+    await provider.complete(BASE_REQ); // slow, small → count=1
+    expect(reloadCalls).toHaveLength(0);
+
+    await provider.complete(BASE_REQ); // slow, large → abstain, count stays 1
+    expect(reloadCalls).toHaveLength(0);
+
+    await provider.complete(BASE_REQ); // slow, small → count=2 → reload
+    expect(reloadCalls).toHaveLength(1);
   });
 });
 
