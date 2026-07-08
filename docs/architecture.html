@@ -412,7 +412,17 @@ graph TD
         <code>||</code> short-circuit idiom into <code>&amp;&amp;</code>/ternary forms), and a single-operator
         flip on that wreck can't reach green even though the same flip on the original file can; the current
         version is still tried as a fallback. The winning candidate's label now names its base, e.g.
-        <code>!== -&gt; === (original)</code>. It exists because the mri wrong-operator wall above showed that no
+        <code>!== -&gt; === (original)</code>. Candidates are then SCOPED to the locked target function's line
+        range via <code>scopeMutationsToRange</code> (<code>state.lockedTargetRange</code>, captured alongside
+        <code>lockedTargetPath</code> from <code>context.targetFile.functionStartLine</code>/<code>functionEndLine</code>
+        when the target function is known) — an operator flip OUTSIDE the bug function that coincidentally
+        greens a weakly-covered test can no longer be selected as a "fix"; falls back to the full whole-file
+        candidate list when the function range is unknown (and <code>scopeMutationsToRange</code> returns a fresh
+        array on that no-op path, so the loop's in-place clear-and-repush can't self-empty it — a latent bug the
+        2026-07-07 dogfood surfaced). The whole pass is additionally <strong>gated to genuine assertion/logic
+        reds</strong>: when the baseline failure is a compile/load error (<code>hasLoadError</code> — a missing
+        export/module, syntax error, or unresolved import), which no operator flip can resolve, both operator-mutation
+        and statement repair are skipped rather than churning the oracle over every candidate. It exists because the mri wrong-operator wall above showed that no
         model-side lever — exact-line localization, 32b escalation, or a minimal-edit prompt — could fix a
         single-comparison-operator bug; the operator space is small and the oracle is deterministic, so the
         harness brute-forces it instead of asking the model to. The pass is deterministic and cannot

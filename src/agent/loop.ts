@@ -10,7 +10,7 @@ import type { ReasoningHandler } from "@/reasoning/index.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
 import { checkNewImports, formatImportRejection } from "@/verify/import-check.ts";
 import { captureTestBaseline, escalateBrokenClean, finalStateWorseThanBaseline, runTieredOracle, type TestBaseline } from "@/verify/oracle.ts";
-import { enumerateComparisonMutations } from "@/repair/operator-mutation.ts";
+import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
@@ -376,6 +376,17 @@ async function runOperatorMutationRepair(
       candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
     }
   }
+  // Scope to the locked target function: an operator flip OUTSIDE the bug function
+  // that coincidentally greens a weakly-covered test is not a real fix. When the
+  // function range is unknown, keep every candidate (whole-file fallback).
+  const scoped = scopeMutationsToRange(candidates, state.lockedTargetRange);
+  if (state.lockedTargetRange !== undefined && scoped.length < candidates.length) {
+    console.error(
+      `[mutation-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${candidates.length - scoped.length} out-of-function flip(s) skipped.`,
+    );
+  }
+  candidates.length = 0;
+  candidates.push(...scoped);
   if (candidates.length === 0) return null;
   if (totalAcross > candidates.length) {
     console.error(
@@ -620,6 +631,10 @@ export async function runLoop(
     // drift can no longer relocate the enforcement target.
     if (state.lockedTargetPath === undefined && fixModeBaseline && context.targetFile !== undefined) {
       state.lockedTargetPath = context.targetFile.path;
+      const tf = context.targetFile;
+      if (tf.functionStartLine !== undefined && tf.functionEndLine !== undefined) {
+        state.lockedTargetRange = { startLine: tf.functionStartLine, endLine: tf.functionEndLine };
+      }
     }
     // `env.targetLock` is the escape hatch for a genuine multi-file task that
     // happens to also match fix-mode (SMALLCODE_TARGET_LOCK=0 disables
@@ -1227,7 +1242,31 @@ export async function runLoop(
   // deterministic, so the harness brute-forces it: flip each comparison operator
   // in the target file, run the real oracle, keep the first fully-green candidate.
   // Only fires on failing runs, so it never slows a successful one.
-  if (env.mutationRepair && !state.verified && fixModeBaseline && state.lockedTargetPath !== undefined) {
+  // Gate: a compile/load red (missing export/module, syntax error, unresolved
+  // import) can NEVER be satisfied by flipping an operator or hoisting a
+  // statement in the target file — the symbol/parse failure survives every
+  // candidate. Firing anyway churns the full oracle over every flip for nothing
+  // (dogfood 2026-07-07: an add-a-function task whose red was `Export named
+  // 'wilsonCI' not found` burned ~36 suite runs across 2 rungs). Only brute-force
+  // when the baseline red is a genuine assertion/logic failure (loadError false).
+  if (
+    !state.verified &&
+    fixModeBaseline &&
+    state.lockedTargetPath !== undefined &&
+    testBaseline.loadError &&
+    (env.mutationRepair || env.statementRepair)
+  ) {
+    console.error(
+      `[repair] skipped operator/statement repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement flip can satisfy it.`,
+    );
+  }
+  if (
+    env.mutationRepair &&
+    !state.verified &&
+    fixModeBaseline &&
+    state.lockedTargetPath !== undefined &&
+    !testBaseline.loadError
+  ) {
     const repaired = await runOperatorMutationRepair(state, testBaseline, readFileFn, writeFileFn);
     if (repaired !== null) {
       console.error(
@@ -1265,7 +1304,13 @@ export async function runLoop(
   // hoists the read before the delete, runs the real oracle, keeps it if fully
   // green — recorded as a harness rescue (mutationRepair) so pass-quality
   // classification attributes it to the harness, not the model.
-  if (env.statementRepair && !state.verified && fixModeBaseline && state.lockedTargetPath !== undefined) {
+  if (
+    env.statementRepair &&
+    !state.verified &&
+    fixModeBaseline &&
+    state.lockedTargetPath !== undefined &&
+    !testBaseline.loadError
+  ) {
     const repaired = await runStatementRepair(state, testBaseline, readFileFn, writeFileFn);
     if (repaired !== null) {
       console.error(

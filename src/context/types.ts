@@ -65,6 +65,11 @@ export interface TargetFile {
    * functions (where whole-function re-emission over-edits) but hurts small ones
    * (where whole-function PATCH already works and exact-match S/R adds fragility). */
   functionLineCount?: number;
+  /** 1-based inclusive start line of the target function in the file, when known.
+   * Lets the harness scope operator-mutation repair to the bug function. */
+  functionStartLine?: number;
+  /** 1-based inclusive end line of the target function in the file, when known. */
+  functionEndLine?: number;
 }
 
 export interface ContextBundle {

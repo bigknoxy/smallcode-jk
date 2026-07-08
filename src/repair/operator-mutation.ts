@@ -17,6 +17,10 @@
  * bug and the safest flip — then boundary off-by-one, then relational inversion).
  * The I/O half (write candidate → run oracle → revert on miss) lives in the loop,
  * where the oracle and file helpers already are. No I/O here; deterministic.
+ *
+ * The enumerator's output is later SCOPED (via `scopeMutationsToRange`, also in
+ * this module) to the locked target function's line range by the I/O half, so an
+ * operator flip outside the bug function is never tried against the oracle.
  */
 
 export interface OperatorMutation {
@@ -157,4 +161,30 @@ function countLines(text: string, index: number): number {
     if (text.charCodeAt(i) === 10) line++;
   }
   return line;
+}
+
+export interface LineRange {
+  /** 1-based inclusive start line. */
+  startLine: number;
+  /** 1-based inclusive end line. */
+  endLine: number;
+}
+
+/**
+ * Keep only mutation candidates whose operator falls INSIDE `range` (1-based,
+ * inclusive) — the locked target function. A flip in an unrelated helper that
+ * coincidentally greens a weakly-covered test can no longer be selected. When
+ * `range` is undefined (target function unknown) the list is returned unchanged
+ * (conservative whole-file fallback). Pure; same input → same output.
+ */
+export function scopeMutationsToRange<T extends { line: number }>(
+  items: T[],
+  range: LineRange | undefined,
+): T[] {
+  // Always return a FRESH array (never the input reference): callers mutate the
+  // returned list's backing array in place (e.g. `candidates.length = 0` then
+  // re-push), so aliasing the input would self-clear the result. A no-op range
+  // must still yield a distinct copy.
+  if (range === undefined) return [...items];
+  return items.filter((m) => m.line >= range.startLine && m.line <= range.endLine);
 }
