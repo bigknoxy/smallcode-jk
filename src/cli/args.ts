@@ -19,6 +19,11 @@ export interface ParsedArgs {
  *   smallcode --version / -v
  *   smallcode --help / -h
  */
+// Flags that are ALWAYS boolean — they must never consume the following token as
+// a value (see the `--flag` handling below). Everything not listed is treated as
+// a value flag when a non-flag token follows it.
+const BOOLEAN_FLAGS = new Set(["json", "yes"]);
+
 export function parseArgs(argv: string[]): ParsedArgs {
   if (argv.length === 0) {
     return { command: "help", positionals: [], flags: {} };
@@ -50,18 +55,27 @@ export function parseArgs(argv: string[]): ParsedArgs {
       } else {
         const key = token.slice(2);
         const next = argv[i + 1];
-        // Treat `next` as this flag's value unless it looks like another flag.
-        // A leading "-" normally marks a flag, BUT a negative number (e.g.
-        // `--max-turns -1`) is a legitimate value — capture it rather than
-        // dropping it into positionals. Anything else starting with "-"
-        // (`--other`, `-x`) is a flag, so the current flag stays boolean.
-        const nextIsValue =
-          next !== undefined && (!next.startsWith("-") || /^-\d+(\.\d+)?$/.test(next));
-        if (nextIsValue) {
-          flags[key] = next as string;
-          i++;
-        } else {
+        // Known BOOLEAN flags never take a value — so `run --json improve the
+        // parser` keeps the whole task as positionals instead of the parser
+        // swallowing "improve" as --json's value (which silently disabled --json
+        // AND corrupted the task). Value flags (--model, --repo, …) still consume
+        // their argument below.
+        if (BOOLEAN_FLAGS.has(key)) {
           flags[key] = true;
+        } else {
+          // Treat `next` as this flag's value unless it looks like another flag.
+          // A leading "-" normally marks a flag, BUT a negative number (e.g.
+          // `--max-turns -1`) is a legitimate value — capture it rather than
+          // dropping it into positionals. Anything else starting with "-"
+          // (`--other`, `-x`) is a flag, so the current flag stays boolean.
+          const nextIsValue =
+            next !== undefined && (!next.startsWith("-") || /^-\d+(\.\d+)?$/.test(next));
+          if (nextIsValue) {
+            flags[key] = next as string;
+            i++;
+          } else {
+            flags[key] = true;
+          }
         }
       }
     } else {
