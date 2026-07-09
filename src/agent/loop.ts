@@ -18,6 +18,7 @@ import {
   runTieredOracle,
   type TestBaseline,
 } from "@/verify/oracle.ts";
+import { advanceCarousel } from "./carousel.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
 import { computeEditableSet, pinNeighborsIntoContext } from "./target-set.ts";
@@ -1134,6 +1135,21 @@ export async function runLoop(
       }
     }
 
+    // Set-carousel (SMALLCODE_SET_CAROUSEL, opt-in): computed BEFORE the stall/
+    // redraft block below so the redraft trigger can yield to it (see the
+    // `!carouselActive` guard a few lines down). When active AND the model
+    // stalls, the carousel — not a same-file redraft — is the response: a
+    // redrafted prompt on the SAME file is useless when the real remaining bug
+    // is in a DIFFERENT file in the editable set. Firing on stall ALONE (not
+    // gated on exhausting redrafts first) matters for bounded eval budgets — a
+    // redraft-then-carousel sequence would burn ~2× STALL_LIMIT turns before
+    // ever advancing focus. Attention-only: never touches lockedTargetPath,
+    // lockAllowedPaths, applyBatch, revert, or the repair passes — every member
+    // of editablePaths stays editable throughout, as it already is under
+    // SMALLCODE_TARGET_SET.
+    const carouselActive =
+      env.setCarousel && useSet && state.editablePaths !== undefined && state.editablePaths.length > 1;
+
     // Stall detection: compute failure signature and check if we're stuck.
     //
     // Fix 3b: Gate stall on verdict.outcome === "failing" ALONE — do NOT require
@@ -1191,13 +1207,30 @@ export async function runLoop(
       state.lastFailureSignature = turnFailureSig;
 
       // Fire redraft when stall limit reached and we haven't exhausted redrafts.
-      if (state.stallCount >= STALL_LIMIT && (state.redraftCount ?? 0) < MAX_REDRAFTS) {
+      // Yield to the carousel in set-mode: redrafting the SAME file's prompt is
+      // useless when the real remaining bug is in a DIFFERENT file, and the
+      // carousel block below RESETS stallCount when it fires — if redraft ran
+      // first it would zero stallCount and the carousel trigger below would
+      // never see it reach STALL_LIMIT.
+      if (!carouselActive && state.stallCount >= STALL_LIMIT && (state.redraftCount ?? 0) < MAX_REDRAFTS) {
         redraftNext = true;
         redraftStrategyHint = rotateStrategy(state.redraftCount ?? 0);
         state.stallCount = 0;
         state.lastFailureSignature = undefined;
         state.redraftCount = (state.redraftCount ?? 0) + 1;
         turnRedrafted = true;
+      }
+
+      // Set-carousel advance: fires on STALL ALONE (not gated on exhausting
+      // redrafts) so it triggers well within a bounded eval's turn budget. The
+      // helper itself still enforces the 2-sweep cap, length>1, index-mod-length
+      // advance, and the fresh-budget reset (stallCount/redraftCount/
+      // lastFailureSignature) on the new focus.
+      if (carouselActive && (state.stallCount ?? 0) >= STALL_LIMIT) {
+        advanceCarousel(state, state.editablePaths!, {
+          stallLimit: STALL_LIMIT,
+          maxRedrafts: MAX_REDRAFTS,
+        });
       }
     } else {
       // Non-failing outcome (solved / clean / none) resets the stall counter.

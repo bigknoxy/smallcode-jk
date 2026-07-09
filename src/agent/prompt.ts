@@ -224,6 +224,16 @@ export function buildTurnPrompt(
             `⚠ You edited ${outside.map((p) => `\`${p}\``).join(", ")} last turn, which is outside the allowed set — those edits were rejected. Edit only the files listed above.`,
           );
         }
+        // Set-carousel (SMALLCODE_SET_CAROUSEL): the harness has decided the model
+        // stalled on its prior focus and deterministically advanced ATTENTION to
+        // the next file in the editable set. Only rendered when a focus is set AND
+        // it's actually a member of this set (defensive — should always hold).
+        if (state.carouselFocus && editable.includes(state.carouselFocus)) {
+          parts.push(`\n## FOCUS THIS TURN`);
+          parts.push(
+            `You already edited the other file(s) and the test suite STILL fails, so the remaining bug is in **${state.carouselFocus}**. Fix the bug in ${state.carouselFocus}. You may still edit the other listed files if needed, but the fault is most likely here.`,
+          );
+        }
       } else {
         const editedOffTarget = editedPaths.size > 0 && !editedPaths.has(tgtPath);
         parts.push(`\n## STAY ON TARGET`);

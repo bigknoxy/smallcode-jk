@@ -720,6 +720,23 @@ flowchart TD
         model-capability-gated (small models can't drive multi-file coordination), so it ships opt-in
         default OFF pending a broader A/B.
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">Set-carousel (<code>SMALLCODE_SET_CAROUSEL</code>,
+        default OFF, requires <code>SMALLCODE_TARGET_SET</code>)</strong> — since the 7b above still can't
+        drive multi-file coordination itself, the carousel makes the HARNESS decompose the localization
+        instead: when the model stalls on its current focus file (<code>stallCount</code> reaches
+        <code>STALL_LIMIT</code>) while the oracle still fails, <code>src/agent/carousel.ts</code>'s
+        <code>advanceCarousel</code> deterministically advances <code>state.carouselIndex</code> to the next
+        file in <code>editablePaths</code>, surfacing a fresh "## FOCUS THIS TURN" prompt hint and resetting
+        the stall/redraft budget for the new focus — turning one hard cross-file localization into a
+        sequence of single-file ones. It fires on stall ALONE, taking priority over same-file redraft in
+        set-mode (<code>loop.ts</code> guards the redraft trigger with <code>!carouselActive</code>), since
+        redrafting the same file is useless when the bug is elsewhere and waiting out a redraft cycle first
+        would burn too much of a bounded eval's turn budget. Attention-only — it never touches
+        <code>lockedTargetPath</code>, <code>editablePaths</code> itself, enforcement, the oracle, or
+        revert; every set member stays editable throughout, exactly as <code>SMALLCODE_TARGET_SET</code>
+        already allows. Capped at two full sweeps of the set.
+      </p>
     </section>
 
     <!-- ===== EDIT-FORMAT PARSE PIPELINE ===== -->
