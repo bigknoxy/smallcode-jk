@@ -129,6 +129,14 @@ export interface AgentState {
    */
   lockedTargetPath?: string;
   /**
+   * Multi-file target set (SMALLCODE_TARGET_SET). The bounded set of repo-relative
+   * files this fix may edit: the primary `lockedTargetPath` (index 0) plus the
+   * source files it directly imports. Computed ONCE when the target is first
+   * pinned (src/agent/target-set.ts). The enforcement guards allow an edit iff it
+   * lands on a member of this set; unset ⇒ single-file lock (today's behavior).
+   */
+  editablePaths?: string[];
+  /**
    * Line span (1-based inclusive) of the LOCKED target function, captured ONCE
    * alongside `lockedTargetPath` from the same turn's `context.targetFile`. Scopes
    * operator-mutation repair to the bug function so an out-of-function operator flip
@@ -162,6 +170,20 @@ export interface AgentState {
    * is kept).
    */
   finalStateReverted?: { newFailures: string[]; startRed: number; endRed: number; filesRestored: number };
+  /**
+   * Set-carousel (SMALLCODE_SET_CAROUSEL). Tracks the model's current ATTENTION
+   * focus within `editablePaths` when the harness deterministically decomposes a
+   * hard cross-file localization into a sequence of single-file ones. Does not
+   * change enforcement (`editablePaths`/`lockAllowedPaths` are unaffected) — it
+   * only drives the "## FOCUS THIS TURN" prompt hint (prompt.ts) and the advance
+   * decision (src/agent/carousel.ts).
+   */
+  /** Current index into `editablePaths` the carousel is focused on (0 = primary). */
+  carouselIndex?: number;
+  /** Total number of carousel advances made this run (capped at 2 full sweeps). */
+  carouselCount?: number;
+  /** Repo-relative path the prompt should tell the model to focus on this turn. */
+  carouselFocus?: string;
 }
 
 export interface Candidate {

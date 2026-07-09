@@ -466,6 +466,24 @@ graph TD
         stays opt-in (it never fired in the suite once the hint solved <code>lru-recency</code> first).
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Literal-mutation repair</strong>
+        (<code>SMALLCODE_LITERAL_REPAIR</code>, <strong>opt-in, default off</strong>): a third deterministic
+        rescue, sibling of operator-mutation and statement-repair, for a bug shape neither can touch — a wrong
+        integer CONSTANT rather than a wrong operator or statement order (e.g. <code>toFixed(1)</code> should be
+        <code>toFixed(2)</code>; there is no operator to flip when the bug IS the number). The pure
+        <code>src/repair/literal-mutation.ts</code> enumerates standalone integer literals and generates ±1/±2
+        perturbation candidates (priority-ordered, reusing <code>scopeMutationsToRange</code> from
+        <code>operator-mutation.ts</code>); the I/O half <code>runLiteralRepair</code> in
+        <code>src/agent/loop.ts</code> is gated identically to the other two passes (post-loop, unsolved
+        fix-mode run, locked target, non-load-error baseline). Its one structural deviation: it iterates the
+        multi-file EDITABLE SET (<code>state.editablePaths</code>, populated by <code>SMALLCODE_TARGET_SET</code>)
+        rather than the single locked target — scoped-to-function-range on the primary file, whole-file on
+        neighbor files, with a single TOTAL candidate cap shared across the whole set
+        (<code>SMALLCODE_LITERAL_REPAIR_MAX</code>) bounding oracle-run cost. This is the design point where
+        literal-repair complements the set-carousel: the carousel narrows the model's attention to WHICH file
+        holds the bug; literal-repair then brute-forces the CONSTANT in that file the small model can't derive.
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
         diagnostic (strips timings, paths, hex addrs) into a stable hash. When
         <code>STALL_LIMIT=2</code> consecutive turns produce the same signature, the next turn's
@@ -510,7 +528,7 @@ flowchart TD
     THINKONLY -- yes --> ANSWERNOW[record failed turn\nset answerNowNext=true\nNEXT turn: ANSWER NOW prompt\nno think, act immediately]
     ANSWERNOW --> GOAL
     THINKONLY -- no --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
-    PARSEEDITS --> APPLY[applyBatch targetPath?=lockTargetPath\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nHARD-REJECT edit to non-target path\nwhen target lock active isOnTargetPath\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
+    PARSEEDITS --> APPLY[applyBatch targetPath?=lockTargetPath\nor targetPaths=editablePaths when TARGET_SET on\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nHARD-REJECT edit outside target/set\nisOnTargetPath or isInEditableSet\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> TOOLLOCK{write_file AND\ntarget lock active AND\npath ≠ target?}
     TOOLLOCK -- yes --> TOOLREJECT[skip write, feedback:\nEdit REJECTED — fixes only target]
@@ -695,6 +713,47 @@ flowchart TD
         untouched. Both write paths (<code>applyBatch</code> and the <code>TOOL: write_file</code> guard)
         share one per-turn <code>lockTargetPathForTurn</code>, so a retarget triggered by one write path
         also applies to the other write inside the same turn.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Multi-file target set (<code>SMALLCODE_TARGET_SET</code>,
+        default OFF)</strong> — the single-file lock above hard-corrals a fix onto ONE file, but some
+        genuine bugs span a function and the helper module it calls. <code>src/agent/target-set.ts</code>'s
+        <code>computeEditableSet(primaryRel, repoRoot, maxNeighbors=4)</code> generalizes the lock into a
+        BOUNDED set: the pinned primary target plus the source files it directly imports (one hop,
+        resolvable, repo-local, non-test — reusing the import extractor from
+        <code>src/verify/import-check.ts</code>), capped at <code>maxNeighbors</code> for wander-safety.
+        Computed once at target-pin time and stored on <code>AgentState.editablePaths</code>.
+        <code>edit/applier.ts</code>'s <code>ApplyBatchOpts.targetPaths?: string[]</code> supersedes the
+        single <code>targetPath</code> — a block is on-target if its path is IN the set
+        (<code>isInEditableSet</code>), not just equal to one path — and <code>agent/loop.ts</code>
+        branches both edit-enforcement sites (<code>applyBatch</code> and <code>TOOL: write_file</code>) on
+        whichever is active. The "## STAY ON TARGET" prompt widens "Edit ONLY
+        <code>&lt;target&gt;</code>" to name the whole set when it has more than one path.
+        <strong>A/B (causal, <code>multifile-receipt_1</code>, a genuine two-file bug in
+        <code>src/index.js</code> + <code>src/money.js</code> behind one end-to-end test)</strong>:
+        qwen2.5-coder 7b canNOT use it — never localizes the 2nd-file bug, fixates on the primary, 0/5
+        regardless of the flag. qwen2.5-coder 32b + set ON solves in 1 turn editing both files; 32b + set
+        OFF fails (the single lock corrals it onto the primary, it never edits the neighbor). Same model,
+        only the flag differs, so the mechanism causally unlocks multi-file fixes — but it is
+        model-capability-gated (small models can't drive multi-file coordination), so it ships opt-in
+        default OFF pending a broader A/B.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Set-carousel (<code>SMALLCODE_SET_CAROUSEL</code>,
+        default OFF, requires <code>SMALLCODE_TARGET_SET</code>)</strong> — since the 7b above still can't
+        drive multi-file coordination itself, the carousel makes the HARNESS decompose the localization
+        instead: when the model stalls on its current focus file (<code>stallCount</code> reaches
+        <code>STALL_LIMIT</code>) while the oracle still fails, <code>src/agent/carousel.ts</code>'s
+        <code>advanceCarousel</code> deterministically advances <code>state.carouselIndex</code> to the next
+        file in <code>editablePaths</code>, surfacing a fresh "## FOCUS THIS TURN" prompt hint and resetting
+        the stall/redraft budget for the new focus — turning one hard cross-file localization into a
+        sequence of single-file ones. It fires on stall ALONE, taking priority over same-file redraft in
+        set-mode (<code>loop.ts</code> guards the redraft trigger with <code>!carouselActive</code>), since
+        redrafting the same file is useless when the bug is elsewhere and waiting out a redraft cycle first
+        would burn too much of a bounded eval's turn budget. Attention-only — it never touches
+        <code>lockedTargetPath</code>, <code>editablePaths</code> itself, enforcement, the oracle, or
+        revert; every set member stays editable throughout, exactly as <code>SMALLCODE_TARGET_SET</code>
+        already allows. Capped at two full sweeps of the set.
       </p>
     </section>
 
@@ -1526,7 +1585,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-08</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-09</span>
   </div>
 </footer>
 

@@ -205,17 +205,47 @@ export function buildTurnPrompt(
       // the enforcement below (loop.ts) locks to the stable value too, so the
       // prompt must name the same file it will actually reject edits against.
       const tgtPath = state.lockedTargetPath ?? context.targetFile.path;
+      // Multi-file target set: when the fix spans a bounded neighborhood, tell
+      // the model it MAY edit any of those files (else the single-file "edit
+      // ONLY X" framing corrals it onto the primary and it never reaches the
+      // coupled bug in a helper module — the exact baseline failure mode).
+      const editable =
+        state.editablePaths && state.editablePaths.length > 1 ? state.editablePaths : undefined;
       const editedPaths = turnEditedPaths(failingTurn!);
-      const editedOffTarget = editedPaths.size > 0 && !editedPaths.has(tgtPath);
-      parts.push(`\n## STAY ON TARGET`);
-      if (editedOffTarget) {
+      if (editable) {
+        const list = editable.map((p) => `\`${p}\``).join(", ");
+        const outside = [...editedPaths].filter((p) => !editable.includes(p));
+        parts.push(`\n## FILES YOU MAY EDIT`);
         parts.push(
-          `⚠ You edited ${[...editedPaths].map((p) => `\`${p}\``).join(", ")} last turn, but the target is \`${tgtPath}\` and \`${d.assertionId}\` still fails. Edit \`${tgtPath}\` instead — do not edit other files while this test is red.`,
+          `This fix spans more than one file. You may edit any of: ${list}. The failing test is \`${d.assertionId}\`, and it stays red until every broken spot is fixed — changing just one of these files is not enough. Do NOT edit files outside this set.`,
         );
+        if (outside.length > 0) {
+          parts.push(
+            `⚠ You edited ${outside.map((p) => `\`${p}\``).join(", ")} last turn, which is outside the allowed set — those edits were rejected. Edit only the files listed above.`,
+          );
+        }
+        // Set-carousel (SMALLCODE_SET_CAROUSEL): the harness has decided the model
+        // stalled on its prior focus and deterministically advanced ATTENTION to
+        // the next file in the editable set. Only rendered when a focus is set AND
+        // it's actually a member of this set (defensive — should always hold).
+        if (state.carouselFocus && editable.includes(state.carouselFocus)) {
+          parts.push(`\n## FOCUS THIS TURN`);
+          parts.push(
+            `You already edited the other file(s) and the test suite STILL fails, so the remaining bug is in **${state.carouselFocus}**. Fix the bug in ${state.carouselFocus}. You may still edit the other listed files if needed, but the fault is most likely here.`,
+          );
+        }
       } else {
-        parts.push(
-          `Edit ONLY \`${tgtPath}\`. The failing test is \`${d.assertionId}\`. Your last edit did not fix it — try a different fix in \`${tgtPath}\`.`,
-        );
+        const editedOffTarget = editedPaths.size > 0 && !editedPaths.has(tgtPath);
+        parts.push(`\n## STAY ON TARGET`);
+        if (editedOffTarget) {
+          parts.push(
+            `⚠ You edited ${[...editedPaths].map((p) => `\`${p}\``).join(", ")} last turn, but the target is \`${tgtPath}\` and \`${d.assertionId}\` still fails. Edit \`${tgtPath}\` instead — do not edit other files while this test is red.`,
+          );
+        } else {
+          parts.push(
+            `Edit ONLY \`${tgtPath}\`. The failing test is \`${d.assertionId}\`. Your last edit did not fix it — try a different fix in \`${tgtPath}\`.`,
+          );
+        }
       }
     }
   }
@@ -277,6 +307,21 @@ export function buildTurnPrompt(
       parts.push(
         `Emit the COMPLETE file \`${target.path}\` in a FILE: block — every line, including unchanged ones. The full current contents are in Relevant Context below; copy the unchanged parts exactly.`,
       );
+    }
+    // Multi-file target set: the directive above names the PRIMARY target, but a
+    // coupled fix may also need a sibling in the set. Say so explicitly and show
+    // the shape, so the model isn't tunneled onto re-editing the primary (the
+    // observed baseline failure: it fixed the primary, then re-emitted it every
+    // turn while the real remaining bug sat in an untouched neighbor).
+    if (state.editablePaths && state.editablePaths.length > 1) {
+      const others = state.editablePaths.filter((p) => p !== target.path);
+      if (others.length > 0) {
+        parts.push(
+          `\nThis fix may span multiple files. If the bug is only partly in \`${target.path}\`, ALSO emit a separate FILE: block for the other file(s) you need to change (${others
+            .map((p) => `\`${p}\``)
+            .join(", ")}) — their full contents are in Relevant Context above. One reply can contain several FILE: blocks, one per file.`,
+        );
+      }
     }
   }
 

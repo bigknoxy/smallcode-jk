@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { applyBatch, applyBlock, generateDiff } from "../src/edit/applier.ts";
+import { applyBatch, applyBlock, generateDiff, OFF_TARGET_EDIT_REJECTED } from "../src/edit/applier.ts";
 import { repairBlock } from "../src/edit/repair.ts";
 import type { EditBlock } from "../src/edit/types.ts";
 
@@ -135,6 +135,41 @@ describe("applyBatch", () => {
 
     expect(result.allApplied).toBe(true);
     expect(written.get("new.ts")).toBe("fresh content");
+  });
+
+  // Multi-file target set (SMALLCODE_TARGET_SET): targetPaths supersedes the
+  // single targetPath — any member is on-target, anything else is rejected.
+  it("14. targetPaths allows edits to any member of the set", async () => {
+    const fs = new Map<string, string>([
+      ["src/index.js", "aaa"],
+      ["src/money.js", "bbb"],
+    ]);
+    const readFile = async (p: string) => fs.get(p) ?? null;
+    const writeFile = async (p: string, c: string) => {
+      fs.set(p, c);
+    };
+    const blocks: EditBlock[] = [block("src/index.js", "aaa", "AAA"), block("src/money.js", "bbb", "BBB")];
+    const result = await applyBatch(blocks, readFile, writeFile, {
+      targetPaths: ["src/index.js", "src/money.js"],
+    });
+    expect(result.allApplied).toBe(true);
+    expect(fs.get("src/index.js")).toBe("AAA");
+    expect(fs.get("src/money.js")).toBe("BBB");
+  });
+
+  it("15. targetPaths rejects an edit outside the set", async () => {
+    const fs = new Map<string, string>([["src/other.js", "ccc"]]);
+    const readFile = async (p: string) => fs.get(p) ?? null;
+    const writeFile = async (p: string, c: string) => {
+      fs.set(p, c);
+    };
+    const blocks: EditBlock[] = [block("src/other.js", "ccc", "CCC")];
+    const result = await applyBatch(blocks, readFile, writeFile, {
+      targetPaths: ["src/index.js", "src/money.js"],
+    });
+    expect(result.results[0]?.status).toBe("error");
+    expect(result.results[0]?.error).toContain(OFF_TARGET_EDIT_REJECTED);
+    expect(fs.get("src/other.js")).toBe("ccc"); // unchanged
   });
 });
 

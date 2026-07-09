@@ -7,6 +7,7 @@ import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
+import { enumerateLiteralMutations } from "@/repair/literal-mutation.ts";
 import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
@@ -18,8 +19,10 @@ import {
   runTieredOracle,
   type TestBaseline,
 } from "@/verify/oracle.ts";
+import { advanceCarousel } from "./carousel.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
+import { computeEditableSet, pinNeighborsIntoContext } from "./target-set.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
 import { rotateStrategy } from "./strategy.ts";
@@ -361,6 +364,12 @@ export async function runOperatorMutationRepair(
   // can simulate a `bun test` timeout mid-repair without a global module mock.
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
+  // NOTE: the deterministic repair passes still operate ONLY on the single
+  // `lockedTargetPath`, even when SMALLCODE_TARGET_SET widened the model's
+  // editable set to the import neighborhood. Repair is a best-effort last resort
+  // (deterministic-or-noop), so this narrows the backstop back to single-file
+  // scope on multi-file tasks; widening the brute-force pass across the set is a
+  // future step (bounded by oracle-run cost). See project_multifile_target_set.
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
   const current = await readFileFn(targetRel);
@@ -440,6 +449,127 @@ export async function runOperatorMutationRepair(
 }
 
 /**
+ * Harness-side literal-mutation repair (SMALLCODE_LITERAL_REPAIR, default off;
+ * I/O half — the pure enumerator is in repair/literal-mutation.ts). Mirrors
+ * runOperatorMutationRepair for a DISJOINT bug shape: a wrong integer CONSTANT
+ * rather than a wrong operator (e.g. `toFixed(1)` should be `toFixed(2)`) —
+ * there is no operator for operator-mutation to flip, so this class of bug is
+ * otherwise unreachable by any deterministic repair pass.
+ *
+ * KEY DEVIATION from operator-mutation/statement-repair: this pass iterates
+ * the multi-file EDITABLE SET (`state.editablePaths`, when SMALLCODE_TARGET_SET
+ * widened the model's editable neighborhood), not just the single locked
+ * target. The primary target's candidates are scoped to the locked function
+ * range (same discipline as operator-mutation); neighbor files are small
+ * enough that whole-file scanning is fine, and the TOTAL candidate cap across
+ * every file in the set bounds oracle-run cost regardless of set size. This
+ * lets literal-repair fix a constant in an imported helper the set-carousel
+ * narrowed the model's attention onto but that the model itself never landed.
+ *
+ * Deterministic, can't fake-green (requires a full-green verdict); every
+ * non-winning candidate is reverted so each file is left either fixed or
+ * byte-identical to how the model left it.
+ */
+export async function runLiteralRepair(
+  state: AgentState,
+  testBaseline: TestBaseline,
+  readFileFn: (p: string) => Promise<string | null>,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+  runOracle: typeof runTieredOracle = runTieredOracle,
+): Promise<{ file: string; label: string; line: number; attempts: number } | null> {
+  const targets: string[] =
+    state.editablePaths && state.editablePaths.length > 0
+      ? state.editablePaths
+      : state.lockedTargetPath !== undefined
+        ? [state.lockedTargetPath]
+        : [];
+  if (targets.length === 0) return null;
+
+  const cap = env.literalRepairMax;
+  let attempts = 0;
+
+  for (const targetRel of targets) {
+    if (attempts >= cap) break;
+    const current = await readFileFn(targetRel);
+    if (current === null) continue;
+
+    // Bases to mutate, in priority order: pristine (if the model changed the
+    // file) first, then the current on-disk version — mirrors operator-mutation.
+    const pristine = pristineTargetContent(state, targetRel);
+    const bases: Array<{ text: string; base: string }> = [];
+    if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
+    bases.push({ text: current, base: "current" });
+
+    const remaining = cap - attempts;
+    const seen = new Set<string>([current]);
+    const candidates: Array<{ candidate: string; label: string; line: number; base: string }> = [];
+    let totalAcross = 0;
+    for (const { text, base } of bases) {
+      const { mutations, totalFound } = enumerateLiteralMutations(text, remaining);
+      totalAcross += totalFound;
+      for (const m of mutations) {
+        if (candidates.length >= remaining) break;
+        if (seen.has(m.candidate)) continue;
+        seen.add(m.candidate);
+        candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
+      }
+    }
+
+    // Scope to the locked target function ONLY on the primary target — neighbor
+    // files in the editable set have no function-range annotation and are small
+    // enough that whole-file scanning is fine (the total cap bounds cost).
+    const scoped =
+      targetRel === state.lockedTargetPath
+        ? scopeMutationsToRange(candidates, state.lockedTargetRange)
+        : candidates;
+    if (
+      targetRel === state.lockedTargetPath &&
+      state.lockedTargetRange !== undefined &&
+      scoped.length < candidates.length
+    ) {
+      console.error(
+        `[literal-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${candidates.length - scoped.length} out-of-function literal(s) skipped.`,
+      );
+    }
+    if (scoped.length === 0) continue;
+    if (totalAcross > scoped.length) {
+      console.error(
+        `[literal-repair] ${targetRel}: ${totalAcross} literal candidate(s) across pristine+current, trying ${scoped.length} (remaining cap ${remaining}). Some flips not tried.`,
+      );
+    }
+
+    try {
+      for (const c of scoped) {
+        if (attempts >= cap) break;
+        attempts++;
+        await writeFileFn(targetRel, c.candidate);
+        const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
+        if (verdict.outcome === "solved") {
+          // Leave the winning mutation on disk — it IS the fix.
+          return { file: targetRel, label: `${c.label} (${c.base})`, line: c.line, attempts };
+        }
+        // Miss: restore the file to exactly how the model left it before trying next.
+        await writeFileFn(targetRel, current);
+      }
+    } catch (err) {
+      // A candidate write or oracle run threw mid-loop. Restore this file to how
+      // the model left it so we never orphan a half-tried candidate on disk, then
+      // hand off UNSOLVED — the final-state guard is the backstop.
+      try {
+        await writeFileFn(targetRel, current);
+      } catch {
+        // best-effort restore
+      }
+      console.error(
+        `[literal-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
+      );
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Harness-side statement-repair (SMALLCODE_STATEMENT_REPAIR, default off).
  * Mirrors runOperatorMutationRepair for a DISJOINT bug shape: the read-after-delete
  * ordering bug (`X.delete(K); X.set(K, X.get(K))`) that a sub-14B model localizes
@@ -457,6 +587,12 @@ export async function runStatementRepair(
   writeFileFn: (p: string, content: string) => Promise<void>,
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
+  // NOTE: the deterministic repair passes still operate ONLY on the single
+  // `lockedTargetPath`, even when SMALLCODE_TARGET_SET widened the model's
+  // editable set to the import neighborhood. Repair is a best-effort last resort
+  // (deterministic-or-noop), so this narrows the backstop back to single-file
+  // scope on multi-file tasks; widening the brute-force pass across the set is a
+  // future step (bounded by oracle-run cost). See project_multifile_target_set.
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
   const current = await readFileFn(targetRel);
@@ -685,6 +821,12 @@ export async function runLoop(
       if (tf.functionStartLine !== undefined && tf.functionEndLine !== undefined) {
         state.lockedTargetRange = { startLine: tf.functionStartLine, endLine: tf.functionEndLine };
       }
+      // Multi-file target set (SMALLCODE_TARGET_SET): widen the lock from the
+      // single primary to its bounded import neighborhood so a coupled fix can
+      // reach the helper module. Computed ONCE alongside the primary pin.
+      if (env.targetSet) {
+        state.editablePaths = await computeEditableSet(context.targetFile.path, state.repoRoot);
+      }
     }
     // `env.targetLock` is the escape hatch for a genuine multi-file task that
     // happens to also match fix-mode (SMALLCODE_TARGET_LOCK=0 disables
@@ -700,6 +842,22 @@ export async function runLoop(
     // write attempts (edit blocks, then write_file tool calls) enforce
     // against the NEW target rather than waiting for the next turn.
     let lockTargetPathForTurn = lockTargetPath;
+    // When the multi-file set is active, enforcement checks membership in the
+    // bounded neighborhood instead of the single primary; the mis-pin retarget
+    // guard is skipped (the explicit set is authoritative, so there is no single
+    // target to "give up" on). `useSet` gates that branch at both write paths.
+    const useSet =
+      lockTargetPath !== undefined &&
+      env.targetSet &&
+      state.editablePaths !== undefined &&
+      state.editablePaths.length > 0;
+    const lockAllowedPaths = useSet ? state.editablePaths : undefined;
+    // Guarantee the model can actually SEE every file it is now allowed to edit:
+    // force each neighbor's full contents into context as a pinned chunk. Without
+    // this the prompt would name a helper module the model may never have in view.
+    if (useSet && state.editablePaths !== undefined) {
+      await pinNeighborsIntoContext(context.chunks, state.editablePaths, readFileFn);
+    }
 
     // Build turn prompt. Answer-now recovery (think-only truncation last turn)
     // takes precedence over a stall redraft — getting ANY answer out beats trying
@@ -837,7 +995,7 @@ export async function runLoop(
         // retargets `lockTargetPathForTurn` (and `state.lockedTargetPath`) so
         // THIS batch's write is enforced against the corrected target instead
         // of being rejected forever. On-target/test-file blocks are no-ops.
-        if (lockTargetPathForTurn !== undefined) {
+        if (!useSet && lockTargetPathForTurn !== undefined) {
           for (const block of editBlocks) {
             lockTargetPathForTurn = trackOffTargetAttempt(
               state,
@@ -851,7 +1009,11 @@ export async function runLoop(
             editBlocks,
             readFileFn,
             writeFileFn,
-            lockTargetPathForTurn !== undefined ? { targetPath: lockTargetPathForTurn } : undefined,
+            useSet
+              ? { targetPaths: lockAllowedPaths }
+              : lockTargetPathForTurn !== undefined
+                ? { targetPath: lockTargetPathForTurn }
+                : undefined,
           );
           applyResults = batchResult.results;
         } catch {
@@ -984,17 +1146,31 @@ export async function runLoop(
       // instead of rejected forever.
       if (call.name === "write_file" && lockTargetPathForTurn !== undefined) {
         const p = call.args["path"];
-        if (typeof p === "string") {
-          lockTargetPathForTurn = trackOffTargetAttempt(state, p, lockTargetPathForTurn);
-        }
-        if (typeof p === "string" && !isOnTargetPath(p, lockTargetPathForTurn)) {
-          toolResults.push({
-            name: "write_file",
-            success: false,
-            output: "",
-            error: `Edit REJECTED — this task fixes only \`${lockTargetPathForTurn}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPathForTurn}\`.`,
-          });
-          continue;
+        if (useSet) {
+          // Multi-file set: allow the write iff it lands on any neighborhood member.
+          if (typeof p === "string" && !lockAllowedPaths!.some((t) => isOnTargetPath(p, t))) {
+            const allowList = lockAllowedPaths!.map((t) => `\`${t}\``).join(", ");
+            toolResults.push({
+              name: "write_file",
+              success: false,
+              output: "",
+              error: `Edit REJECTED — this fix may only touch ${allowList}; your edit to \`${p}\` was NOT written. Make your change in one of those.`,
+            });
+            continue;
+          }
+        } else {
+          if (typeof p === "string") {
+            lockTargetPathForTurn = trackOffTargetAttempt(state, p, lockTargetPathForTurn);
+          }
+          if (typeof p === "string" && !isOnTargetPath(p, lockTargetPathForTurn)) {
+            toolResults.push({
+              name: "write_file",
+              success: false,
+              output: "",
+              error: `Edit REJECTED — this task fixes only \`${lockTargetPathForTurn}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPathForTurn}\`.`,
+            });
+            continue;
+          }
         }
       }
 
@@ -1081,6 +1257,21 @@ export async function runLoop(
       }
     }
 
+    // Set-carousel (SMALLCODE_SET_CAROUSEL, opt-in): computed BEFORE the stall/
+    // redraft block below so the redraft trigger can yield to it (see the
+    // `!carouselActive` guard a few lines down). When active AND the model
+    // stalls, the carousel — not a same-file redraft — is the response: a
+    // redrafted prompt on the SAME file is useless when the real remaining bug
+    // is in a DIFFERENT file in the editable set. Firing on stall ALONE (not
+    // gated on exhausting redrafts first) matters for bounded eval budgets — a
+    // redraft-then-carousel sequence would burn ~2× STALL_LIMIT turns before
+    // ever advancing focus. Attention-only: never touches lockedTargetPath,
+    // lockAllowedPaths, applyBatch, revert, or the repair passes — every member
+    // of editablePaths stays editable throughout, as it already is under
+    // SMALLCODE_TARGET_SET.
+    const carouselActive =
+      env.setCarousel && useSet && state.editablePaths !== undefined && state.editablePaths.length > 1;
+
     // Stall detection: compute failure signature and check if we're stuck.
     //
     // Fix 3b: Gate stall on verdict.outcome === "failing" ALONE — do NOT require
@@ -1138,13 +1329,30 @@ export async function runLoop(
       state.lastFailureSignature = turnFailureSig;
 
       // Fire redraft when stall limit reached and we haven't exhausted redrafts.
-      if (state.stallCount >= STALL_LIMIT && (state.redraftCount ?? 0) < MAX_REDRAFTS) {
+      // Yield to the carousel in set-mode: redrafting the SAME file's prompt is
+      // useless when the real remaining bug is in a DIFFERENT file, and the
+      // carousel block below RESETS stallCount when it fires — if redraft ran
+      // first it would zero stallCount and the carousel trigger below would
+      // never see it reach STALL_LIMIT.
+      if (!carouselActive && state.stallCount >= STALL_LIMIT && (state.redraftCount ?? 0) < MAX_REDRAFTS) {
         redraftNext = true;
         redraftStrategyHint = rotateStrategy(state.redraftCount ?? 0);
         state.stallCount = 0;
         state.lastFailureSignature = undefined;
         state.redraftCount = (state.redraftCount ?? 0) + 1;
         turnRedrafted = true;
+      }
+
+      // Set-carousel advance: fires on STALL ALONE (not gated on exhausting
+      // redrafts) so it triggers well within a bounded eval's turn budget. The
+      // helper itself still enforces the 2-sweep cap, length>1, index-mod-length
+      // advance, and the fresh-budget reset (stallCount/redraftCount/
+      // lastFailureSignature) on the new focus.
+      if (carouselActive && (state.stallCount ?? 0) >= STALL_LIMIT) {
+        advanceCarousel(state, state.editablePaths!, {
+          stallLimit: STALL_LIMIT,
+          maxRedrafts: MAX_REDRAFTS,
+        });
       }
     } else {
       // Non-failing outcome (solved / clean / none) resets the stall counter.
@@ -1312,13 +1520,13 @@ export async function runLoop(
     fixModeBaseline &&
     state.lockedTargetPath !== undefined &&
     testBaseline.loadError &&
-    (env.mutationRepair || env.statementRepair)
+    (env.mutationRepair || env.statementRepair || env.literalRepair)
   ) {
     console.error(
-      `[repair] skipped operator/statement repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement flip can satisfy it.`,
+      `[repair] skipped operator/statement/literal repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement/literal flip can satisfy it.`,
     );
   }
-  // Both last-resort repair passes run inside ONE try/catch so a throw in either
+  // All last-resort repair passes run inside ONE try/catch so a throw in any of them
   // (a `bun test` timeout, an fs error, anything) can NEVER escape runLoop and skip
   // the final-state guard below — the guard is the "never leave the repo worse than
   // found" backstop and must always get to run. The repair fns already restore the
@@ -1364,6 +1572,52 @@ export async function runLoop(
           timestamp: Date.now(),
           mutationRepair: {
             label: repaired.label,
+            line: repaired.line,
+            attempts: repaired.attempts,
+          },
+        } as TurnRecord);
+        await saveState(state, statePath);
+      }
+    }
+
+    // Harness-side literal-mutation repair (SMALLCODE_LITERAL_REPAIR, default
+    // off). Second last-resort pass for a DISJOINT bug shape from
+    // operator-mutation: a wrong integer CONSTANT (no operator to flip).
+    // Guarded by `!state.verified` so it never runs if the model loop OR
+    // operator-mutation already solved the task. Iterates the multi-file
+    // editable set (not just the single locked target) — see runLiteralRepair.
+    if (
+      env.literalRepair &&
+      !state.verified &&
+      fixModeBaseline &&
+      state.lockedTargetPath !== undefined &&
+      !testBaseline.loadError
+    ) {
+      const repaired = await runLiteralRepair(state, testBaseline, readFileFn, writeFileFn);
+      if (repaired !== null) {
+        console.error(
+          `[literal-repair] SOLVED ${repaired.file} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+        );
+        for (const g of state.goals) g.status = "done";
+        state.status = "done";
+        state.verified = true;
+        addTurn(state, {
+          turn: state.turns.length + 1,
+          goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "literal-repair",
+          prompt: "",
+          rawResponse: "",
+          answer: `[harness] literal-mutation repair: ${repaired.file} ${repaired.label} @L${repaired.line}`,
+          toolCalls: [],
+          toolResults: [],
+          editBlocks: [],
+          applyResults: [
+            { filePath: repaired.file, status: "applied", diff: repaired.label },
+          ],
+          promptTokens: 0,
+          completionTokens: 0,
+          timestamp: Date.now(),
+          mutationRepair: {
+            label: `${repaired.label} (${repaired.file})`,
             line: repaired.line,
             attempts: repaired.attempts,
           },

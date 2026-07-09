@@ -472,6 +472,21 @@ export interface ApplyBatchOpts {
    * enforcement (multi-file/low-confidence tasks are unaffected).
    */
   targetPath?: string;
+  /**
+   * Multi-file target set (SMALLCODE_TARGET_SET). The bounded set of files this
+   * fix may edit (primary + its import neighborhood). When set, it SUPERSEDES
+   * `targetPath`: a block is allowed iff its path matches ANY member. A
+   * single-element array is exactly `targetPath` behavior, so the two paths
+   * share one guard.
+   */
+  targetPaths?: string[];
+}
+
+/** Normalize the two lock options to one allow-list (targetPaths wins). */
+function allowedTargets(opts?: ApplyBatchOpts): string[] | undefined {
+  if (opts?.targetPaths && opts.targetPaths.length > 0) return opts.targetPaths;
+  if (opts?.targetPath !== undefined) return [opts.targetPath];
+  return undefined;
 }
 
 export async function applyBatch(
@@ -482,6 +497,7 @@ export async function applyBatch(
 ): Promise<ApplyBatchResult> {
   const inMemory = new Map<string, string>();
   const results: ApplyResult[] = [];
+  const allowed = allowedTargets(opts);
   // Pre-batch on-disk content per EFFECTIVE path, stashed the first time the
   // batch touches that file. This is the content a revert must restore to (so a
   // multi-block edit to one file undoes back to before the FIRST block, not the
@@ -539,15 +555,17 @@ export async function applyBatch(
     // can't sneak past, and via `isOnTargetPath` so a typo'd TARGET path still
     // counts as on-target.
     if (
-      opts?.targetPath !== undefined &&
-      !isOnTargetPath(path, opts.targetPath) &&
-      !isOnTargetPath(block.filePath, opts.targetPath)
+      allowed !== undefined &&
+      !allowed.some((t) => isOnTargetPath(path, t) || isOnTargetPath(block.filePath, t))
     ) {
+      const allowList = allowed.map((t) => `\`${t}\``).join(", ");
+      const scope =
+        allowed.length === 1 ? `this task fixes only ${allowList}` : `this fix may only touch ${allowList}`;
       results.push({
         filePath: block.filePath,
         effectivePath: path,
         status: "error",
-        error: `Edit REJECTED — this task fixes only \`${opts.targetPath}\`; your edit to \`${block.filePath}\` was NOT written. Make your change in \`${opts.targetPath}\`. (${OFF_TARGET_EDIT_REJECTED})`,
+        error: `Edit REJECTED — ${scope}; your edit to \`${block.filePath}\` was NOT written. Make your change in one of those. (${OFF_TARGET_EDIT_REJECTED})`,
       });
       continue;
     }
