@@ -1,0 +1,1 @@
+{ "id": "multifile-v1", "kind": "capability", "description": "Genuine multi-file bug-fix tasks: one feature broken in two coupled spots across two source files, one end-to-end test. Fixing either file alone leaves the test red — both must change. Measures whether the harness can coordinate a fix beyond a single locked target (SMALLCODE_TARGET_SET).", "defaultTrials": 1 }

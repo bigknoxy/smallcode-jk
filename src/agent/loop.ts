@@ -20,6 +20,7 @@ import {
 } from "@/verify/oracle.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
+import { computeEditableSet, pinNeighborsIntoContext } from "./target-set.ts";
 import { buildSystemPrompt, fitTurnPromptToWindow } from "./prompt.ts";
 import { addTurn, advanceGoal, currentGoal, isTerminal, saveState } from "./state.ts";
 import { rotateStrategy } from "./strategy.ts";
@@ -361,6 +362,12 @@ export async function runOperatorMutationRepair(
   // can simulate a `bun test` timeout mid-repair without a global module mock.
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
+  // NOTE: the deterministic repair passes still operate ONLY on the single
+  // `lockedTargetPath`, even when SMALLCODE_TARGET_SET widened the model's
+  // editable set to the import neighborhood. Repair is a best-effort last resort
+  // (deterministic-or-noop), so this narrows the backstop back to single-file
+  // scope on multi-file tasks; widening the brute-force pass across the set is a
+  // future step (bounded by oracle-run cost). See project_multifile_target_set.
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
   const current = await readFileFn(targetRel);
@@ -457,6 +464,12 @@ export async function runStatementRepair(
   writeFileFn: (p: string, content: string) => Promise<void>,
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
+  // NOTE: the deterministic repair passes still operate ONLY on the single
+  // `lockedTargetPath`, even when SMALLCODE_TARGET_SET widened the model's
+  // editable set to the import neighborhood. Repair is a best-effort last resort
+  // (deterministic-or-noop), so this narrows the backstop back to single-file
+  // scope on multi-file tasks; widening the brute-force pass across the set is a
+  // future step (bounded by oracle-run cost). See project_multifile_target_set.
   const targetRel = state.lockedTargetPath;
   if (targetRel === undefined) return null;
   const current = await readFileFn(targetRel);
@@ -685,6 +698,12 @@ export async function runLoop(
       if (tf.functionStartLine !== undefined && tf.functionEndLine !== undefined) {
         state.lockedTargetRange = { startLine: tf.functionStartLine, endLine: tf.functionEndLine };
       }
+      // Multi-file target set (SMALLCODE_TARGET_SET): widen the lock from the
+      // single primary to its bounded import neighborhood so a coupled fix can
+      // reach the helper module. Computed ONCE alongside the primary pin.
+      if (env.targetSet) {
+        state.editablePaths = await computeEditableSet(context.targetFile.path, state.repoRoot);
+      }
     }
     // `env.targetLock` is the escape hatch for a genuine multi-file task that
     // happens to also match fix-mode (SMALLCODE_TARGET_LOCK=0 disables
@@ -700,6 +719,22 @@ export async function runLoop(
     // write attempts (edit blocks, then write_file tool calls) enforce
     // against the NEW target rather than waiting for the next turn.
     let lockTargetPathForTurn = lockTargetPath;
+    // When the multi-file set is active, enforcement checks membership in the
+    // bounded neighborhood instead of the single primary; the mis-pin retarget
+    // guard is skipped (the explicit set is authoritative, so there is no single
+    // target to "give up" on). `useSet` gates that branch at both write paths.
+    const useSet =
+      lockTargetPath !== undefined &&
+      env.targetSet &&
+      state.editablePaths !== undefined &&
+      state.editablePaths.length > 0;
+    const lockAllowedPaths = useSet ? state.editablePaths : undefined;
+    // Guarantee the model can actually SEE every file it is now allowed to edit:
+    // force each neighbor's full contents into context as a pinned chunk. Without
+    // this the prompt would name a helper module the model may never have in view.
+    if (useSet && state.editablePaths !== undefined) {
+      await pinNeighborsIntoContext(context.chunks, state.editablePaths, readFileFn);
+    }
 
     // Build turn prompt. Answer-now recovery (think-only truncation last turn)
     // takes precedence over a stall redraft — getting ANY answer out beats trying
@@ -837,7 +872,7 @@ export async function runLoop(
         // retargets `lockTargetPathForTurn` (and `state.lockedTargetPath`) so
         // THIS batch's write is enforced against the corrected target instead
         // of being rejected forever. On-target/test-file blocks are no-ops.
-        if (lockTargetPathForTurn !== undefined) {
+        if (!useSet && lockTargetPathForTurn !== undefined) {
           for (const block of editBlocks) {
             lockTargetPathForTurn = trackOffTargetAttempt(
               state,
@@ -851,7 +886,11 @@ export async function runLoop(
             editBlocks,
             readFileFn,
             writeFileFn,
-            lockTargetPathForTurn !== undefined ? { targetPath: lockTargetPathForTurn } : undefined,
+            useSet
+              ? { targetPaths: lockAllowedPaths }
+              : lockTargetPathForTurn !== undefined
+                ? { targetPath: lockTargetPathForTurn }
+                : undefined,
           );
           applyResults = batchResult.results;
         } catch {
@@ -984,17 +1023,31 @@ export async function runLoop(
       // instead of rejected forever.
       if (call.name === "write_file" && lockTargetPathForTurn !== undefined) {
         const p = call.args["path"];
-        if (typeof p === "string") {
-          lockTargetPathForTurn = trackOffTargetAttempt(state, p, lockTargetPathForTurn);
-        }
-        if (typeof p === "string" && !isOnTargetPath(p, lockTargetPathForTurn)) {
-          toolResults.push({
-            name: "write_file",
-            success: false,
-            output: "",
-            error: `Edit REJECTED — this task fixes only \`${lockTargetPathForTurn}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPathForTurn}\`.`,
-          });
-          continue;
+        if (useSet) {
+          // Multi-file set: allow the write iff it lands on any neighborhood member.
+          if (typeof p === "string" && !lockAllowedPaths!.some((t) => isOnTargetPath(p, t))) {
+            const allowList = lockAllowedPaths!.map((t) => `\`${t}\``).join(", ");
+            toolResults.push({
+              name: "write_file",
+              success: false,
+              output: "",
+              error: `Edit REJECTED — this fix may only touch ${allowList}; your edit to \`${p}\` was NOT written. Make your change in one of those.`,
+            });
+            continue;
+          }
+        } else {
+          if (typeof p === "string") {
+            lockTargetPathForTurn = trackOffTargetAttempt(state, p, lockTargetPathForTurn);
+          }
+          if (typeof p === "string" && !isOnTargetPath(p, lockTargetPathForTurn)) {
+            toolResults.push({
+              name: "write_file",
+              success: false,
+              output: "",
+              error: `Edit REJECTED — this task fixes only \`${lockTargetPathForTurn}\`; your edit to \`${p}\` was NOT written. Make your change in \`${lockTargetPathForTurn}\`.`,
+            });
+            continue;
+          }
         }
       }
 

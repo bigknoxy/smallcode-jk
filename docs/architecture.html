@@ -510,7 +510,7 @@ flowchart TD
     THINKONLY -- yes --> ANSWERNOW[record failed turn\nset answerNowNext=true\nNEXT turn: ANSWER NOW prompt\nno think, act immediately]
     ANSWERNOW --> GOAL
     THINKONLY -- no --> PARSEEDITS[Edit parser\nPATCH: function → FILE: full-file → search-replace → JSON]
-    PARSEEDITS --> APPLY[applyBatch targetPath?=lockTargetPath\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nHARD-REJECT edit to non-target path\nwhen target lock active isOnTargetPath\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
+    PARSEEDITS --> APPLY[applyBatch targetPath?=lockTargetPath\nor targetPaths=editablePaths when TARGET_SET on\npath-typo rescue dots→slashes\nreject test/spec-file edits anti-fake-green\nHARD-REJECT edit outside target/set\nisOnTargetPath or isInEditableSet\nfull-file: reject truncated re-emit\nS/R: exact → fuzzy repair on miss]
     APPLY --> PARSETOOLS[parseToolCalls\nTOOL: name json per line]
     PARSETOOLS --> TOOLLOCK{write_file AND\ntarget lock active AND\npath ≠ target?}
     TOOLLOCK -- yes --> TOOLREJECT[skip write, feedback:\nEdit REJECTED — fixes only target]
@@ -695,6 +695,30 @@ flowchart TD
         untouched. Both write paths (<code>applyBatch</code> and the <code>TOOL: write_file</code> guard)
         share one per-turn <code>lockTargetPathForTurn</code>, so a retarget triggered by one write path
         also applies to the other write inside the same turn.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Multi-file target set (<code>SMALLCODE_TARGET_SET</code>,
+        default OFF)</strong> — the single-file lock above hard-corrals a fix onto ONE file, but some
+        genuine bugs span a function and the helper module it calls. <code>src/agent/target-set.ts</code>'s
+        <code>computeEditableSet(primaryRel, repoRoot, maxNeighbors=4)</code> generalizes the lock into a
+        BOUNDED set: the pinned primary target plus the source files it directly imports (one hop,
+        resolvable, repo-local, non-test — reusing the import extractor from
+        <code>src/verify/import-check.ts</code>), capped at <code>maxNeighbors</code> for wander-safety.
+        Computed once at target-pin time and stored on <code>AgentState.editablePaths</code>.
+        <code>edit/applier.ts</code>'s <code>ApplyBatchOpts.targetPaths?: string[]</code> supersedes the
+        single <code>targetPath</code> — a block is on-target if its path is IN the set
+        (<code>isInEditableSet</code>), not just equal to one path — and <code>agent/loop.ts</code>
+        branches both edit-enforcement sites (<code>applyBatch</code> and <code>TOOL: write_file</code>) on
+        whichever is active. The "## STAY ON TARGET" prompt widens "Edit ONLY
+        <code>&lt;target&gt;</code>" to name the whole set when it has more than one path.
+        <strong>A/B (causal, <code>multifile-receipt_1</code>, a genuine two-file bug in
+        <code>src/index.js</code> + <code>src/money.js</code> behind one end-to-end test)</strong>:
+        qwen2.5-coder 7b canNOT use it — never localizes the 2nd-file bug, fixates on the primary, 0/5
+        regardless of the flag. qwen2.5-coder 32b + set ON solves in 1 turn editing both files; 32b + set
+        OFF fails (the single lock corrals it onto the primary, it never edits the neighbor). Same model,
+        only the flag differs, so the mechanism causally unlocks multi-file fixes — but it is
+        model-capability-gated (small models can't drive multi-file coordination), so it ships opt-in
+        default OFF pending a broader A/B.
       </p>
     </section>
 
@@ -1526,7 +1550,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-08</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-09</span>
   </div>
 </footer>
 

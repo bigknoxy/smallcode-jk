@@ -129,6 +129,14 @@ export interface AgentState {
    */
   lockedTargetPath?: string;
   /**
+   * Multi-file target set (SMALLCODE_TARGET_SET). The bounded set of repo-relative
+   * files this fix may edit: the primary `lockedTargetPath` (index 0) plus the
+   * source files it directly imports. Computed ONCE when the target is first
+   * pinned (src/agent/target-set.ts). The enforcement guards allow an edit iff it
+   * lands on a member of this set; unset ⇒ single-file lock (today's behavior).
+   */
+  editablePaths?: string[];
+  /**
    * Line span (1-based inclusive) of the LOCKED target function, captured ONCE
    * alongside `lockedTargetPath` from the same turn's `context.targetFile`. Scopes
    * operator-mutation repair to the bug function so an out-of-function operator flip
