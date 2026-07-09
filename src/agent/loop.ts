@@ -7,6 +7,7 @@ import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
+import { enumerateLiteralMutations } from "@/repair/literal-mutation.ts";
 import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
 import { failureSignature } from "@/verify/failure-extract.ts";
@@ -443,6 +444,127 @@ export async function runOperatorMutationRepair(
     console.error(
       `[mutation-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
     );
+  }
+  return null;
+}
+
+/**
+ * Harness-side literal-mutation repair (SMALLCODE_LITERAL_REPAIR, default off;
+ * I/O half — the pure enumerator is in repair/literal-mutation.ts). Mirrors
+ * runOperatorMutationRepair for a DISJOINT bug shape: a wrong integer CONSTANT
+ * rather than a wrong operator (e.g. `toFixed(1)` should be `toFixed(2)`) —
+ * there is no operator for operator-mutation to flip, so this class of bug is
+ * otherwise unreachable by any deterministic repair pass.
+ *
+ * KEY DEVIATION from operator-mutation/statement-repair: this pass iterates
+ * the multi-file EDITABLE SET (`state.editablePaths`, when SMALLCODE_TARGET_SET
+ * widened the model's editable neighborhood), not just the single locked
+ * target. The primary target's candidates are scoped to the locked function
+ * range (same discipline as operator-mutation); neighbor files are small
+ * enough that whole-file scanning is fine, and the TOTAL candidate cap across
+ * every file in the set bounds oracle-run cost regardless of set size. This
+ * lets literal-repair fix a constant in an imported helper the set-carousel
+ * narrowed the model's attention onto but that the model itself never landed.
+ *
+ * Deterministic, can't fake-green (requires a full-green verdict); every
+ * non-winning candidate is reverted so each file is left either fixed or
+ * byte-identical to how the model left it.
+ */
+export async function runLiteralRepair(
+  state: AgentState,
+  testBaseline: TestBaseline,
+  readFileFn: (p: string) => Promise<string | null>,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+  runOracle: typeof runTieredOracle = runTieredOracle,
+): Promise<{ file: string; label: string; line: number; attempts: number } | null> {
+  const targets: string[] =
+    state.editablePaths && state.editablePaths.length > 0
+      ? state.editablePaths
+      : state.lockedTargetPath !== undefined
+        ? [state.lockedTargetPath]
+        : [];
+  if (targets.length === 0) return null;
+
+  const cap = env.literalRepairMax;
+  let attempts = 0;
+
+  for (const targetRel of targets) {
+    if (attempts >= cap) break;
+    const current = await readFileFn(targetRel);
+    if (current === null) continue;
+
+    // Bases to mutate, in priority order: pristine (if the model changed the
+    // file) first, then the current on-disk version — mirrors operator-mutation.
+    const pristine = pristineTargetContent(state, targetRel);
+    const bases: Array<{ text: string; base: string }> = [];
+    if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
+    bases.push({ text: current, base: "current" });
+
+    const remaining = cap - attempts;
+    const seen = new Set<string>([current]);
+    const candidates: Array<{ candidate: string; label: string; line: number; base: string }> = [];
+    let totalAcross = 0;
+    for (const { text, base } of bases) {
+      const { mutations, totalFound } = enumerateLiteralMutations(text, remaining);
+      totalAcross += totalFound;
+      for (const m of mutations) {
+        if (candidates.length >= remaining) break;
+        if (seen.has(m.candidate)) continue;
+        seen.add(m.candidate);
+        candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
+      }
+    }
+
+    // Scope to the locked target function ONLY on the primary target — neighbor
+    // files in the editable set have no function-range annotation and are small
+    // enough that whole-file scanning is fine (the total cap bounds cost).
+    const scoped =
+      targetRel === state.lockedTargetPath
+        ? scopeMutationsToRange(candidates, state.lockedTargetRange)
+        : candidates;
+    if (
+      targetRel === state.lockedTargetPath &&
+      state.lockedTargetRange !== undefined &&
+      scoped.length < candidates.length
+    ) {
+      console.error(
+        `[literal-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${candidates.length - scoped.length} out-of-function literal(s) skipped.`,
+      );
+    }
+    if (scoped.length === 0) continue;
+    if (totalAcross > scoped.length) {
+      console.error(
+        `[literal-repair] ${targetRel}: ${totalAcross} literal candidate(s) across pristine+current, trying ${scoped.length} (remaining cap ${remaining}). Some flips not tried.`,
+      );
+    }
+
+    try {
+      for (const c of scoped) {
+        if (attempts >= cap) break;
+        attempts++;
+        await writeFileFn(targetRel, c.candidate);
+        const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
+        if (verdict.outcome === "solved") {
+          // Leave the winning mutation on disk — it IS the fix.
+          return { file: targetRel, label: `${c.label} (${c.base})`, line: c.line, attempts };
+        }
+        // Miss: restore the file to exactly how the model left it before trying next.
+        await writeFileFn(targetRel, current);
+      }
+    } catch (err) {
+      // A candidate write or oracle run threw mid-loop. Restore this file to how
+      // the model left it so we never orphan a half-tried candidate on disk, then
+      // hand off UNSOLVED — the final-state guard is the backstop.
+      try {
+        await writeFileFn(targetRel, current);
+      } catch {
+        // best-effort restore
+      }
+      console.error(
+        `[literal-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
+      );
+      return null;
+    }
   }
   return null;
 }
@@ -1398,13 +1520,13 @@ export async function runLoop(
     fixModeBaseline &&
     state.lockedTargetPath !== undefined &&
     testBaseline.loadError &&
-    (env.mutationRepair || env.statementRepair)
+    (env.mutationRepair || env.statementRepair || env.literalRepair)
   ) {
     console.error(
-      `[repair] skipped operator/statement repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement flip can satisfy it.`,
+      `[repair] skipped operator/statement/literal repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement/literal flip can satisfy it.`,
     );
   }
-  // Both last-resort repair passes run inside ONE try/catch so a throw in either
+  // All last-resort repair passes run inside ONE try/catch so a throw in any of them
   // (a `bun test` timeout, an fs error, anything) can NEVER escape runLoop and skip
   // the final-state guard below — the guard is the "never leave the repo worse than
   // found" backstop and must always get to run. The repair fns already restore the
@@ -1450,6 +1572,52 @@ export async function runLoop(
           timestamp: Date.now(),
           mutationRepair: {
             label: repaired.label,
+            line: repaired.line,
+            attempts: repaired.attempts,
+          },
+        } as TurnRecord);
+        await saveState(state, statePath);
+      }
+    }
+
+    // Harness-side literal-mutation repair (SMALLCODE_LITERAL_REPAIR, default
+    // off). Second last-resort pass for a DISJOINT bug shape from
+    // operator-mutation: a wrong integer CONSTANT (no operator to flip).
+    // Guarded by `!state.verified` so it never runs if the model loop OR
+    // operator-mutation already solved the task. Iterates the multi-file
+    // editable set (not just the single locked target) — see runLiteralRepair.
+    if (
+      env.literalRepair &&
+      !state.verified &&
+      fixModeBaseline &&
+      state.lockedTargetPath !== undefined &&
+      !testBaseline.loadError
+    ) {
+      const repaired = await runLiteralRepair(state, testBaseline, readFileFn, writeFileFn);
+      if (repaired !== null) {
+        console.error(
+          `[literal-repair] SOLVED ${repaired.file} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+        );
+        for (const g of state.goals) g.status = "done";
+        state.status = "done";
+        state.verified = true;
+        addTurn(state, {
+          turn: state.turns.length + 1,
+          goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "literal-repair",
+          prompt: "",
+          rawResponse: "",
+          answer: `[harness] literal-mutation repair: ${repaired.file} ${repaired.label} @L${repaired.line}`,
+          toolCalls: [],
+          toolResults: [],
+          editBlocks: [],
+          applyResults: [
+            { filePath: repaired.file, status: "applied", diff: repaired.label },
+          ],
+          promptTokens: 0,
+          completionTokens: 0,
+          timestamp: Date.now(),
+          mutationRepair: {
+            label: `${repaired.label} (${repaired.file})`,
             line: repaired.line,
             attempts: repaired.attempts,
           },

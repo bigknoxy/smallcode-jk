@@ -25,8 +25,8 @@ snapshot();
 afterEach(restore);
 
 describe("ENV_REGISTRY", () => {
-  it("has 21 entries", () => {
-    expect(ENV_REGISTRY.length).toBe(21);
+  it("has 23 entries", () => {
+    expect(ENV_REGISTRY.length).toBe(23);
   });
 
   it("every env getter name appears in ENV_REGISTRY", () => {
@@ -49,6 +49,8 @@ describe("ENV_REGISTRY", () => {
       "SMALLCODE_MUTATION_REPAIR_MAX",
       "SMALLCODE_RAD_HINT",
       "SMALLCODE_STATEMENT_REPAIR",
+      "SMALLCODE_LITERAL_REPAIR",
+      "SMALLCODE_LITERAL_REPAIR_MAX",
       "SMALLCODE_FINAL_STATE_GUARD",
       "SMALLCODE_IMPORT_GATE",
     ];

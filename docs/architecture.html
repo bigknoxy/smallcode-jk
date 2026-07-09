@@ -466,6 +466,24 @@ graph TD
         stays opt-in (it never fired in the suite once the hint solved <code>lru-recency</code> first).
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Literal-mutation repair</strong>
+        (<code>SMALLCODE_LITERAL_REPAIR</code>, <strong>opt-in, default off</strong>): a third deterministic
+        rescue, sibling of operator-mutation and statement-repair, for a bug shape neither can touch — a wrong
+        integer CONSTANT rather than a wrong operator or statement order (e.g. <code>toFixed(1)</code> should be
+        <code>toFixed(2)</code>; there is no operator to flip when the bug IS the number). The pure
+        <code>src/repair/literal-mutation.ts</code> enumerates standalone integer literals and generates ±1/±2
+        perturbation candidates (priority-ordered, reusing <code>scopeMutationsToRange</code> from
+        <code>operator-mutation.ts</code>); the I/O half <code>runLiteralRepair</code> in
+        <code>src/agent/loop.ts</code> is gated identically to the other two passes (post-loop, unsolved
+        fix-mode run, locked target, non-load-error baseline). Its one structural deviation: it iterates the
+        multi-file EDITABLE SET (<code>state.editablePaths</code>, populated by <code>SMALLCODE_TARGET_SET</code>)
+        rather than the single locked target — scoped-to-function-range on the primary file, whole-file on
+        neighbor files, with a single TOTAL candidate cap shared across the whole set
+        (<code>SMALLCODE_LITERAL_REPAIR_MAX</code>) bounding oracle-run cost. This is the design point where
+        literal-repair complements the set-carousel: the carousel narrows the model's attention to WHICH file
+        holds the bug; literal-repair then brute-forces the CONSTANT in that file the small model can't derive.
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">Stall detection + redraft</strong>: <code>failureSignature()</code> normalises the
         diagnostic (strips timings, paths, hex addrs) into a stable hash. When
         <code>STALL_LIMIT=2</code> consecutive turns produce the same signature, the next turn's
