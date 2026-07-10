@@ -716,7 +716,7 @@ flowchart TD
       </p>
       <p>
         <strong style="color: var(--text-primary);">Multi-file target set (<code>SMALLCODE_TARGET_SET</code>,
-        default OFF)</strong> — the single-file lock above hard-corrals a fix onto ONE file, but some
+        default ON since 2026-07-09)</strong> — the single-file lock above hard-corrals a fix onto ONE file, but some
         genuine bugs span a function and the helper module it calls. <code>src/agent/target-set.ts</code>'s
         <code>computeEditableSet(primaryRel, repoRoot, maxNeighbors=4)</code> generalizes the lock into a
         BOUNDED set: the pinned primary target plus the source files it directly imports (one hop,
@@ -734,13 +734,15 @@ flowchart TD
         qwen2.5-coder 7b canNOT use it — never localizes the 2nd-file bug, fixates on the primary, 0/5
         regardless of the flag. qwen2.5-coder 32b + set ON solves in 1 turn editing both files; 32b + set
         OFF fails (the single lock corrals it onto the primary, it never edits the neighbor). Same model,
-        only the flag differs, so the mechanism causally unlocks multi-file fixes — but it is
-        model-capability-gated (small models can't drive multi-file coordination), so it ships opt-in
-        default OFF pending a broader A/B.
+        only the flag differs, so the mechanism causally unlocks multi-file fixes. Model-capability-gated
+        (small models can't drive multi-file coordination), but a 22-task realrepo regression A/B
+        (2026-07-09) proved it pass@1-neutral on single-file tasks (pooled 0.892 ON = 0.892 OFF, identical
+        CIs, 20/22 tasks byte-identical) — so it now ships <strong>default ON</strong>. Set
+        <code>SMALLCODE_TARGET_SET=0</code> to disable.
       </p>
       <p>
         <strong style="color: var(--text-primary);">Set-carousel (<code>SMALLCODE_SET_CAROUSEL</code>,
-        default OFF, requires <code>SMALLCODE_TARGET_SET</code>)</strong> — since the 7b above still can't
+        default ON since 2026-07-09, requires <code>SMALLCODE_TARGET_SET</code>)</strong> — since the 7b above still can't
         drive multi-file coordination itself, the carousel makes the HARNESS decompose the localization
         instead: when the model stalls on its current focus file (<code>stallCount</code> reaches
         <code>STALL_LIMIT</code>) while the oracle still fails, <code>src/agent/carousel.ts</code>'s
@@ -753,7 +755,9 @@ flowchart TD
         would burn too much of a bounded eval's turn budget. Attention-only — it never touches
         <code>lockedTargetPath</code>, <code>editablePaths</code> itself, enforcement, the oracle, or
         revert; every set member stays editable throughout, exactly as <code>SMALLCODE_TARGET_SET</code>
-        already allows. Capped at two full sweeps of the set.
+        already allows. Capped at two full sweeps of the set. On single-file tasks the set is length 1 so
+        this is a no-op — the same regression A/B confirmed pooled pass@1 unchanged (0.892 = 0.892). Set
+        <code>SMALLCODE_SET_CAROUSEL=0</code> to disable.
       </p>
     </section>
 
@@ -1585,7 +1589,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-09</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-10</span>
   </div>
 </footer>
 

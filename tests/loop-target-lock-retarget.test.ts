@@ -89,6 +89,15 @@ function makePinnedContext(): ContextBundle {
 let testDir: string;
 
 beforeEach(async () => {
+  // This suite exercises the single-file target-LOCK retarget mechanism
+  // (state.lockedTargetPath moving to a persistently-attempted off-target
+  // file). SMALLCODE_TARGET_SET now defaults ON, which replaces single-target
+  // enforcement with the bounded editable-SET path (`useSet` in loop.ts) —
+  // the retarget guard is intentionally skipped in that mode ("the explicit
+  // set is authoritative, so there is no single target to give up on").
+  // Force the single-file path here so this suite keeps testing what it was
+  // written to test.
+  process.env["SMALLCODE_TARGET_SET"] = "0";
   testDir = join(tmpdir(), `smallcode-retarget-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   await mkdir(join(testDir, "src"), { recursive: true });
   await mkdir(join(testDir, "tests"), { recursive: true });
@@ -108,6 +117,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   delete process.env["SMALLCODE_TARGET_LOCK"];
+  delete process.env["SMALLCODE_TARGET_SET"];
   await rm(testDir, { recursive: true, force: true });
 });
 
