@@ -1243,8 +1243,10 @@ function add(a: number, b: number): number { return a + b; }
 <span class="comment"># pickTargetFunction aims at a real fn in each buggy file. No model — fast, deterministic, CI-safe.</span>
 <span class="cmd">bun scripts/validate-realrepo-tasks.ts</span>
 
-<span class="comment"># multifile = evals/suites/multifile/, task multifile-receipt_1: one GENUINE two-file bug</span>
-<span class="comment"># (src/index.js + src/money.js, one end-to-end test; fixing either file alone leaves it red).</span>
+<span class="comment"># multifile = evals/suites/multifile/, 4 GENUINE two-file bugs (each: two coupled source files +</span>
+<span class="comment"># one end-to-end test; fixing either file alone leaves it red). Distinct coupling shapes/archetypes:</span>
+<span class="comment"># receipt_1 (missing factor + wrong format-arg), taxrate_1 (shared const + wrong operator),</span>
+<span class="comment"># slug_1 (string pipeline: missing .trim + wrong join sep), fullname_1 (object field + wrong sep).</span>
 <span class="comment"># SMALLCODE_TARGET_SET defaults ON; set =0 to A/B against the old single-file lock (corrals the model onto the primary target only).</span>
 <span class="cmd">SMALLCODE_SUITE=multifile SMALLCODE_TARGET_SET=0 bun scripts/run-baseline.ts</span>
       </div>

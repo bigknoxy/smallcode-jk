@@ -1,0 +1,9 @@
+{
+  "id": "multifile-taxrate_1",
+  "desc": "In this small checkout library, withTax(cents) should add 8% sales tax to a pre-tax amount in cents and round to the nearest cent (e.g. withTax(1000) === 1080). It currently returns the wrong value. Two things are broken on this code path, in different source files under src/. Find and fix both so tests/tax.test.ts passes.",
+  "setup": { "repoFixture": "multifile-taxrate_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/tax.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["multifile", "coordination", "genuine-multifile"],
+  "reference_solution": "multifile-taxrate_1-solution/"
+}

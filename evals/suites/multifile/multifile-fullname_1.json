@@ -1,0 +1,9 @@
+{
+  "id": "multifile-fullname_1",
+  "desc": "In this small library, fullName(first, last) should return a person's name as \"First Last\" joined by a single space (e.g. fullName(\"Ada\", \"Lovelace\") === \"Ada Lovelace\"). It currently returns the wrong value. Two things are broken on this code path, in different source files under src/. Find and fix both so tests/fullname.test.ts passes.",
+  "setup": { "repoFixture": "multifile-fullname_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/fullname.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["multifile", "coordination", "genuine-multifile"],
+  "reference_solution": "multifile-fullname_1-solution/"
+}

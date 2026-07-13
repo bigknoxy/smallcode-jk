@@ -1,0 +1,9 @@
+{
+  "id": "multifile-slug_1",
+  "desc": "In this small library, slugify(title) should lowercase a title, trim surrounding whitespace, and join its words with hyphens to form a URL slug (e.g. slugify(\"  Hello World  \") === \"hello-world\"). It currently returns the wrong value. Two things are broken on this code path, in different source files under src/. Find and fix both so tests/slug.test.ts passes.",
+  "setup": { "repoFixture": "multifile-slug_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/slug.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["multifile", "coordination", "genuine-multifile"],
+  "reference_solution": "multifile-slug_1-solution/"
+}
