@@ -1,7 +1,7 @@
 # HANDOFF — smallcode
 
 > **Living doc. UPDATE THIS on every meaningful step** (new commit, A/B result, merge, decision). Assume the next agent has NO memory — this file is its only bridge. Keep it terse and CURRENT. Stale handoff = bug.
-> Last updated: **2026-07-09**
+> Last updated: **2026-07-13**
 
 ## What smallcode is
 A coding HARNESS that makes a SMALL LOCAL model (qwen2.5-coder 3b/7b/32b via Ollama, fully offline) fix real bugs on real repos. Thesis: **harness design > model size.** Small models can't localize faults or derive non-trivial logic (capability ceiling, proven repeatedly). Wins come from HARNESS-side deterministic rescues + attention-shaping, not model coaxing.
@@ -39,13 +39,29 @@ All require `SMALLCODE_TARGET_LOCK=1` (default on). TARGET_SET+carousel default 
 | bare (all levers off) | 0.16 [.06-.35] |
 | + carousel | 0.48 [.30-.67] |
 | + carousel + literal-repair | **0.96 [.80-.99]** |
-Every step CI-significant. **Harness took a 7b from 16% → 96% on a real 2-file bug.** North-star proof: harness > model size.
+Every step CI-significant on THIS fixture. **Harness took a 7b from 16% → 96% on a real 2-file bug.** But see generality below — the 96% was partly literal-repair-specific and does NOT transfer to every coupling shape.
+
+## GENERALITY RESULT (2026-07-13, PR #132 merged `ee3b84a`) — the 16→96 does NOT cleanly generalize; it REFINES
+Added 3 new genuine two-file fixtures with DISTINCT coupling shapes/archetypes (`multifile-taxrate_1` shared-const: wrong-const `0.8`→`0.08` + wrong-operator `-`→`+`; `multifile-slug_1` string-pipeline: missing `.trim()` + wrong join `_`→`-`; `multifile-fullname_1` object-field: missing field `last` + wrong sep `_`→space). All verified genuine-multifile (each single-file fix red, both green) via official dry-run gate (4/4) + independent 4-check script. **NONE is crackable by literal-repair (decimals/strings/methods, not integer literals) or operator-mutation (arithmetic `+/-`, not comparison) — so this A/B ISOLATES the core carousel/target-set mechanism, no deterministic-rescue confound.**
+
+A/B (7b, n=10/arm, TARGET_SET on both arms, literal+operator repair OFF):
+| task | coupling | bare (carousel off) | + carousel | read |
+|---|---|---|---|---|
+| taxrate_1 | shared const | 0.00 | 0.00 | CAPABILITY CEILING — 7b can't derive decimal `0.8→0.08` + operator flip even with attention placed |
+| slug_1 | string pipeline | **0.90** [.70-1.0] | 0.90 [.70-1.0] | TARGET_SET ALONE suffices; edits simple → model never stalls → carousel no-op |
+| fullname_1 | object field | 0.00 | **0.10** [.00-.30] | model fixates; carousel = marginal nudge (1/10), NOT CI-significant |
+
+**Refined north-star claim (honest):**
+- **TARGET_SET (editability of the import-neighbor) is the ROBUST general win** — it carried slug to 0.90 on a brand-new coupling shape with zero other help. Making both files editable is what generalizes.
+- **Carousel is a CONDITIONAL stall-rescue**, not a universal lift: no-op when the model solves fast (slug 0.90=0.90), marginal when it fixates on a doable edit (fullname 0→0.10, not sig), useless when edits exceed the model (taxrate 0=0). Receipt was the favorable case (strong 0.16→0.48) because its index.js edit was doable-once-focused AND its neighbor bug was literal-crackable.
+- **The 96% headline was LITERAL-REPAIR-specific** (cracking `toFixed(1)→(2)`); it does not transfer to bugs without a brute-forceable literal/operator. Stop citing 16→96 as a general result — cite it as the receipt-fixture ladder, and cite the generality table for the honest cross-shape picture.
+- Ceiling persists (taxrate) exactly as [[project_lever_frontier_mapped]] predicts: no model-side lever crosses a genuine derivation ceiling.
 
 ## NEXT STEPS (in order)
-1. **Ship the default-on flip** (branch `feat/default-on-targetset-carousel`): push → PR → admin-merge. IN PROGRESS.
-2. **GENERALITY** (main open risk): the multi-file result rests on ONE fixture (`multifile-receipt_1`). Add more genuine multi-file tasks to `evals/suites/multifile` (different coupling shapes, different neighbor bug types) so the 16→96% claim generalizes.
-3. **LITERAL_REPAIR fake-green audit** before promoting it ON: it brute-flips integer literals whole-file on neighbors + keeps any full-green — on a weak test oracle it could green a semantically-wrong fix. Sweep it across a broad suite, check for false-greens, before defaulting ON.
-4. 3b never tested on this axis (7b is the floor that works; 3b likely below the localization ceiling even with carousel).
+1. ~~Ship default-on flip~~ DONE (PR #131, `d794648`). ~~Generality suite~~ DONE (PR #132, `ee3b84a`) — result above.
+2. **Widen the deterministic repair coverage** (the actionable follow-on from generality): taxrate's `-`→`+` and `0.8`→`0.08` are the residual bug shapes no repair pass covers. A DECIMAL-literal repair (extend `enumerateLiteralMutations` past integers) + an ARITHMETIC-operator mutation (`+`↔`-`, `*`↔`/`) would be the natural next levers to crack taxrate — but gate them behind a fake-green audit first (arithmetic flips green far more spuriously than comparison flips).
+3. **LITERAL_REPAIR fake-green audit** before promoting it ON: brute-flips integer literals whole-file on neighbors + keeps any full-green — on a weak oracle could green a semantically-wrong fix. Sweep broad suite, count false-greens.
+4. 3b never tested on this axis (7b already 0 on taxrate/fullname; 3b likely ≤ that).
 
 ## Run an A/B (exact)
 ```
