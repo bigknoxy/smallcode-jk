@@ -13,7 +13,7 @@ The harness could not fix bugs spanning >1 file (single `lockedTargetPath`). Thr
 |---|---|---|---|
 | Target set | `SMALLCODE_TARGET_SET` | **ON** | generalizes single-file lock → bounded editable set (primary + direct import neighbors). Makes both files EDITABLE. |
 | Set carousel | `SMALLCODE_SET_CAROUSEL` | **ON** | on model stall, walks model ATTENTION across the set (fresh `## FOCUS THIS TURN` prompt). Harness does the cross-file localization the small model can't. Requires TARGET_SET. No-op on single-file (set length 1). |
-| Literal repair | `SMALLCODE_LITERAL_REPAIR` | **OFF** | last-resort deterministic pass: brute-force integer-literal ±1/±2 over the editable SET, run real oracle, keep first full-green. Cracks off-by-one-CONSTANT bugs (`toFixed(1)→(2)`) operator-mutation can't. OFF pending a fake-green audit. |
+| Literal repair | `SMALLCODE_LITERAL_REPAIR` | **OFF (stays)** | last-resort deterministic pass: brute-force integer-literal ±1/±2 over the editable SET, run real oracle, keep first full-green. Cracks off-by-one-CONSTANT bugs (`toFixed(1)→(2)`) operator-mutation can't. **Audit DONE 2026-07-13 (`scripts/audit-literal-repair.ts`): 4/38 FAKE-GREENS → KEEP OFF** (see below). |
 
 All require `SMALLCODE_TARGET_LOCK=1` (default on). TARGET_SET+carousel default ON since 2026-07-09 (regression-neutral, see below); LITERAL_REPAIR opt-in.
 
@@ -57,11 +57,23 @@ A/B (7b, n=10/arm, TARGET_SET on both arms, literal+operator repair OFF):
 - **The 96% headline was LITERAL-REPAIR-specific** (cracking `toFixed(1)→(2)`); it does not transfer to bugs without a brute-forceable literal/operator. Stop citing 16→96 as a general result — cite it as the receipt-fixture ladder, and cite the generality table for the honest cross-shape picture.
 - Ceiling persists (taxrate) exactly as [[project_lever_frontier_mapped]] predicts: no model-side lever crosses a genuine derivation ceiling.
 
+## LITERAL_REPAIR FAKE-GREEN AUDIT (2026-07-13) — DONE → keep OFF
+Built `scripts/audit-literal-repair.ts` (MODEL-FREE, deterministic; reuses the real `enumerateLiteralMutations` + real deterministic grader). For every solution-backed task in realrepo/edit-reliability/multifile: lay pristine buggy fixture, apply each literal candidate one at a time (worst-case whole-file scope), run the real oracle, classify first green as no-green / true-fix / FAKE-GREEN. Reproduced independently (deterministic, same numbers twice):
+| suite | scanned | no-green | true-fix | FAKE-GREEN |
+|---|---|---|---|---|
+| realrepo | 22 | 21 | 0 | 1 |
+| edit-reliability | 12 | 8 | 1 | 3 |
+| multifile | 4 | 4 | 0 | 0 |
+| **TOTAL** | **38** | **33** | **1** | **4 (10.5%)** |
+All 4 fake-greens share ONE shape: a reference fix that REMOVES a `- 1`/`+ 1` term (or changes a boundary operator `<`→`<=`) coincidentally imitated by flipping a nearby `1`→`0`. **fn-range scoping does NOT fix it** — the offending flips sit INSIDE the target function, siblings of the correct fix; the failure is STRUCTURAL (term-removal vs value-substitution), not locality. So "deterministic ⇒ can't fake-green" is FALSE on thin oracles. **Disposition: SMALLCODE_LITERAL_REPAIR stays default OFF.** A real promotion needs a stronger guard (e.g. require the greening flip's position to match a term the model's own diff touched, or a regression check beyond the single failing test). Docs corrected: llms.html had a now-false "can't fake-green" claim (fixed); README + llms module map note the audit.
+
+Also measured (data, not assumption): full existing repair stack (operator-mutation incl `+`↔`-`, + literal, + carousel) on taxrate = **0/10** — confirms single-mutation repair CANNOT crack taxrate (needs both fixes at once; the decimal `0.8` isn't even matched by the integer-only enumerator). And `+`↔`-` ALREADY lives in `operator-mutation.ts` (rank 4) — no separate arith pass needed; only `*`↔`/` would be net-new (low value).
+
 ## NEXT STEPS (in order)
-1. ~~Ship default-on flip~~ DONE (PR #131, `d794648`). ~~Generality suite~~ DONE (PR #132, `ee3b84a`) — result above.
-2. **Widen the deterministic repair coverage** (the actionable follow-on from generality): taxrate's `-`→`+` and `0.8`→`0.08` are the residual bug shapes no repair pass covers. A DECIMAL-literal repair (extend `enumerateLiteralMutations` past integers) + an ARITHMETIC-operator mutation (`+`↔`-`, `*`↔`/`) would be the natural next levers to crack taxrate — but gate them behind a fake-green audit first (arithmetic flips green far more spuriously than comparison flips).
-3. **LITERAL_REPAIR fake-green audit** before promoting it ON: brute-flips integer literals whole-file on neighbors + keeps any full-green — on a weak oracle could green a semantically-wrong fix. Sweep broad suite, count false-greens.
-4. 3b never tested on this axis (7b already 0 on taxrate/fullname; 3b likely ≤ that).
+1. ~~Ship default-on flip~~ DONE (#131 `d794648`). ~~Generality suite~~ DONE (#132 `ee3b84a`). ~~LITERAL_REPAIR audit~~ DONE (keeps OFF, above).
+2. **If pursuing LITERAL_REPAIR promotion:** build the stronger guard (position-match to the model's own attempted diff, or multi-test regression check) that eliminates the 4 fake-greens, re-run `scripts/audit-literal-repair.ts` (target: 0 FAKE-GREEN), THEN promote. Only worth it if a real task needs it.
+3. **3b on the multi-file axis** — cheapest remaining measurement (7b already 0 on taxrate/fullname → 3b likely ≤ that; slug 0.90 might survive). Run bare vs carousel on the 4 multifile tasks, n=10, foreground batches.
+4. Real-dogfood multi-file (not synthetic): does TARGET_SET help on a genuine 2-file bug in a real repo? The robust general win deserves a real-world confirmation.
 
 ## Run an A/B (exact)
 ```
