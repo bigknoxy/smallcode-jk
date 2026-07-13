@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.10.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.9.0...v1.10.0) (2026-07-13)
+
+
+### Features
+
+* **agent:** multi-file target set — bounded editable neighborhood unlocks coupled fixes (SMALLCODE_TARGET_SET) ([8728076](https://github.com/bigknoxy/smallcode-jk/commit/8728076cf4812c815f442e1c9ebd33eb7afaeab9))
+* **agent:** set-carousel — walk model attention across the editable set so a 7b can solve multi-file bugs (SMALLCODE_SET_CAROUSEL) ([efb6c78](https://github.com/bigknoxy/smallcode-jk/commit/efb6c787e66f2403c9396f13cb48328b2ecb1cd4))
+* **config:** default SMALLCODE_TARGET_SET + SMALLCODE_SET_CAROUSEL ON — regression-neutral on single-file, unlocks multi-file by default ([cfaad65](https://github.com/bigknoxy/smallcode-jk/commit/cfaad65f8282f05c806bd1145ff0ee83adc6914c))
+* **config:** default TARGET_SET + SET_CAROUSEL ON (regression-neutral, unlocks multi-file by default) ([d794648](https://github.com/bigknoxy/smallcode-jk/commit/d794648165cf87e8163ae6f3a7acbf9bc40fda84))
+* **context:** defines-over-uses scorer signal + real-repo localization measuring stick ([0b87a26](https://github.com/bigknoxy/smallcode-jk/commit/0b87a263582fb26c666b7a8fefd74fa04d9ee03e))
+* **context:** R2 defines-over-uses scorer signal + real-repo localization measuring stick ([828fa74](https://github.com/bigknoxy/smallcode-jk/commit/828fa74837d6e54debe362a0605625002b47bbeb))
+* multi-file capability — target-set + carousel + literal-repair take a 7b 16%→96% on a real 2-file bug ([9f26579](https://github.com/bigknoxy/smallcode-jk/commit/9f26579566fc4a4060c86812a1a26c6d0f9fc48c))
+* **repair:** literal-mutation repair — brute-force off-by-one constants across the editable set; 7b hits 96% on a real 2-file bug (SMALLCODE_LITERAL_REPAIR) ([e3ad581](https://github.com/bigknoxy/smallcode-jk/commit/e3ad5818cfa81052d016c47d227f17ce2043287d))
+
+
+### Bug Fixes
+
+* **agent:** contain repair-pass oracle throws so the final-state guard always runs ([#127](https://github.com/bigknoxy/smallcode-jk/issues/127)) ([a6f68cc](https://github.com/bigknoxy/smallcode-jk/commit/a6f68cc4cebfe842721010addb9067726ea0e0e0))
+* **cli:** boolean flags (--json/--yes) must not swallow the next positional ([#126](https://github.com/bigknoxy/smallcode-jk/issues/126)) ([e71e416](https://github.com/bigknoxy/smallcode-jk/commit/e71e41697088f2f66843a9122574b3a223df6d23))
+* **context:** pin tie-break stays a TRUE tie-break — never demote path-named winner ([#123](https://github.com/bigknoxy/smallcode-jk/issues/123)) ([1e61881](https://github.com/bigknoxy/smallcode-jk/commit/1e6188119f3d4b2aa47afcfbeb4333424483b3f1))
+* **provider:** watchdog abstains on large prompts — prefill-dominated wall-clock tps caused false reload-loops at 32K num_ctx ([#129](https://github.com/bigknoxy/smallcode-jk/issues/129)) ([55e1763](https://github.com/bigknoxy/smallcode-jk/commit/55e1763d28296a1822aa3beb1e16698b7995ce8a))
+* **repair:** scope to target fn + gate to assertion reds + fix range-less no-op ([#125](https://github.com/bigknoxy/smallcode-jk/issues/125)) ([06545f9](https://github.com/bigknoxy/smallcode-jk/commit/06545f984e4e8021a497bb4bbe5fbe3832191802))
+
 ## [1.9.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.8.0...v1.9.0) (2026-07-05)
 
 
