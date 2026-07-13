@@ -1,0 +1,90 @@
+{
+  "_comment": "Frozen model-free localization probe against smallcode's OWN 644-file repo. Each case is a task/bug-report framed by MECHANISM (never a verbatim path), mirroring the real-repo condition the synthetic eval fixtures cannot reproduce (they name the target path, so PATH_MENTION dominates and localization is trivially 100%). truth = the file(s) that DEFINE the mechanism. hard=true marks cases where the definer's basename does NOT contain the concept words — these guard against over-fitting any basename-based ranking signal. Authored 2026-07-13 from the dogfood mislocalization (operator-mutation task locked onto loop.ts, the USER of the enumerator, not operator-mutation.ts, the DEFINER).",
+  "cases": [
+    {
+      "id": "operator-mutation-muldiv",
+      "query": "Add support for flipping multiplicative operators * and / in the operator-mutation repair pass so it can crack a wrong-arithmetic bug.",
+      "truth": ["src/repair/operator-mutation.ts"]
+    },
+    {
+      "id": "literal-mutation-decimal",
+      "query": "The integer-literal brute-force repair only tries plus or minus one and two on whole numbers; extend the literal mutation enumerator to also perturb decimal constants.",
+      "truth": ["src/repair/literal-mutation.ts"]
+    },
+    {
+      "id": "read-after-delete-hint",
+      "query": "When the model deletes a line it still needs to read, we inject a read-after-delete hint telling it to reorder. Make the hint fire one turn earlier.",
+      "truth": ["src/repair/read-after-delete.ts"]
+    },
+    {
+      "id": "scorer-target-select",
+      "query": "Retrieval keeps ranking the wrong file first on big repos. Fix how source files are scored and ordered by their lexical relevance to the task.",
+      "truth": ["src/context/scorer.ts"]
+    },
+    {
+      "id": "walker-index",
+      "query": "The routine that recursively walks the repository directory tree and lists every source file skips too many entries. Add support for one more source extension.",
+      "truth": ["src/context/walker.ts"]
+    },
+    {
+      "id": "carousel-attention",
+      "query": "The stall-rescue routine that walks the model's attention from one editable file to the next — the carousel — visits files in the wrong order. Fix the visitation order.",
+      "truth": ["src/agent/carousel.ts"]
+    },
+    {
+      "id": "target-set-neighborhood",
+      "query": "Widen the single-file edit lock into a bounded editable set built from the primary target plus the files it directly imports.",
+      "truth": ["src/agent/target-set.ts"]
+    },
+    {
+      "id": "planner-goals",
+      "query": "The planner sometimes emits a bare file path instead of an action as a sub-goal. Tighten how the task is decomposed into ordered sub-goals.",
+      "truth": ["src/agent/planner.ts"]
+    },
+    {
+      "id": "phase-gate",
+      "query": "Before the model has read any file it should be in explore phase and write tools stay gated. Adjust the phase gate that decides explore vs edit.",
+      "truth": ["src/agent/phase-gate.ts"]
+    },
+    {
+      "id": "fingerprint-diff",
+      "query": "Compare two metric snapshots and flag a regression only when the confidence intervals do not overlap. Fix the run fingerprint diff.",
+      "truth": ["src/improve/fingerprint.ts"]
+    },
+    {
+      "id": "reasoning-thinkonly",
+      "query": "Detect when a small model produced only chain-of-thought and no tool call, and strip the reasoning block before applying edits.",
+      "truth": ["src/reasoning/handler.ts"],
+      "hard": true
+    },
+    {
+      "id": "stats-ci",
+      "query": "Report pass@k with a 95% bootstrap confidence interval instead of a bare point estimate over the trials.",
+      "truth": ["src/eval/stats.ts"],
+      "hard": true
+    },
+    {
+      "id": "oracle-earlystop",
+      "query": "Run the test suite as the correctness oracle and early-stop the agent loop the moment every test is green.",
+      "truth": ["src/verify/oracle.ts"],
+      "hard": true
+    },
+    {
+      "id": "watchdog-abstain",
+      "query": "When the prompt is very large the tokens-per-second watchdog wrongly reports a degraded model and thrashes a reload; make it abstain on big prompts.",
+      "truth": ["src/provider/watchdog.ts"],
+      "hard": true
+    },
+    {
+      "id": "edit-format-choice",
+      "query": "Decide whether an edit should be a whole-file rewrite or a single-function patch based on the file's line count.",
+      "truth": ["src/edit/patch-function.ts"],
+      "hard": true
+    },
+    {
+      "id": "repair-block-fuzzy",
+      "query": "When a search-replace edit block does not match exactly, run a fuzzy repair pass to re-anchor it before giving up.",
+      "truth": ["src/edit/repair.ts"]
+    }
+  ]
+}

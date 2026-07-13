@@ -1354,6 +1354,28 @@ flowchart TD
             <code>SMALLCODE_TARGET_PIN=0</code> to disable pinning + size-gating and measure the clean
             pre-A baseline on the identical retrieval path.
           </p>
+          <p>
+            <strong>Defines over uses (2026-07-13).</strong> A real-repo dogfood exposed that on a large
+            codebase the pin locks onto the wrong file: an <em>operator-mutation</em> task locked onto
+            <code>loop.ts</code> (the CALLER, whose many symbols pile up partial-substring hits on the
+            task's common words) instead of <code>operator-mutation.ts</code> (the small module that
+            DEFINES the mechanism). The synthetic eval fixtures never surfaced this — their task text
+            names the target path verbatim, so <code>PATH_MENTION_WEIGHT</code> (+1000) trivially wins and
+            localization reads 100%. Two <code>scoreFiles</code> signals close the gap: a <strong>basename
+            definer</strong> boost (a file NAMED for the query's concept — <code>read-after-delete.ts</code>
+            for a "read after delete" task — is likely the definer; +18 per matched basename token, +25
+            when two or more match, with a generic-name stoplist so an <code>index.ts</code> barrel can't
+            resurrect on the word "index"), and a <strong>partial-match cap</strong> that bounds the
+            substring-noise pile a big aggregator can accumulate (exact + basename stay uncapped, only the
+            noise is bounded). Plus <code>scripts/</code> joins the low-priority target segments (dev
+            tooling, not a mechanism definition). Measured model-free by
+            <code>scripts/localization-probe.ts</code> against smallcode's own repo — on a blind
+            independent probe (queries authored without sight of the ranking code) the change lifts top-1
+            localization <strong>13% → 31%</strong> and top-3 <strong>13% → 44%</strong>, while the
+            synthetic overlay accuracy holds at 38/38. The residual gap is the LEXICAL ceiling: a task that
+            shares no word with the definer's name (e.g. "cycle its focus" for the carousel) needs semantic
+            retrieval, the next lever.
+          </p>
         </div>
       </div>
     </section>
