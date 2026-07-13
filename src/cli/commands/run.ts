@@ -8,7 +8,13 @@ import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
 import type { AgentConfig, AgentState } from "../../agent/types.ts";
 import { loadConfig } from "../../config/loader.ts";
-import { buildContext, walkRepo } from "../../context/index.ts";
+import {
+  buildContext,
+  type EmbedFn,
+  embedFileIndex,
+  makeOllamaEmbedder,
+  walkRepo,
+} from "../../context/index.ts";
 import type { ContextBundle } from "../../context/types.ts";
 import { contextBudgetFor } from "../../models/context-budget.ts";
 import { ModelRegistry } from "../../models/registry.ts";
@@ -270,9 +276,38 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     process.exit(1);
   }
 
+  // 6c. Semantic retrieval (opt-in, SMALLCODE_SEMANTIC_RETRIEVAL=1). Build a
+  // LOCAL embedder from the same base URL and embed the file INDEX once here, so
+  // every buildBundle call (planner + each turn) reuses the query-independent
+  // vectors. A down/absent embedder degrades to lexical-only (index is null →
+  // buildContext embeds inline, and computeSemanticScores swallows failures).
+  let semanticEmbed: EmbedFn | undefined;
+  let semanticDocVectors: number[][] | undefined;
+  if (process.env["SMALLCODE_SEMANTIC_RETRIEVAL"] === "1") {
+    semanticEmbed = makeOllamaEmbedder({
+      baseUrl: config.provider.baseUrl,
+      model: process.env["SMALLCODE_EMBED_MODEL"] ?? "nomic-embed-text",
+      apiKey: config.provider.apiKey,
+    });
+    process.stderr.write("[smallcode] Embedding file index for semantic retrieval...\n");
+    const idx = await embedFileIndex(repoMap.files, semanticEmbed);
+    if (idx) {
+      semanticDocVectors = idx;
+    } else {
+      process.stderr.write(
+        "[smallcode] Semantic index embedding failed — falling back to lexical retrieval.\n",
+      );
+    }
+  }
+
   async function buildBundle(query: string): Promise<ContextBundle> {
     try {
-      return await buildContext(repoMap, query, { repoRoot, tokenBudget: ctxBudget });
+      return await buildContext(repoMap, query, {
+        repoRoot,
+        tokenBudget: ctxBudget,
+        ...(semanticEmbed ? { semanticEmbed } : {}),
+        ...(semanticDocVectors ? { semanticDocVectors } : {}),
+      });
     } catch {
       return { chunks: [], totalTokens: 0, tokenBudget: ctxBudget, truncated: false, query };
     }
