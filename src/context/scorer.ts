@@ -15,6 +15,7 @@ export interface ScoredFile {
  * the real source — which would otherwise tie or even outrank it in retrieval.
  */
 const LOW_PRIORITY_SEGMENTS = new Set([
+  "scripts", // dev tooling / one-off probes — rarely the mechanism-fix target
   "fixtures",
   "__fixtures__",
   "__mocks__",
@@ -94,6 +95,133 @@ const EXACT_NAME_WEIGHT = 15;
 const PATH_MENTION_WEIGHT = 1000;
 
 /**
+ * Cap on the AGGREGATE partial-substring symbol-match score (signal 2) a single
+ * file can earn. Partial matches are weak "this file mentions the concept"
+ * evidence; unbounded, they let a big aggregator/barrel file (dozens of symbols,
+ * each partial-matching a common task word like "file"/"run"/"add") pile up a
+ * score that swamps the small module actually DEFINING the mechanism. Exact
+ * symbol matches (signal 1) and the basename definer signal are NOT capped — only
+ * the noise is. Set at ~4 partial hits, above which more matches signal "big
+ * file" rather than "better target". Real dogfood failure this addresses: an
+ * operator-mutation task ranked loop.ts (the caller, many symbols) over
+ * operator-mutation.ts (the definer, few symbols).
+ */
+const PARTIAL_MATCH_CAP = 12;
+
+/**
+ * Per-token weight for a query token that matches a token of the file's BASENAME
+ * (filename minus extension, split on non-alphanumeric). A file literally NAMED
+ * for the concept the task is about (`operator-mutation.ts` for an "operator
+ * mutation" task) is the DEFINER of that mechanism; a file that merely USES the
+ * mechanism accumulates only partial substring hits on its own symbol names.
+ * This is the "defines over uses" signal: without it, retrieval on a large repo
+ * locks onto the orchestration file that references a mechanism instead of the
+ * small module that defines it (real dogfood failure: an operator-mutation task
+ * locked onto loop.ts, the caller, not operator-mutation.ts, the enumerator).
+ * Weighted at ~one exact-symbol so a single named-file match clears the generic
+ * substring noise a big decoy piles up from common task words (add/for/pass).
+ */
+const BASENAME_TOKEN_WEIGHT = 22;
+
+/**
+ * Basename tokens too STRUCTURAL to indicate a file is named for a concept.
+ * These name a file's role in the module layout (a barrel, a util grab-bag, an
+ * entrypoint), not the mechanism it defines, so matching one is not evidence of
+ * "definer". Excluding them lets BASENAME_TOKEN_WEIGHT run high enough to clear
+ * decoy symbol-piles without resurrecting an `index.ts` barrel or a
+ * `file-utils.ts` grab-bag every time a task sentence says "file" or "index".
+ */
+const GENERIC_BASENAME_TOKENS = new Set([
+  "index",
+  "main",
+  "file",
+  "util",
+  "utils",
+  "helper",
+  "helpers",
+  "core",
+  "base",
+  "common",
+  "types",
+  "type",
+  "node",
+  "code",
+  "data",
+  "lib",
+  "mod",
+]);
+
+/**
+ * Extra boost when TWO OR MORE distinct query tokens match the basename — a
+ * compound-named file (`operator-mutation`, `read-after-delete`, `target-set`)
+ * whose name reproduces multiple task nouns is almost certainly the definer, a
+ * far stronger and rarer signal than a single common-word filename hit. Kept
+ * well below PATH_MENTION_WEIGHT so an explicitly-named path always still wins.
+ */
+const BASENAME_COMPOUND_BONUS = 25;
+
+/**
+ * Minimum basename-token length considered for the "defines" signal. Short
+ * fragments ("to", "of", "id", "js") are too generic to indicate a file is
+ * named for a concept and would false-fire on decoys. Pure.
+ */
+const MIN_BASENAME_TOKEN_LEN = 4;
+
+/**
+ * Tokenize a file's basename (drop directory + extension, split on
+ * non-alphanumeric) into lower-cased fragments of at least MIN_BASENAME_TOKEN_LEN
+ * chars. `src/repair/operator-mutation.ts` → ["operator", "mutation"]. Pure.
+ */
+function tokenizeBasename(path: string): string[] {
+  const norm = path.replace(/\\/g, "/");
+  const base = norm.slice(norm.lastIndexOf("/") + 1).replace(/\.[a-z0-9]+$/i, "");
+  return base
+    .split(/[^a-zA-Z0-9]+/)
+    .map((t) => t.toLowerCase())
+    .filter((t) => t.length >= MIN_BASENAME_TOKEN_LEN && !GENERIC_BASENAME_TOKENS.has(t));
+}
+
+/**
+ * True when two lower-cased tokens name the same concept: equal, or sharing a
+ * common prefix of at least MIN_BASENAME_TOKEN_LEN chars (so "walker"~"walks",
+ * "scorer"~"scored", "planner"~"planning" — but NOT "wall"~"walk", 3-char share).
+ * Prefix, not arbitrary substring, so unrelated tokens that merely share a middle
+ * fragment don't collide. Pure.
+ */
+function tokensAkin(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length < MIN_BASENAME_TOKEN_LEN || b.length < MIN_BASENAME_TOKEN_LEN) return false;
+  let i = 0;
+  const max = Math.min(a.length, b.length);
+  while (i < max && a[i] === b[i]) i++;
+  return i >= MIN_BASENAME_TOKEN_LEN;
+}
+
+/**
+ * "Defines over uses" score for a file: how strongly the file's BASENAME is
+ * named after the query's concept tokens. Counts DISTINCT query tokens that
+ * match a basename token (exact, or one is a prefix of the other with the shared
+ * prefix ≥ MIN_BASENAME_TOKEN_LEN — so "walker" matches "walks"/"walk" but not
+ * "wall"). Returns 0 when nothing matches (the common case → no ranking change).
+ * Pure.
+ */
+function definerScore(basenameTokens: string[], queryTokens: string[]): number {
+  if (basenameTokens.length === 0) return 0;
+  const matched = new Set<string>();
+  for (const qt of queryTokens) {
+    for (const bt of basenameTokens) {
+      if (tokensAkin(qt, bt)) {
+        matched.add(bt);
+        break;
+      }
+    }
+  }
+  const count = matched.size;
+  if (count === 0) return 0;
+  return BASENAME_TOKEN_WEIGHT * count + (count >= 2 ? BASENAME_COMPOUND_BONUS : 0);
+}
+
+/**
  * True when `query` names `path` verbatim as a repo-relative path. The path is
  * distinctive (contains a "/" separator and/or a file extension), so a plain
  * substring test can't false-match a bare word. Slashes are normalized so a
@@ -121,6 +249,12 @@ export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
       score += PATH_MENTION_WEIGHT;
     }
 
+    // Signal 0.5 (defines over uses): the file's BASENAME is named after the
+    // query's concept tokens → it likely DEFINES the mechanism rather than
+    // merely using it. Applied before the partial-match signals so a named-file
+    // definer clears the generic-word substring noise a big decoy accumulates.
+    score += definerScore(tokenizeBasename(fileMap.path), tokens);
+
     // Signal 3: file path contains query token (+2 per matching token)
     for (const token of tokens) {
       if (pathLower.includes(token)) {
@@ -128,33 +262,44 @@ export function scoreFiles(files: FileMap[], query: string): ScoredFile[] {
       }
     }
 
-    // Signals 1, 2, 4: symbol-level scoring
+    // Signals 1, 2, 4: symbol-level scoring. EXACT matches (signal 1) are the
+    // definer signal and stay uncapped; PARTIAL substring matches (signal 2) are
+    // the "uses" noise — they accumulate without bound across a big aggregator's
+    // dozens of symbols and swamp a small definer module, so their aggregate is
+    // capped (see PARTIAL_MATCH_CAP). This is the other half of "defines over
+    // uses": stop a barrel/orchestration file from out-scoring the module that
+    // defines the mechanism purely by having more symbols to partial-match.
+    let exactScore = 0;
+    let partialScore = 0;
     for (const sym of fileMap.symbols) {
       const nameLower = sym.name.toLowerCase();
-      let symScore = 0;
+      let symExact = 0;
+      let symPartial = 0;
 
       for (const token of tokens) {
         if (nameLower === token) {
           // Signal 1: exact symbol name match — dominant target signal.
-          symScore += EXACT_NAME_WEIGHT;
+          symExact += EXACT_NAME_WEIGHT;
         } else if (nameLower.includes(token)) {
           // Signal 2: partial symbol name match (+3)
-          symScore += 3;
+          symPartial += 3;
         }
       }
 
-      // Signal 4: function/method kind boost (+1)
+      // Signal 4: function/method kind boost (+1) — applied once if the symbol
+      // matched at all, on whichever bucket it contributed to.
       if (sym.kind === "function" || sym.kind === "method") {
-        if (symScore > 0) {
-          symScore += 1;
-        }
+        if (symExact > 0) symExact += 1;
+        else if (symPartial > 0) symPartial += 1;
       }
 
-      if (symScore > 0) {
-        score += symScore;
+      if (symExact > 0 || symPartial > 0) {
+        exactScore += symExact;
+        partialScore += symPartial;
         matchedSymbols.push(sym);
       }
     }
+    score += exactScore + Math.min(partialScore, PARTIAL_MATCH_CAP);
 
     // Deprioritize test/fixture/vendor/example paths for TARGET selection —
     // gated on score > 0 so a zero-score file is never resurrected above zero.

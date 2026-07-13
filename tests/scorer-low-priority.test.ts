@@ -121,3 +121,120 @@ describe("scoreFiles — explicit path mention", () => {
     expect(scored[0]!.score).toBeLessThan(100); // nowhere near the 1000 boost
   });
 });
+
+// ---------------------------------------------------------------------------
+// scoreFiles — "defines over uses": a file NAMED for the concept (the definer)
+// outranks a big orchestration file that merely USES it via partial matches.
+// Regression guard for the real dogfood failure (operator-mutation task locked
+// onto loop.ts, the caller, not operator-mutation.ts, the definer).
+// ---------------------------------------------------------------------------
+
+describe("scoreFiles — defines over uses (basename definer signal)", () => {
+  it("ranks the file NAMED for the concept above a bigger file that only uses it", () => {
+    // Definer: small module literally named for the mechanism, few symbols.
+    const definer = makeFile("src/repair/operator-mutation.ts", [
+      makeSymbol("enumerateComparisonMutations"),
+      makeSymbol("OperatorMutation", "class"),
+    ]);
+    // User/orchestration: a big file that references the mechanism across many
+    // symbols, accumulating partial-substring hits on the task's common words.
+    const user = makeFile(
+      "src/agent/loop.ts",
+      [
+        "runOperatorMutationRepair",
+        "runLiteralRepair",
+        "runStatementRepair",
+        "pristineTargetContent",
+        "readFailureWindow",
+        "parseToolCalls",
+      ].map((n) => makeSymbol(n)),
+    );
+    const scored = scoreFiles(
+      [user, definer],
+      "Add support for flipping multiplicative operators in the operator-mutation repair pass",
+    );
+    expect(scored[0]!.fileMap.path).toBe("src/repair/operator-mutation.ts");
+    expect(scored[0]!.score).toBeGreaterThan(scored[1]!.score);
+  });
+
+  it("gives a compound (two-token) basename match a bonus over a single-token match", () => {
+    const compound = makeFile("src/repair/read-after-delete.ts", [makeSymbol("buildHint")]);
+    const single = makeFile("src/repair/delete.ts", [makeSymbol("buildHint")]);
+    const scored = scoreFiles(
+      [single, compound],
+      "generate the read after delete hint that tells the model to reorder",
+    );
+    expect(scored[0]!.fileMap.path).toBe("src/repair/read-after-delete.ts");
+    expect(scored[0]!.score).toBeGreaterThan(scored[1]!.score);
+  });
+
+  it("does not fire on generic structural basename tokens (index/file/utils)", () => {
+    // A barrel named index.ts must NOT get a definer boost just because the task
+    // sentence contains the word "index".
+    const barrel = makeFile("src/agent/index.ts", [makeSymbol("reExported")]);
+    const real = makeFile("src/agent/carousel.ts", [makeSymbol("runCarousel")]);
+    const scored = scoreFiles([barrel, real], "fix the carousel index visitation order");
+    // carousel.ts gets the definer boost; index.ts does not (index is generic).
+    expect(scored[0]!.fileMap.path).toBe("src/agent/carousel.ts");
+  });
+
+  it("an explicit path mention still dominates the basename definer signal", () => {
+    // If the task NAMES a path, that file wins even if a decoy is named for the
+    // concept — PATH_MENTION_WEIGHT stays an order of magnitude above basename.
+    const named = makeFile("src/cli/args.ts", [makeSymbol("parseArgs")]);
+    const conceptNamed = makeFile("src/repair/operator-mutation.ts", [makeSymbol("x")]);
+    const scored = scoreFiles(
+      [conceptNamed, named],
+      "In src/cli/args.ts, fix the operator mutation parsing",
+    );
+    expect(scored[0]!.fileMap.path).toBe("src/cli/args.ts");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scoreFiles — partial-match cap: a big file's unbounded partial-substring pile
+// can no longer swamp a smaller, more relevant file.
+// ---------------------------------------------------------------------------
+
+describe("scoreFiles — partial-match cap", () => {
+  it("caps the aggregate partial-substring score a single file can earn", () => {
+    // 20 symbols each partial-matching "repair" → uncapped this is 20*4=80; the
+    // cap holds it to a bounded contribution so it can't dwarf a real target.
+    const bigDecoy = makeFile(
+      "src/agent/orchestrate.ts",
+      Array.from({ length: 20 }, (_, i) => makeSymbol(`repairStep${i}`)),
+    );
+    const scored = scoreFiles([bigDecoy], "run the repair");
+    // Cap (12) + no path/exact/basename signal here → well under the uncapped 80.
+    expect(scored[0]!.score).toBeLessThanOrEqual(12);
+  });
+
+  it("exact symbol matches remain uncapped (definer with exact hit still wins)", () => {
+    const exact = makeFile("src/x.ts", [makeSymbol("repair")]); // exact "repair" = 15 + 1
+    const partials = makeFile(
+      "src/y.ts",
+      Array.from({ length: 20 }, (_, i) => makeSymbol(`repairThing${i}`)),
+    );
+    const scored = scoreFiles([partials, exact], "run the repair");
+    expect(scored[0]!.fileMap.path).toBe("src/x.ts");
+    expect(scored[0]!.score).toBe(16);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scoreFiles — scripts/ deprioritized as edit targets (dev tooling, not the
+// mechanism definition).
+// ---------------------------------------------------------------------------
+
+describe("scoreFiles — scripts deprioritization", () => {
+  it("flags a scripts/ path as low-priority for target selection", () => {
+    expect(isLowPriorityTargetPath("scripts/compare-runs.ts")).toBe(true);
+  });
+
+  it("ranks a src definer above a scripts file named for the same concept", () => {
+    const src = makeFile("src/improve/fingerprint.ts", [makeSymbol("fingerprintDiff")]);
+    const script = makeFile("scripts/fingerprint.ts", [makeSymbol("fingerprintDiff")]);
+    const scored = scoreFiles([script, src], "fix the fingerprint diff");
+    expect(scored[0]!.fileMap.path).toBe("src/improve/fingerprint.ts");
+  });
+});
