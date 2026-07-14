@@ -1391,6 +1391,25 @@ flowchart TD
             climbs top-1 13% → 31% → 50% and top-3 13% → 44% → 69%. Default OFF (adds an index-embed step + a model
             pull); A/B via <code>scripts/localization-probe.ts</code>.
           </p>
+          <p>
+            <strong>Coupled two-site intra-file (2026-07-14).</strong> Once a task IS localized to the right
+            file, a residual gap remains: some fixes need the target FUNCTION plus a coupled module-level
+            declaration it depends on (e.g. a lookup table or dispatch map defined outside the function) —
+            a function-only fix stays red. <code>src/context/coupled-decls.ts</code>'s pure
+            <code>surfaceCoupledDecls(content, symbols, targetFnName)</code> is a read-only signal that scans a
+            file for the module-level <code>const</code>/<code>let</code>/<code>var</code> declarations the
+            localized target function references — it is NOT wired into the loop. A model-free measuring
+            stick, <code>scripts/coupled-site-accuracy.ts</code> over the new <code>evals/suites/coupled-site</code>
+            suite (4 genuine coupled two-site fixtures), quantifies the gap: baseline (today's pipeline surfaces
+            no coupled decls) vs. the walker's recall/precision against the module decls the solution overlay
+            actually edits — the static signal recovers the coupled decls the existing operator-mutation repair's
+            <code>FLIPS</code>/<code>OP_RE</code> constants already depend on in <code>operator-mutation.ts</code>.
+            A prompt-hint lever surfacing those decls to the model was built and A/B-tested, and it did NOT help
+            the 7b — 0/15 on the real <code>operator-mutation.ts</code> fixture, and a synthetic regression
+            (0.80 → 0.75) — because this gap is a DERIVATION problem (the model still can't reason about how the
+            decl and the function interact), not an attention problem a hint can close. It was reverted; there is
+            no new env var and no loop behavior change.
+          </p>
         </div>
       </div>
     </section>
@@ -1626,7 +1645,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-13</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-14</span>
   </div>
 </footer>
 
