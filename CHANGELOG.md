@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.10.0...v1.11.0) (2026-07-14)
+
+
+### Features
+
+* **context:** semantic retrieval — local-embedding fusion crosses the lexical ceiling ([d429b7b](https://github.com/bigknoxy/smallcode-jk/commit/d429b7b01c13f589014ddb83915cd0e767dddd7c))
+* **context:** semantic retrieval — local-embedding fusion crosses the lexical ceiling ([e5f83b5](https://github.com/bigknoxy/smallcode-jk/commit/e5f83b5bfc69957372eab34a72eb6268682481d5))
+
 ## [1.10.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.9.0...v1.10.0) (2026-07-13)
 
 
