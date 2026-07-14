@@ -1,7 +1,10 @@
 # HANDOFF — smallcode
 
 > **Living doc. UPDATE THIS on every meaningful step** (new commit, A/B result, merge, decision). Assume the next agent has NO memory — this file is its only bridge. Keep it terse and CURRENT. Stale handoff = bug.
-> Last updated: **2026-07-13**
+> Last updated: **2026-07-14**
+
+## ▶ START HERE (next move)
+Clean `main` @ v1.11.0, tree clean, all retrieval levers shipped. **The open axis is NEXT STEP 1d: the COUPLED TWO-SITE INTRA-FILE edit** (below). Localization (1b) + final-state guard (1c) are DONE. 1d is a genuine capability/inference gap the dogfood exposed after localization was fixed — NOT a flag flip, NOT eval-gameable coaching. Read 1d, then the DOGFOOD section for the root cause. Everything above 1d is shipped history.
 
 ## What smallcode is
 A coding HARNESS that makes a SMALL LOCAL model (qwen2.5-coder 3b/7b/32b via Ollama, fully offline) fix real bugs on real repos. Thesis: **harness design > model size.** Small models can't localize faults or derive non-trivial logic (capability ceiling, proven repeatedly). Wins come from HARNESS-side deterministic rescues + attention-shaping, not model coaxing.
