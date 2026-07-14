@@ -1,5 +1,6 @@
 import { chooseEditFormat } from "@/edit/patch-function.ts";
 import { scoreFiles } from "./scorer.ts";
+import { computeSemanticScores, type EmbedFn } from "./semantic.ts";
 import { estimateTokens } from "./tokens.ts";
 import type {
   CodeSymbol,
@@ -225,6 +226,20 @@ export interface BuildOptions {
    * identical retrieval path (clean A/B isolation).
    */
   pinTarget?: boolean;
+  /**
+   * Optional local-embedding function. When provided AND
+   * `SMALLCODE_SEMANTIC_RETRIEVAL=1`, its cosine similarity is fused as an
+   * additive boost into the lexical file scores so a task can localize a file it
+   * shares no WORD with (the lexical ceiling). Absent / flag off → pure lexical
+   * (unchanged). An embedding failure degrades to lexical-only (never throws).
+   */
+  semanticEmbed?: EmbedFn;
+  /**
+   * Optional precomputed file-profile vectors (query-independent), in
+   * `repoMap.files` order. Lets a caller embed the index ONCE and reuse it across
+   * many queries; when absent the fusion embeds the index inline each call.
+   */
+  semanticDocVectors?: number[][];
 }
 
 // Build a compact symbol-only text for a single file.
@@ -293,6 +308,8 @@ export async function buildContext(
     maxChunksPerFile = 3,
     includeSymbolsOnly = false,
     pinTarget = true,
+    semanticEmbed,
+    semanticDocVectors,
   } = options;
 
   const effectiveBudget = tokenBudget - reserveTokens;
@@ -312,7 +329,29 @@ export async function buildContext(
     return bundle;
   }
 
-  const scoredFiles = scoreFiles(repoMap.files, query);
+  let scoredFiles = scoreFiles(repoMap.files, query);
+
+  // Semantic fusion (opt-in): add a local-embedding cosine boost so a task can
+  // localize a file it shares no WORD with (the lexical ceiling). Additive on
+  // top of the lexical score, so a strong semantic hit can resurrect a
+  // lexically-zero definer; a no-op (empty map) when the embedder is absent,
+  // the flag is off, or embedding fails — retrieval degrades to lexical-only.
+  if (semanticEmbed && process.env["SMALLCODE_SEMANTIC_RETRIEVAL"] === "1") {
+    const semScores = await computeSemanticScores(
+      query,
+      repoMap.files,
+      semanticEmbed,
+      semanticDocVectors,
+    );
+    if (semScores.size > 0) {
+      scoredFiles = scoredFiles
+        .map((s) => {
+          const boost = semScores.get(s.fileMap.path) ?? 0;
+          return boost > 0 ? { ...s, score: s.score + boost } : s;
+        })
+        .sort((a, b) => b.score - a.score);
+    }
+  }
 
   if (includeSymbolsOnly) {
     // Build compact repo map from symbol signatures — no file reads.

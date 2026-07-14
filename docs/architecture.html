@@ -1376,6 +1376,21 @@ flowchart TD
             shares no word with the definer's name (e.g. "cycle its focus" for the carousel) needs semantic
             retrieval, the next lever.
           </p>
+          <p>
+            <strong>Semantic retrieval (2026-07-13, opt-in <code>SMALLCODE_SEMANTIC_RETRIEVAL=1</code>).</strong>
+            That next lever: a MEANING signal for the tasks lexical scoring cannot reach. A compact profile of
+            each file (path + symbol signatures) and the task query are embedded with a LOCAL Ollama model
+            (<code>nomic-embed-text</code>, 768-dim — fully offline, consistent with the north star), cosine-ranked,
+            and the above-threshold similarity is fused as an ADDITIVE boost (<code>src/context/semantic.ts</code>)
+            into the lexical score so a strong semantic hit can resurrect a lexically-zero definer without letting a
+            marginal match dominate (weight 100, threshold 0.55, both tuned on the blind probe; above ~140 semantic
+            overpowers good lexical picks). The file index is embedded ONCE per run and reused across the planner and
+            every turn; a down/absent embedder or any embedding failure degrades to lexical-only and never breaks a
+            run. On the blind independent probe it lifts localization <strong>top-1 31% → 50%</strong>, <strong>top-3
+            44% → 69%</strong> over the lexical-only path — so across both levers the blind real-repo localization
+            climbs top-1 13% → 31% → 50% and top-3 13% → 44% → 69%. Default OFF (adds an index-embed step + a model
+            pull); A/B via <code>scripts/localization-probe.ts</code>.
+          </p>
         </div>
       </div>
     </section>
