@@ -1,0 +1,6 @@
+{
+  "name": "coupled-opmut-muldiv_1",
+  "module": "src/operator-mutation.ts",
+  "type": "module",
+  "private": true
+}
