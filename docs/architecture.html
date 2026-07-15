@@ -425,9 +425,15 @@ graph TD
         and statement repair are skipped rather than churning the oracle over every candidate. It exists because the mri wrong-operator wall above showed that no
         model-side lever — exact-line localization, 32b escalation, or a minimal-edit prompt — could fix a
         single-comparison-operator bug; the operator space is small and the oracle is deterministic, so the
-        harness brute-forces it instead of asking the model to. The pass is deterministic and cannot
-        fake-green (it requires a full-green oracle verdict), and it only runs on runs that already failed,
-        so it can never slow down or destabilize a successful one. A/B (7b, no probe): it lifted the mri
+        harness brute-forces it instead of asking the model to. It requires a full-green oracle verdict, but
+        "deterministic ⇒ cannot fake-green" does <strong>not</strong> hold on thin test oracles: a 2026-07-15
+        model-free audit (<code>scripts/audit-operator-mutation.ts</code>, production-scoped to the locked
+        function range) found <strong>4/38 (10.5%)</strong> solution-backed tasks go green via a
+        semantically-wrong sibling-operator flip <em>inside</em> the target function — the same structural
+        fake-green mode, and the same rate, that keeps <code>SMALLCODE_LITERAL_REPAIR</code> off. It stays
+        default ON because it is the only lever that cracks the mri-class wrong-operator wall, pending a
+        stronger accept-check (tie the greening flip to the model's own attempted region). It only runs on
+        runs that already failed, so it can never slow down or destabilize a successful one. A/B (7b, no probe): it lifted the mri
         floor from <strong>0.00 → 0.88</strong> (non-overlapping CIs — significant), took the realrepo suite
         from 0.90 [.85–.93] to 0.94 [.91–.97] (22-task, 7b, n=10, pooled n=220), and nudged edit-reliability
         0.99 → 1.00 with zero regression — which is why it is now on by default.
@@ -751,6 +757,18 @@ flowchart TD
         CIs, 20/22 tasks byte-identical) — so it now ships <strong>default ON</strong>. Set
         <code>SMALLCODE_TARGET_SET=0</code> to disable.
       </p>
+      <p style="background: var(--bg-callout, rgba(255,200,0,0.08)); border-left: 3px solid var(--text-accent); padding: var(--space-3, 12px); margin: var(--space-3, 12px) 0;">
+        <strong>Honest caveat — what generalizes vs what doesn't.</strong> A follow-up generality test
+        (2026-07-13) added 3 more genuine two-file coupling shapes, none literal/operator-crackable. Result:
+        <strong>TARGET_SET (making the neighbor file editable) is the robust general win</strong> — it
+        carried a brand-new coupling shape to 0.90 pass@1 with zero other lever's help. The stacked
+        "16% → 96%" ladder below (carousel + literal-repair on <code>multifile-receipt_1</code>) does
+        <strong>not</strong> generalize the same way: on the 3 new shapes, carousel was a no-op where
+        TARGET_SET alone already solved it (0.90 = 0.90), a non-significant nudge on a shape the model
+        fixates on (0.00 → 0.10), and useless against a genuine capability ceiling (0.00 = 0.00). The 96%
+        headline was specific to this fixture's brute-forceable literal constant — cite it as the receipt
+        fixture's ladder, not as a general "harness &gt; model" transfer.
+      </p>
       <p>
         <strong style="color: var(--text-primary);">Set-carousel (<code>SMALLCODE_SET_CAROUSEL</code>,
         default ON since 2026-07-09, requires <code>SMALLCODE_TARGET_SET</code>)</strong> — since the 7b above still can't
@@ -768,7 +786,10 @@ flowchart TD
         revert; every set member stays editable throughout, exactly as <code>SMALLCODE_TARGET_SET</code>
         already allows. Capped at two full sweeps of the set. On single-file tasks the set is length 1 so
         this is a no-op — the same regression A/B confirmed pooled pass@1 unchanged (0.892 = 0.892). Set
-        <code>SMALLCODE_SET_CAROUSEL=0</code> to disable.
+        <code>SMALLCODE_SET_CAROUSEL=0</code> to disable. On <code>multifile-receipt_1</code>, stacking this
+        with <code>SMALLCODE_LITERAL_REPAIR</code> lifted a 7b from 0.16 (bare) → 0.48 (+ carousel) → 0.96
+        (+ literal-repair) — <strong>see the caveat above: this ladder is fixture-specific and does not
+        generalize as a universal lift.</strong>
       </p>
     </section>
 
