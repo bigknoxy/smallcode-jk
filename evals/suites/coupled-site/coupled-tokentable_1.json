@@ -1,0 +1,9 @@
+{
+  "id": "coupled-tokentable_1",
+  "desc": "mutateOps(src) scans src for arithmetic operators and returns one mutated variant per match, flipping each operator to its opposite (e.g. mutateOps(\"a + b\") should include \"a - b\"). It currently only handles \"+\" and \"-\" — \"*\" and \"/\" are silently ignored instead of being flipped to each other. Two things are broken in the same file, in different places. Find and fix both so tests/mutate.test.ts passes.",
+  "setup": { "repoFixture": "coupled-tokentable_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/mutate.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["coupled-site", "intra-file", "genuine-coupled"],
+  "reference_solution": "coupled-tokentable_1-solution/"
+}

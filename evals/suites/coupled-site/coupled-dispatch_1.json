@@ -1,0 +1,9 @@
+{
+  "id": "coupled-dispatch_1",
+  "desc": "applyOp(kind, a, b) should support kind values \"add\", \"sub\", and \"mul\" (e.g. applyOp(\"mul\", 3, 4) === 12). It currently throws an \"unknown kind\" error for \"mul\" instead of returning a value. Two things are broken in the same file, in different places. Find and fix both so tests/apply.test.ts passes.",
+  "setup": { "repoFixture": "coupled-dispatch_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/apply.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["coupled-site", "intra-file", "genuine-coupled"],
+  "reference_solution": "coupled-dispatch_1-solution/"
+}
