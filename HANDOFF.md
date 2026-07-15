@@ -3,6 +3,9 @@
 > **Living doc. UPDATE THIS on every meaningful step** (new commit, A/B result, merge, decision). Assume the next agent has NO memory — this file is its only bridge. Keep it terse and CURRENT. Stale handoff = bug.
 > Last updated: **2026-07-15**
 
+## ▶ START HERE (next move)
+`main` @ v1.11.0. Retrieval localization levers shipped (defines-over-uses + semantic, PR #136/#137). 1d COUPLED-INTRA-FILE axis: measuring stick shipped, prompt-hint REFUTED (derivation ≠ attention, PR #141) — that axis is a derivation ceiling, don't re-chase model-side. 07-15 REAL-DOGFOOD of TARGET_SET on a genuine 2-file bug found + FIXED a safety bug (oracle output-truncation silently disabled both regression guards, PR #142) and exposed the next lever. **OPEN NEXT STEPS (pick by value): (a) make TARGET_SET's editable set BIDIRECTIONAL — include bounded importers of the primary, so a producer-localized coupling reaches its consumer (the 07-15 directionality hole); (b) audit `SMALLCODE_MUTATION_REPAIR` for fake-greens like literal-repair was (panel flagged it as the biggest unaudited contributor to the 0.94 headline); (c) tighten public-page numbers so index.html/README carry the same caveats HANDOFF does (16→96 is fixture/literal-specific; part of 0.94 is deterministic repair, not model).** Read the REAL-DOGFOOD + SAFETY BUG sections below for context.
+
 ## What smallcode is
 A coding HARNESS that makes a SMALL LOCAL model (qwen2.5-coder 3b/7b/32b via Ollama, fully offline) fix real bugs on real repos. Thesis: **harness design > model size.** Small models can't localize faults or derive non-trivial logic (capability ceiling, proven repeatedly). Wins come from HARNESS-side deterministic rescues + attention-shaping, not model coaxing.
 
