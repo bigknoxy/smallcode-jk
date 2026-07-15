@@ -191,12 +191,17 @@ export function escalateBrokenClean(verdict: OracleVerdict): OracleVerdict {
 }
 
 export function captureTestBaseline(repoRoot: string): TestBaseline {
-  const { state, result } = runBunTest(repoRoot);
+  const { state, fullOutput } = runBunTest(repoRoot);
+  // Parse counts/ids from the FULL, un-truncated output. `result.output` is
+  // sliced to 4000 chars for model-facing feedback brevity; a verbose failure
+  // (deep recursion, long stack traces) can push the `(fail)` lines and the
+  // `X pass / Y fail` summary past that cutoff, which would make the parsers
+  // read a false "0 red" and silently disable the final-state guard.
   return {
-    failingIds: parseFailingTestIds(result.output),
+    failingIds: parseFailingTestIds(fullOutput),
     hadAnyTests: state !== "absent",
-    redCount: parseRedCount(result.output),
-    loadError: hasLoadError(result.output),
+    redCount: parseRedCount(fullOutput),
+    loadError: hasLoadError(fullOutput),
   };
 }
 
@@ -223,7 +228,18 @@ export function finalStateWorseThanBaseline(
   return { worse: countRegression || newFailures.length > 0, newFailures };
 }
 
-function runBunTest(repoRoot: string): { state: TestState; result: CheckResult } {
+function runBunTest(repoRoot: string): {
+  state: TestState;
+  result: CheckResult;
+  /**
+   * The complete, un-truncated `bun test` output. `result.output` is sliced to
+   * 4000 chars for model-facing feedback, but the red-count / failing-id / load-
+   * error parsers MUST read the full text: a verbose failure can push the
+   * `(fail)` lines and the summary line past the slice, and a truncated parse
+   * reads a false "0 red" that silently disables the regression guards.
+   */
+  fullOutput: string;
+} {
   const start = Date.now();
   const proc = Bun.spawnSync(["bun", "test"], { cwd: repoRoot, timeout: 120_000 });
   const out =
@@ -233,6 +249,7 @@ function runBunTest(repoRoot: string): { state: TestState; result: CheckResult }
   const state = classifyTest(out, exit);
   return {
     state,
+    fullOutput: out,
     result: {
       kind: "test",
       name: "bun-test",
@@ -264,13 +281,16 @@ export async function runTieredOracle(
   // Tier 1: tests (authoritative).
   const test = runBunTest(repoRoot);
   if (test.state !== "absent") {
+    // Parse verdict-driving counts/ids from the FULL output (see runBunTest):
+    // `test.result.output` is truncated for feedback and would under-count a
+    // verbose failure, silently skipping the per-turn regression revert.
     const baselineFailing: Set<string> = opts.baseline?.failingIds ?? new Set();
-    const currentFailing = parseFailingTestIds(test.result.output);
+    const currentFailing = parseFailingTestIds(test.fullOutput);
     const newFailures = [...currentFailing].filter((id) => !baselineFailing.has(id));
-    const passCount = num(test.result.output.match(/(\d+)\s+pass/i));
+    const passCount = num(test.fullOutput.match(/(\d+)\s+pass/i));
 
     const baselineRed = opts.baseline?.redCount ?? 0;
-    const currentRed = parseRedCount(test.result.output);
+    const currentRed = parseRedCount(test.fullOutput);
     const countRegression = currentRed > baselineRed;
 
     // Honesty rule: "solved" requires a FULLY GREEN suite (zero failures, ≥1
@@ -301,7 +321,7 @@ export async function runTieredOracle(
     // red-count fell (a non-loading suite runs fewer tests). Without this the
     // count guard reads "fewer reds = progress" and keeps a broken edit.
     const introducedLoadError =
-      VALIDATE_EDIT && hasLoadError(test.result.output) && opts.baseline?.loadError !== true;
+      VALIDATE_EDIT && hasLoadError(test.fullOutput) && opts.baseline?.loadError !== true;
 
     const reportedFailures = [...newFailures];
     if (introducedLoadError && newFailures.length === 0) {

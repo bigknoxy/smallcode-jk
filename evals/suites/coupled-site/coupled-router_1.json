@@ -1,0 +1,9 @@
+{
+  "id": "coupled-router_1",
+  "desc": "handle(method, path) should route POST /submit to \"created\", the same way it already routes GET /health to \"ok\" (e.g. handle(\"POST\", \"/submit\") === \"created\"). It currently returns \"405\" for that request instead. Two things are broken in the same file, in different places. Find and fix both so tests/router.test.ts passes.",
+  "setup": { "repoFixture": "coupled-router_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/router.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["coupled-site", "intra-file", "genuine-coupled"],
+  "reference_solution": "coupled-router_1-solution/"
+}

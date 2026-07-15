@@ -627,6 +627,17 @@ flowchart TD
         <code>state.finalStateReverted</code>). It is <strong>eval-neutral by construction</strong>: it
         fires only on unsolved runs and reverts to the seeded-bug START state, so an unsolved trial stays
         unsolved (pass/fail unchanged) — it removes broken residue, it never manufactures a pass.
+        <strong>Full-output parsing (dogfood #4, 2026-07-15)</strong>: both this guard and the per-turn
+        revert were silently disabled when a failure was verbose. <code>runBunTest</code> slices its output
+        to 4000 chars for model feedback, and the verdict parsers
+        (<code>captureTestBaseline</code>/<code>runTieredOracle</code>) were reading that slice — so a
+        recursion-shaped bug (25,813 chars of stack frames for 4 reds) pushed the <code>(fail)</code> lines
+        and the <code>X pass / Y fail</code> summary past the cutoff, the parser read <code>redCount=0</code>,
+        and <code>finalStateWorseThanBaseline(start=2, final=0)</code> returned "not worse" → the guard
+        bailed and the repo was left strictly worse (a real 2-file dogfood, <code>TARGET_SET=0</code>, 3/6
+        runs). Fix: the parsers now read the full, un-truncated output; the OFF-arm worse-rate went 3/6 →
+        0/10 (the now-working per-turn revert catches the regression before the final state). Guarded by
+        <code>tests/oracle-truncation.test.ts</code>.
         <strong>Repair-pass throw containment</strong> (dogfood #3, 2026-07-08): the guard is only a
         backstop if the loop actually reaches it. <code>runOperatorMutationRepair</code> and
         <code>runStatementRepair</code> each call the real <code>bun test</code> oracle per candidate,
@@ -1391,6 +1402,25 @@ flowchart TD
             climbs top-1 13% → 31% → 50% and top-3 13% → 44% → 69%. Default OFF (adds an index-embed step + a model
             pull); A/B via <code>scripts/localization-probe.ts</code>.
           </p>
+          <p>
+            <strong>Coupled two-site intra-file (2026-07-14).</strong> Once a task IS localized to the right
+            file, a residual gap remains: some fixes need the target FUNCTION plus a coupled module-level
+            declaration it depends on (e.g. a lookup table or dispatch map defined outside the function) —
+            a function-only fix stays red. <code>src/context/coupled-decls.ts</code>'s pure
+            <code>surfaceCoupledDecls(content, symbols, targetFnName)</code> is a read-only signal that scans a
+            file for the module-level <code>const</code>/<code>let</code>/<code>var</code> declarations the
+            localized target function references — it is NOT wired into the loop. A model-free measuring
+            stick, <code>scripts/coupled-site-accuracy.ts</code> over the new <code>evals/suites/coupled-site</code>
+            suite (4 genuine coupled two-site fixtures), quantifies the gap: baseline (today's pipeline surfaces
+            no coupled decls) vs. the walker's recall/precision against the module decls the solution overlay
+            actually edits — the static signal recovers the coupled decls the existing operator-mutation repair's
+            <code>FLIPS</code>/<code>OP_RE</code> constants already depend on in <code>operator-mutation.ts</code>.
+            A prompt-hint lever surfacing those decls to the model was built and A/B-tested, and it did NOT help
+            the 7b — 0/15 on the real <code>operator-mutation.ts</code> fixture, and a synthetic regression
+            (0.80 → 0.75) — because this gap is a DERIVATION problem (the model still can't reason about how the
+            decl and the function interact), not an attention problem a hint can close. It was reverted; there is
+            no new env var and no loop behavior change.
+          </p>
         </div>
       </div>
     </section>
@@ -1626,7 +1656,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-13</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-15</span>
   </div>
 </footer>
 

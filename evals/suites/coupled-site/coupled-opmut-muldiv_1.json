@@ -1,0 +1,9 @@
+{
+  "id": "coupled-opmut-muldiv_1",
+  "desc": "src/operator-mutation.ts enumerates single-operator-flip repair candidates. It currently handles comparison and +/- flips but NOT multiplication/division: enumerateComparisonMutations should also propose flipping `*` to `/` and `/` to `*`. Two things must change in this one file, in different places, for tests/muldiv.test.ts to pass. Find and fix both.",
+  "setup": { "repoFixture": "coupled-opmut-muldiv_1" },
+  "graders": [{ "type": "deterministic_tests", "required": ["tests/muldiv.test.ts"], "command": "bun test" }],
+  "tracked_metrics": ["n_turns", "n_toolcalls", "n_total_tokens", "pass_at_1"],
+  "tags": ["coupled-site", "intra-file", "genuine-coupled", "real-file", "regex-coupling"],
+  "reference_solution": "coupled-opmut-muldiv_1-solution/"
+}
