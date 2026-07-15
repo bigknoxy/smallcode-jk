@@ -152,6 +152,18 @@ interface LineDiff {
   operatorOnly: boolean;
   buggyOperators: string[];
   solutionOperators: string[];
+  /** Operator-only lines can carry MULTIPLE mutable operators where only one
+   * actually changed (e.g. `i+1 === len || (...).charCodeAt(0) !== 45` has
+   * TWO operators — `===` and `!==` — but the reference fix only flips the
+   * `!==`). Pairing buggyOperators/solutionOperators positionally (same
+   * length on an operator-only line, since no operator was added/removed,
+   * only retargeted) and keeping just the pair(s) where they differ gives the
+   * actual single operator change the reference made, independent of how
+   * many other unrelated operators sit on the same line. Bug fixed here: the
+   * old code required `buggyOperators.length === 1` and thus could never
+   * match a true-fix on a multi-operator line — it fell through to
+   * FAKE-GREEN even for an exact reference match. */
+  changedOperatorPairs: Array<{ from: string; to: string }>;
 }
 
 interface FileClassification {
@@ -177,7 +189,28 @@ function classifyFileDiff(buggySrc: string, solutionSrc: string, file: string): 
     const operatorOnly = bStripped === sStripped;
     const buggyOperators = extractOperators(b);
     const solutionOperators = extractOperators(s);
-    changedLines.push({ lineNo: i + 1, buggy: b, solution: s, operatorOnly, buggyOperators, solutionOperators });
+    // Positional pairing: on an operator-only line the token COUNT can't
+    // change (stripOperators equality already ruled out add/remove of
+    // non-operator content). Pair same-index entries and keep only the ones
+    // that differ — that isolates the ACTUAL operator change from unrelated
+    // operators that happen to share the line.
+    const changedOperatorPairs: Array<{ from: string; to: string }> = [];
+    if (buggyOperators.length === solutionOperators.length) {
+      for (let k = 0; k < buggyOperators.length; k++) {
+        if (buggyOperators[k] !== solutionOperators[k]) {
+          changedOperatorPairs.push({ from: buggyOperators[k]!, to: solutionOperators[k]! });
+        }
+      }
+    }
+    changedLines.push({
+      lineNo: i + 1,
+      buggy: b,
+      solution: s,
+      operatorOnly,
+      buggyOperators,
+      solutionOperators,
+      changedOperatorPairs,
+    });
   }
 
   const classification: "operator-only" | "non-operator" =
@@ -192,7 +225,19 @@ function classifyFileDiff(buggySrc: string, solutionSrc: string, file: string): 
 // Task audit
 // ---------------------------------------------------------------------------
 
-type TaskVerdict = "no-green" | "true-fix" | "FAKE-GREEN";
+// Three honest outcomes for a greening flip on an operator-only reference:
+//  - "true-fix": (line, from-operator, to-operator) EXACTLY equals the
+//    reference diff's (line, from, to) — the enumerator independently
+//    rediscovered the reference's own fix.
+//  - "alt-correct": same line, same FROM operator as the reference, but a
+//    DIFFERENT TO operator (e.g. reference flips `<`->`>`, the greening
+//    mutation flips `<`->`>=`) that also greens the full oracle. This is a
+//    correct alternative fix for a boundary/tie case, not an imitation of a
+//    non-operator fix — it must not be lumped in with genuine fakes.
+//  - "FAKE-GREEN": the greening flip is on a DIFFERENT line/expression than
+//    the reference touched, or the reference fix wasn't operator-only at all
+//    (a non-operator fix that an operator flip happened to imitate).
+type TaskVerdict = "no-green" | "true-fix" | "alt-correct" | "FAKE-GREEN";
 
 interface TaskAuditResult {
   suite: string;
@@ -342,27 +387,33 @@ async function auditTask(suite: string, task: EvalTask): Promise<TaskAuditResult
     };
   }
 
-  // 3. Decide true-fix vs FAKE-GREEN.
+  // 3. Decide true-fix / alt-correct / FAKE-GREEN.
   const fc = fileClassifications.find((f) => f.file === firstGreen!.file);
-  let isTrueFix = false;
+  let verdict: TaskVerdict = "FAKE-GREEN";
   let detail: string;
   if (overallRefClass === "operator-only" && fc && fc.classification === "operator-only") {
-    // Does the greening mutation reproduce the reference operator change on
-    // ITS changed line(s) in this file? True-fix requires the SAME line, the
-    // SAME original operator, and the SAME target operator as the reference.
-    const matchesRef = fc.changedLines.some(
-      (l) =>
-        l.lineNo === firstGreen!.line &&
-        l.buggyOperators.length === 1 &&
-        l.solutionOperators.length === 1 &&
-        `${l.buggyOperators[0]} -> ${l.solutionOperators[0]}` === firstGreen!.label,
-    );
-    isTrueFix = matchesRef;
-    detail = matchesRef
-      ? `mutation matches reference operator change in ${firstGreen.file} @L${firstGreen.line}`
-      : `reference is operator-only but greening flip (${firstGreen.label} @L${firstGreen.line}) does not match the reference's operator change`;
+    // Find the reference's actual changed-operator pair(s) on the SAME line
+    // the mutation greened. A line can carry multiple unrelated operators
+    // (see changedOperatorPairs doc above) — only compare against the pair(s)
+    // the reference itself changed, not every operator present on the line.
+    const refLine = fc.changedLines.find((l) => l.lineNo === firstGreen!.line);
+    const [mutFrom, mutTo] = firstGreen!.label.split(" -> ");
+    const exactMatch =
+      refLine?.changedOperatorPairs.some((p) => p.from === mutFrom && p.to === mutTo) ?? false;
+    const altCorrect =
+      !exactMatch && (refLine?.changedOperatorPairs.some((p) => p.from === mutFrom) ?? false);
+    if (exactMatch) {
+      verdict = "true-fix";
+      detail = `mutation matches reference operator change in ${firstGreen!.file} @L${firstGreen!.line}`;
+    } else if (altCorrect) {
+      verdict = "alt-correct";
+      detail = `reference flips the same operator (${mutFrom} -> ${refLine!.changedOperatorPairs.find((p) => p.from === mutFrom)!.to}) at ${firstGreen!.file} @L${firstGreen!.line}, but the greening mutation used a different target operator (${mutTo}) that also fully greens the oracle — correct boundary-equivalent alternative, not a fake`;
+    } else {
+      verdict = "FAKE-GREEN";
+      detail = `reference is operator-only but greening flip (${firstGreen!.label} @L${firstGreen!.line}) touches a different line/operator than the reference's actual change`;
+    }
   } else {
-    detail = `reference fix for ${firstGreen.file} is ${fc?.classification ?? "non-operator"} (not an operator-only change): ${
+    detail = `reference fix for ${firstGreen!.file} is ${fc?.classification ?? "non-operator"} (not an operator-only change): ${
       fc?.changedLines
         .slice(0, 2)
         .map((l) => `L${l.lineNo} "${l.buggy.trim()}" -> "${l.solution.trim()}"`)
@@ -373,7 +424,7 @@ async function auditTask(suite: string, task: EvalTask): Promise<TaskAuditResult
   return {
     suite,
     taskId: task.id,
-    verdict: isTrueFix ? "true-fix" : "FAKE-GREEN",
+    verdict,
     detail,
     greenFile: firstGreen.file,
     greenLabel: `${firstGreen.label} @L${firstGreen.line}`,
@@ -466,20 +517,21 @@ async function main() {
     bySuite.get(r.suite)!.push(r);
   }
 
-  console.log("suite               | scanned | no-green | true-fix | FAKE-GREEN");
-  console.log("--------------------+---------+----------+----------+-----------");
-  let totScanned = 0, totNoGreen = 0, totTrueFix = 0, totFake = 0;
+  console.log("suite               | scanned | no-green | true-fix | alt-correct | FAKE-GREEN");
+  console.log("--------------------+---------+----------+----------+-------------+-----------");
+  let totScanned = 0, totNoGreen = 0, totTrueFix = 0, totAlt = 0, totFake = 0;
   for (const [suite, results] of bySuite) {
     const noGreen = results.filter((r) => r.verdict === "no-green").length;
     const trueFix = results.filter((r) => r.verdict === "true-fix").length;
+    const alt = results.filter((r) => r.verdict === "alt-correct").length;
     const fake = results.filter((r) => r.verdict === "FAKE-GREEN").length;
-    totScanned += results.length; totNoGreen += noGreen; totTrueFix += trueFix; totFake += fake;
+    totScanned += results.length; totNoGreen += noGreen; totTrueFix += trueFix; totAlt += alt; totFake += fake;
     console.log(
-      `${suite.padEnd(20)} | ${String(results.length).padEnd(7)} | ${String(noGreen).padEnd(8)} | ${String(trueFix).padEnd(8)} | ${fake}`,
+      `${suite.padEnd(20)} | ${String(results.length).padEnd(7)} | ${String(noGreen).padEnd(8)} | ${String(trueFix).padEnd(8)} | ${String(alt).padEnd(11)} | ${fake}`,
     );
   }
-  console.log("--------------------+---------+----------+----------+-----------");
-  console.log(`${"TOTAL".padEnd(20)} | ${String(totScanned).padEnd(7)} | ${String(totNoGreen).padEnd(8)} | ${String(totTrueFix).padEnd(8)} | ${totFake}`);
+  console.log("--------------------+---------+----------+----------+-------------+-----------");
+  console.log(`${"TOTAL".padEnd(20)} | ${String(totScanned).padEnd(7)} | ${String(totNoGreen).padEnd(8)} | ${String(totTrueFix).padEnd(8)} | ${String(totAlt).padEnd(11)} | ${totFake}`);
 
   const fakeGreens = allResults.filter((r) => r.verdict === "FAKE-GREEN");
   if (fakeGreens.length > 0) {
@@ -491,6 +543,19 @@ async function main() {
           : "whole-file-fallback";
       console.log(`  - [${r.suite}] ${r.taskId}: ${r.greenLabel} in ${r.greenFile} (${fnNote})`);
       console.log(`      why suspicious: ${r.detail}`);
+    }
+  }
+
+  const altCorrects = allResults.filter((r) => r.verdict === "alt-correct");
+  if (altCorrects.length > 0) {
+    console.log("\nalt-correct detail (correct boundary-equivalent alternative, NOT counted as fake):");
+    for (const r of altCorrects) {
+      const fnNote =
+        r.scopeLabel === "fn-range"
+          ? `fn-range: ${r.targetFunctionName} L${r.targetFunctionRange?.startLine}-${r.targetFunctionRange?.endLine}`
+          : "whole-file-fallback";
+      console.log(`  - [${r.suite}] ${r.taskId}: ${r.greenLabel} in ${r.greenFile} (${fnNote})`);
+      console.log(`      ${r.detail}`);
     }
   }
 

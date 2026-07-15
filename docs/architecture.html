@@ -425,14 +425,15 @@ graph TD
         and statement repair are skipped rather than churning the oracle over every candidate. It exists because the mri wrong-operator wall above showed that no
         model-side lever — exact-line localization, 32b escalation, or a minimal-edit prompt — could fix a
         single-comparison-operator bug; the operator space is small and the oracle is deterministic, so the
-        harness brute-forces it instead of asking the model to. It requires a full-green oracle verdict, but
-        "deterministic ⇒ cannot fake-green" does <strong>not</strong> hold on thin test oracles: a 2026-07-15
-        model-free audit (<code>scripts/audit-operator-mutation.ts</code>, production-scoped to the locked
-        function range) found <strong>4/38 (10.5%)</strong> solution-backed tasks go green via a
-        semantically-wrong sibling-operator flip <em>inside</em> the target function — the same structural
-        fake-green mode, and the same rate, that keeps <code>SMALLCODE_LITERAL_REPAIR</code> off. It stays
-        default ON because it is the only lever that cracks the mri-class wrong-operator wall, pending a
-        stronger accept-check (tie the greening flip to the model's own attempted region). It only runs on
+        harness brute-forces it instead of asking the model to. It requires a full-green oracle verdict. A
+        2026-07-15 model-free audit (<code>scripts/audit-operator-mutation.ts</code>, production-scoped to the
+        locked function range) initially appeared to find fake-greens, but manual verification against each
+        fixture's reference diff found <strong>0 genuine fake-greens</strong>: every greening flip either
+        matched the reference fix exactly (e.g. the mri <code>!== → ===</code> fix) or was a semantically-equivalent
+        boundary alternative (<code>&gt;=</code> vs <code>&gt;</code> for max-finding, where ties don't change the
+        result) that legitimately passes the full oracle. The audit's first automated classifier had a
+        false-positive bug (since fixed) that mislabeled these true fixes as fake. It stays default ON as the
+        only lever that cracks the mri-class wrong-operator wall. It only runs on
         runs that already failed, so it can never slow down or destabilize a successful one. A/B (7b, no probe): it lifted the mri
         floor from <strong>0.00 → 0.88</strong> (non-overlapping CIs — significant), took the realrepo suite
         from 0.90 [.85–.93] to 0.94 [.91–.97] (22-task, 7b, n=10, pooled n=220), and nudged edit-reliability
