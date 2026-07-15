@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.12.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.11.0...v1.12.0) (2026-07-15)
+
+
+### Features
+
+* **eval:** 1d coupled two-site intra-file measuring stick + fixtures ([0a6cf04](https://github.com/bigknoxy/smallcode-jk/commit/0a6cf04eef5476b6931f9b944908c45666d86ae4))
+
+
+### Bug Fixes
+
+* **oracle:** parse red-count from FULL bun-test output, not the feedback slice ([d94c7db](https://github.com/bigknoxy/smallcode-jk/commit/d94c7db9f24d0d6f507340faf4538d5a338f1c6d))
+* **oracle:** restore never-leave-repo-worse guarantee — parse red-count from full output (dogfood [#4](https://github.com/bigknoxy/smallcode-jk/issues/4)) ([b6f562e](https://github.com/bigknoxy/smallcode-jk/commit/b6f562e0e0992a588c0f4202d8f1be32b6669077))
+
 ## [1.11.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.10.0...v1.11.0) (2026-07-14)
 
 
