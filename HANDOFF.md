@@ -1,7 +1,9 @@
 # HANDOFF — smallcode
 
 > **Living doc. UPDATE THIS on every meaningful step** (new commit, A/B result, merge, decision). Assume the next agent has NO memory — this file is its only bridge. Keep it terse and CURRENT. Stale handoff = bug.
-> Last updated: **2026-07-13**
+> Last updated: **2026-07-15**
+>
+> **⚠ MULTIPLE OPEN BRANCHES touch this file (reconcile at merge):** `fix/oracle-truncation-safety` (THIS content — oracle guard bug fix + TARGET_SET real-dogfood, PR pending), `feat/coupled-decls-1d` (1d coupled-site stick + refuted hint, PR #141), `docs/handoff-next-move-1d` (START-HERE pointer, PR #140). Each edits HANDOFF differently — keep ALL sections when merging.
 
 ## What smallcode is
 A coding HARNESS that makes a SMALL LOCAL model (qwen2.5-coder 3b/7b/32b via Ollama, fully offline) fix real bugs on real repos. Thesis: **harness design > model size.** Small models can't localize faults or derive non-trivial logic (capability ceiling, proven repeatedly). Wins come from HARNESS-side deterministic rescues + attention-shaping, not model coaxing.
@@ -22,6 +24,16 @@ All require `SMALLCODE_TARGET_LOCK=1` (default on). TARGET_SET+carousel default 
 - Multi-file work MERGED to `main` via PR #130 (commits `8728076`+`efb6c78`+`e3ad581`). CI green.
 - Default-on flip: branch **`feat/default-on-targetset-carousel`** (TARGET_SET+carousel defaults OFF→ON, docs synced, one test pinned to `TARGET_SET=0`). Suite 1120/0, tsc clean. Shipping via PR + admin-merge.
 - Merge to protected `main` = PR + `gh pr merge <#> --admin --merge`.
+
+## ⭐ REAL-DOGFOOD (2026-07-15): TARGET_SET on a genuine 2-file bug + a SAFETY BUG the dogfood found (branch `fix/oracle-truncation-safety`)
+Dogfooded the "robust win" (TARGET_SET) on a GENUINE 2-file coupling in smallcode's OWN repo (not synthetic): reverted a real shipped coupling — `src/edit/applier.ts` (`applyBlock`, consumer) ↔ `src/edit/repair.ts` (`repairBlock` whitespace strategy, producer), covered by `tests/edit-repair-wiring.test.ts`. Genuine (single-file fix stays red, both green). Isolated full-repo copy at `scratchpad/dogfood-repo` (bug committed as clean baseline, tests trimmed to the one wiring test for a fast oracle, node_modules symlinked); A/B driver `scratchpad/dogfood-ab.sh` (7b, `smallcode run`, per-trial git reset).
+
+**Two findings:**
+1. **TARGET_SET editable-set is FORWARD-import-only + localization is phrasing-dependent (model-free, confirmed):** primary=`applier.ts` (consumer) → editable `[applier, patch-function, repair, types]` (both coupled files IN); primary=`repair.ts` (producer, a leaf) → editable `[repair, types]` (`applier` LOCKED OUT). "apply"-worded task localizes the consumer; "repair"-worded localizes the producer. **So TARGET_SET only reaches files the primary IMPORTS, not files that import it — a real directionality hole the synthetic fixtures never exposed (they were all built consumer-primary).** When defines-over-uses picks the producer/definer, a reverse-coupled consumer is unreachable.
+2. **A/B (consumer-localizing task, 7b): ON 0/8 (3 partials, fixed 1 of 2 sites), OFF 0/6.** TARGET_SET is NECESSARY (unlocks repair.ts; OFF can't touch it → can't solve) but NOT SUFFICIENT here — this coupling (retry-pipeline + whitespace strategy) is harder than synthetic slug; the 7b makes partial progress but can't complete it. **ON is also SAFER: OFF left the repo strictly WORSE 3/6 (model flailed destructively in the one editable file); ON 0/8 worse.**
+
+## ⭐ SAFETY BUG FIXED (dogfood #4, this branch) — oracle output-truncation silently disabled BOTH regression guards
+While measuring finding 2, OFF left the repo strictly worse (2→4 reds) AND the final-state guard did NOT fire. Forensic root cause: `runBunTest` slices `bun test` output to 4000 chars for model feedback, and BOTH `captureTestBaseline` AND `runTieredOracle` parsed `redCount`/`failingIds`/`loadError` from that slice. A verbose failure (the model's edit caused deep recursion → 25,813 chars for 4 reds) pushes the `(fail)` lines + summary past the cutoff → parser reads false `redCount=0` → `finalStateWorseThanBaseline(start=2, final=0)`="not worse" → guard bails (loop.ts:668, never logs); the per-turn revert (shares the parse) also silently skipped. Proof: `parseRedCount(full)=4` vs `parseRedCount(slice(0,4000))=0`. **FIX (`src/verify/oracle.ts`): `runBunTest` also returns full un-truncated output; verdict parsers read it, `result.output` stays sliced for feedback only.** End-to-end: OFF worse-rate **3/6 → 0/10** with fix live. New `tests/oracle-truncation.test.ts`. Suite 1140/0, tsc clean, docs synced (architecture.html guard prose + llms.html oracle row + footer 07-15). This is a genuine dogfood-beats-benchmark safety find — the "never leave repo worse" guarantee was broken for any verbose-failure bug class.
 
 ## A/B results (7b, task `multifile-receipt_1` — a GENUINE 2-file bug: index.js missing `*qty` + money.js `toFixed(1)` should be `(2)`; fixing either alone stays red)
 **Carousel** (TARGET_SET on both arms), pooled **n=40/arm**:
