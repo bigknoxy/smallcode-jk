@@ -228,7 +228,7 @@ export function finalStateWorseThanBaseline(
   return { worse: countRegression || newFailures.length > 0, newFailures };
 }
 
-function runBunTest(repoRoot: string): {
+export interface BunTestRun {
   state: TestState;
   result: CheckResult;
   /**
@@ -239,7 +239,9 @@ function runBunTest(repoRoot: string): {
    * reads a false "0 red" that silently disables the regression guards.
    */
   fullOutput: string;
-} {
+}
+
+function runBunTestImpl(repoRoot: string): BunTestRun {
   const start = Date.now();
   const proc = Bun.spawnSync(["bun", "test"], { cwd: repoRoot, timeout: 120_000 });
   const out =
@@ -254,11 +256,33 @@ function runBunTest(repoRoot: string): {
       kind: "test",
       name: "bun-test",
       status: state === "green" ? "passed" : state === "red" ? "failed" : "skipped",
-      output: out.slice(0, 4000),
+      output: out.slice(0, 4000), // feedback-only (not a verdict input)
       durationMs: Date.now() - start,
       exitCode: exit,
     },
   };
+}
+
+/**
+ * Indirection so tests can drive the oracle's output→verdict wiring (does
+ * `captureTestBaseline` / `runTieredOracle` really parse `fullOutput`, not the
+ * truncated feedback slice?) WITHOUT spawning a real `bun test` and WITHOUT
+ * mocking the global `Bun.spawnSync`. A global spy leaks across test files under
+ * some bun versions and reappears as spurious failures in every other
+ * spawnSync-using suite (the agent-loop / repair / target-lock tests all run the
+ * oracle). This module-local runner is reset with a plain assignment via
+ * `__setBunTestRunnerForTests(null)` — deterministic across bun versions, unlike
+ * spyOn/mockRestore.
+ */
+let bunTestRunner: (repoRoot: string) => BunTestRun = runBunTestImpl;
+
+function runBunTest(repoRoot: string): BunTestRun {
+  return bunTestRunner(repoRoot);
+}
+
+/** Test-only seam: override the bun-test runner. Pass `null` to restore the real one. */
+export function __setBunTestRunnerForTests(fn: ((repoRoot: string) => BunTestRun) | null): void {
+  bunTestRunner = fn ?? runBunTestImpl;
 }
 
 export interface TieredOracleOptions {
@@ -339,14 +363,14 @@ export async function runTieredOracle(
     // misleading.
     const stalledOnBaseline = newFailures.length === 0 && !countRegression && !introducedLoadError;
     const feedbackBody = introducedLoadError
-      ? `BUILD ERROR — your last edit does not compile/load, so the test suite never ran. Fix the import/syntax (do NOT import modules that don't exist; use built-in JS/TS APIs):\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+      ? `BUILD ERROR — your last edit does not compile/load, so the test suite never ran. Fix the import/syntax (do NOT import modules that don't exist; use built-in JS/TS APIs):\n\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
       : newFailures.length > 0
-        ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+        ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
         : countRegression
-          ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+          ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
           : stalledOnBaseline
-            ? `The pre-existing failing test(s) are STILL failing — your change did not fix the target. Check it edited the right file.\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
-            : test.result.output.slice(0, MAX_FEEDBACK);
+            ? `The pre-existing failing test(s) are STILL failing — your change did not fix the target. Check it edited the right file.\n\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
+            : test.result.output.slice(0, MAX_FEEDBACK); // feedback-only (not a verdict input)
 
     return {
       outcome: "failing",
@@ -395,7 +419,7 @@ export async function runTieredOracle(
       return {
         outcome: "failing",
         checks,
-        feedback: `Type errors:\n${tsc.output.slice(0, MAX_FEEDBACK)}`,
+        feedback: `Type errors:\n${tsc.output.slice(0, MAX_FEEDBACK)}`, // feedback-only (not a verdict input)
         diagnostic: extractFirstFailure(tsc.output) ?? undefined,
         regressed: true,
       };

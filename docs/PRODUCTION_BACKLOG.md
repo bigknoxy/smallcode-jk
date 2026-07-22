@@ -133,7 +133,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 
 | ID | Epic | Task | Pri | Eff | Dep | Status |
 |----|------|------|-----|-----|-----|--------|
-| E1-T1 | Trust | Oracle full-fidelity regression guard + slice audit | P0 | S | — | ☐ TODO |
+| E1-T1 | Trust | Oracle full-fidelity regression guard + slice audit | P0 | S | — | ☑ DONE |
 | E1-T2 | Trust | Atomic multi-file apply + write-ahead journal (crash recovery) | P0 | L | E1-T1 | ☐ TODO |
 | E1-T3 | Trust | Verified revert (hash-check restoration, fail-closed) | P0 | M | — | ☐ TODO |
 | E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☐ TODO |
@@ -186,7 +186,7 @@ never verifies the bytes landed; (c) the tool `write_file` path is separate from
 
 ---
 
-### E1-T1 — Oracle full-fidelity regression guard + slice audit  ·  P0 · S · Status: ☐ TODO
+### E1-T1 — Oracle full-fidelity regression guard + slice audit  ·  P0 · S · Status: ☑ DONE
 **Goal:** Make it impossible to *reintroduce* the truncation bug without a test screaming.
 
 **Files**
@@ -216,7 +216,7 @@ bun test tests/oracle-truncation.test.ts && bun test && bunx tsc --noEmit
 ```
 **Docs-to-update:** `docs/architecture.html` (oracle/early-stop section + footer date) if you describe the guard test; else `docs: no public-page impact`.
 **Rollback:** tests-only + comments; revert the test file.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-22)_ DONE. Audited `src/verify/oracle.ts`: every verdict input (`parseRedCount`, `parseFailingTestIds`, `hasLoadError`, pass/`newFailures` counts) already reads `fullOutput` in both `captureTestBaseline` and `runTieredOracle` — confirmed the truncation bug stays fixed, this task is regression-proofing. Added to `tests/oracle-truncation.test.ts`: (a) 3 end-to-end tests driving `captureTestBaseline` + `runTieredOracle` with `Bun.spawnSync` mocked to emit a verbose failure whose `X pass / Y fail` summary sits **past char 4000** — asserts real counts (redCount 15, not truncated 0), `regressed:true`, and no false-`solved` on a past-slice green suite; (b) a source-guard test that fails if any `.slice(`/`.substring(` in oracle.ts lacks the `// feedback-only (not a verdict input)` marker. Annotated all 7 slice sites (L257, 342, 344, 346, 348, 349, 398). **Measured:** mutation-test (reintroduce `parseRedCount(fullOutput.slice(0,4000))`) turns the end-to-end test RED → the guard provably bites; reverted. `bun test tests/oracle-truncation.test.ts` 6/6 green; full `bun test` 1148/0; `bunx tsc --noEmit` clean. `docs: no public-page impact` (tests + comments only; no feature/flag/behavior change).
 
 ---
 
