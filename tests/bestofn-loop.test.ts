@@ -1,20 +1,20 @@
-import { mock, test, expect, beforeEach } from "bun:test";
+import { test, expect, beforeEach } from "bun:test";
+import { runBestOfNLoop, defaultTemperatures } from "../src/agent/bestofn-loop.ts";
 
-// Mock the agent loop so we can drive Best-of-N control flow without a model.
-// Each fake runLoop records the temperature it was handed and returns the state.
+// Drive Best-of-N control flow without a model by INJECTING a fake runLoop
+// through `opts.runLoop` — NOT `mock.module("loop.ts")`. A bun module mock is
+// process-global and unrestorable, so it leaked the stub to every downstream
+// test file that imports the loop under ubuntu's file order (the CI-only
+// agent-loop failures). Injection keeps the fake scoped to this file's calls.
 const tempsSeen: number[] = [];
 const modelIdsSeen: (string | undefined)[] = [];
 const profileIdsSeen: (string | undefined)[] = [];
-mock.module("../src/agent/loop.ts", () => ({
-  runLoop: async (state: any, _sp: string, deps: any) => {
-    tempsSeen.push(deps.samplingOverride?.temperature);
-    modelIdsSeen.push(state.modelId);
-    profileIdsSeen.push(deps.profile?.id);
-    return state;
-  },
-}));
-
-const { runBestOfNLoop, defaultTemperatures } = await import("../src/agent/bestofn-loop.ts");
+const fakeRunLoop = async (state: any, _sp: string, deps: any) => {
+  tempsSeen.push(deps.samplingOverride?.temperature);
+  modelIdsSeen.push(state.modelId);
+  profileIdsSeen.push(deps.profile?.id);
+  return state;
+};
 
 const rung = (id: string) => ({ id, provider: { name: id } as any, profile: { id } as any });
 
@@ -26,6 +26,7 @@ function makeOpts(n: number, passOnAttempt: number | null) {
     verifyCalls,
     opts: {
       n,
+      runLoop: fakeRunLoop,
       setup: async (i: number) => {
         setupCalls.push(i);
         return {
@@ -54,6 +55,7 @@ function makeEscalationOpts(n: number, passOnAttempt: number | null, models: any
   return {
     n,
     models,
+    runLoop: fakeRunLoop,
     setup: async (i: number) => ({
       state: { attempt: i, modelId: "base-model" } as any,
       statePath: `/tmp/s${i}`,
