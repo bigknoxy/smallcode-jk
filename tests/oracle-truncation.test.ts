@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, spyOn } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import {
+  __setBunTestRunnerForTests,
   captureTestBaseline,
+  classifyTest,
   finalStateWorseThanBaseline,
   parseFailingTestIds,
   parseRedCount,
@@ -59,8 +61,29 @@ describe("oracle output-truncation regression", () => {
  * fail loudly.
  */
 describe("oracle end-to-end: verbose failure past the 4000-char slice", () => {
-  // Each test restores its own spy in a `finally` so the mocked spawn never
-  // leaks to a later test in this file.
+  // Restore the real runner after every test — a plain assignment, so it can
+  // never leak the fake into the agent-loop / repair / target-lock suites that
+  // also run the oracle (unlike a global Bun.spawnSync spy).
+  afterEach(() => __setBunTestRunnerForTests(null));
+
+  // Build a BunTestRun exactly as the real runner would: state from
+  // classifyTest, `result.output` truncated to 4000 chars (the feedback slice),
+  // `fullOutput` intact. If the oracle ever parses a verdict from the truncated
+  // `result.output` instead of `fullOutput`, these assertions collapse to 0.
+  function installFakeRun(output: string, exitCode: number) {
+    __setBunTestRunnerForTests(() => ({
+      state: classifyTest(output, exitCode),
+      fullOutput: output,
+      result: {
+        kind: "test",
+        name: "bun-test",
+        status: exitCode === 0 ? "passed" : "failed",
+        output: output.slice(0, 4000), // feedback slice, exactly like the real runner
+        durationMs: 1,
+        exitCode,
+      },
+    }));
+  }
 
   // Leading noise pushes BOTH the `(fail)` lines and the summary past char 4000,
   // exactly like a deep-recursion stack trace. A truncated read sees an empty
@@ -77,49 +100,28 @@ describe("oracle end-to-end: verbose failure past the 4000-char slice", () => {
     return out;
   }
 
-  function mockBunTest(output: string, exitCode = 1) {
-    return spyOn(Bun, "spawnSync").mockReturnValue({
-      stdout: new TextEncoder().encode(output),
-      stderr: new Uint8Array(),
-      exitCode,
-      success: exitCode === 0,
-      signalCode: null,
-      pid: 12345,
-      resourceUsage: null,
-      // biome-ignore lint/suspicious/noExplicitAny: minimal SyncSubprocess shim for the mock
-    } as any);
-  }
-
   it("captureTestBaseline reads the real red count, not a truncated 0", () => {
-    const spy = mockBunTest(buildVerboseRedOutput());
-    try {
-      const baseline = captureTestBaseline("/fake/repo");
-      // The whole bug in one assertion: a truncated parse returns redCount 0,
-      // which silently disables the final-state guard. The fix keeps it at 15.
-      expect(baseline.redCount).toBe(15);
-      expect(baseline.failingIds.size).toBe(15);
-      expect(baseline.hadAnyTests).toBe(true);
-    } finally {
-      spy.mockRestore();
-    }
+    installFakeRun(buildVerboseRedOutput(), 1);
+    const baseline = captureTestBaseline("/fake/repo");
+    // The whole bug in one assertion: a truncated parse returns redCount 0,
+    // which silently disables the final-state guard. The fix keeps it at 15.
+    expect(baseline.redCount).toBe(15);
+    expect(baseline.failingIds.size).toBe(15);
+    expect(baseline.hadAnyTests).toBe(true);
   });
 
   it("runTieredOracle reports 'failing' + regressed on a verbose past-slice failure", async () => {
-    const spy = mockBunTest(buildVerboseRedOutput());
-    try {
-      // Baseline is fully green (redCount 0) → the 15 reds are all NEW.
-      const verdict = await runTieredOracle("/fake/repo", {
-        baseline: { failingIds: new Set(), hadAnyTests: true, redCount: 0, loadError: false },
-      });
-      // A truncated parse would read currentRed 0 and (passCount 0) return a
-      // non-regressed "failing" — the loop would then NOT revert. Full parse
-      // sees 15 red > 0 baseline → regressed, with all 15 as new failures.
-      expect(verdict.outcome).toBe("failing");
-      expect(verdict.regressed).toBe(true);
-      expect(verdict.newFailures?.length).toBe(15);
-    } finally {
-      spy.mockRestore();
-    }
+    installFakeRun(buildVerboseRedOutput(), 1);
+    // Baseline is fully green (redCount 0) → the 15 reds are all NEW.
+    const verdict = await runTieredOracle("/fake/repo", {
+      baseline: { failingIds: new Set(), hadAnyTests: true, redCount: 0, loadError: false },
+    });
+    // A truncated parse would read currentRed 0 and (passCount 0) return a
+    // non-regressed "failing" — the loop would then NOT revert. Full parse
+    // sees 15 red > 0 baseline → regressed, with all 15 as new failures.
+    expect(verdict.outcome).toBe("failing");
+    expect(verdict.regressed).toBe(true);
+    expect(verdict.newFailures?.length).toBe(15);
   });
 
   it("runTieredOracle does NOT false-'solved' a green suite whose pass line is past the slice", async () => {
@@ -129,15 +131,11 @@ describe("oracle end-to-end: verbose failure past the 4000-char slice", () => {
     const noise = "console.log noise line\n".repeat(400);
     const greenOut = `${noise}\n 200 pass\n 0 fail\n Ran 200 tests across 3 files.\n`;
     if (greenOut.indexOf("200 pass") <= 4000) throw new Error("fixture pass line must sit past char 4000");
-    const spy = mockBunTest(greenOut, 0); // green suite exits 0
-    try {
-      const verdict = await runTieredOracle("/fake/repo", {
-        baseline: { failingIds: new Set(), hadAnyTests: true, redCount: 0, loadError: false },
-      });
-      expect(verdict.outcome).toBe("solved");
-    } finally {
-      spy.mockRestore();
-    }
+    installFakeRun(greenOut, 0); // green suite exits 0
+    const verdict = await runTieredOracle("/fake/repo", {
+      baseline: { failingIds: new Set(), hadAnyTests: true, redCount: 0, loadError: false },
+    });
+    expect(verdict.outcome).toBe("solved");
   });
 });
 

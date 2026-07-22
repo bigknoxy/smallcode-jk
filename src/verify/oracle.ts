@@ -228,7 +228,7 @@ export function finalStateWorseThanBaseline(
   return { worse: countRegression || newFailures.length > 0, newFailures };
 }
 
-function runBunTest(repoRoot: string): {
+export interface BunTestRun {
   state: TestState;
   result: CheckResult;
   /**
@@ -239,7 +239,9 @@ function runBunTest(repoRoot: string): {
    * reads a false "0 red" that silently disables the regression guards.
    */
   fullOutput: string;
-} {
+}
+
+function runBunTestImpl(repoRoot: string): BunTestRun {
   const start = Date.now();
   const proc = Bun.spawnSync(["bun", "test"], { cwd: repoRoot, timeout: 120_000 });
   const out =
@@ -259,6 +261,28 @@ function runBunTest(repoRoot: string): {
       exitCode: exit,
     },
   };
+}
+
+/**
+ * Indirection so tests can drive the oracle's output→verdict wiring (does
+ * `captureTestBaseline` / `runTieredOracle` really parse `fullOutput`, not the
+ * truncated feedback slice?) WITHOUT spawning a real `bun test` and WITHOUT
+ * mocking the global `Bun.spawnSync`. A global spy leaks across test files under
+ * some bun versions and reappears as spurious failures in every other
+ * spawnSync-using suite (the agent-loop / repair / target-lock tests all run the
+ * oracle). This module-local runner is reset with a plain assignment via
+ * `__setBunTestRunnerForTests(null)` — deterministic across bun versions, unlike
+ * spyOn/mockRestore.
+ */
+let bunTestRunner: (repoRoot: string) => BunTestRun = runBunTestImpl;
+
+function runBunTest(repoRoot: string): BunTestRun {
+  return bunTestRunner(repoRoot);
+}
+
+/** Test-only seam: override the bun-test runner. Pass `null` to restore the real one. */
+export function __setBunTestRunnerForTests(fn: ((repoRoot: string) => BunTestRun) | null): void {
+  bunTestRunner = fn ?? runBunTestImpl;
 }
 
 export interface TieredOracleOptions {
