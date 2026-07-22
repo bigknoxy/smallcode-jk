@@ -254,7 +254,7 @@ function runBunTest(repoRoot: string): {
       kind: "test",
       name: "bun-test",
       status: state === "green" ? "passed" : state === "red" ? "failed" : "skipped",
-      output: out.slice(0, 4000),
+      output: out.slice(0, 4000), // feedback-only (not a verdict input)
       durationMs: Date.now() - start,
       exitCode: exit,
     },
@@ -339,14 +339,14 @@ export async function runTieredOracle(
     // misleading.
     const stalledOnBaseline = newFailures.length === 0 && !countRegression && !introducedLoadError;
     const feedbackBody = introducedLoadError
-      ? `BUILD ERROR — your last edit does not compile/load, so the test suite never ran. Fix the import/syntax (do NOT import modules that don't exist; use built-in JS/TS APIs):\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+      ? `BUILD ERROR — your last edit does not compile/load, so the test suite never ran. Fix the import/syntax (do NOT import modules that don't exist; use built-in JS/TS APIs):\n\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
       : newFailures.length > 0
-        ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+        ? `New failures:\n${newFailures.join("\n")}\n\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
         : countRegression
-          ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}`
+          ? `New failure(s) introduced (${currentRed - baselineRed} more than before):\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
           : stalledOnBaseline
-            ? `The pre-existing failing test(s) are STILL failing — your change did not fix the target. Check it edited the right file.\n\n${test.result.output.slice(0, MAX_FEEDBACK)}`
-            : test.result.output.slice(0, MAX_FEEDBACK);
+            ? `The pre-existing failing test(s) are STILL failing — your change did not fix the target. Check it edited the right file.\n\n${test.result.output.slice(0, MAX_FEEDBACK)}` // feedback-only (not a verdict input)
+            : test.result.output.slice(0, MAX_FEEDBACK); // feedback-only (not a verdict input)
 
     return {
       outcome: "failing",
@@ -395,7 +395,7 @@ export async function runTieredOracle(
       return {
         outcome: "failing",
         checks,
-        feedback: `Type errors:\n${tsc.output.slice(0, MAX_FEEDBACK)}`,
+        feedback: `Type errors:\n${tsc.output.slice(0, MAX_FEEDBACK)}`, // feedback-only (not a verdict input)
         diagnostic: extractFirstFailure(tsc.output) ?? undefined,
         regressed: true,
       };

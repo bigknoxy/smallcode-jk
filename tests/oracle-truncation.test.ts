@@ -1,5 +1,12 @@
-import { describe, expect, it } from "bun:test";
-import { finalStateWorseThanBaseline, parseFailingTestIds, parseRedCount } from "../src/verify/oracle.ts";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, spyOn } from "bun:test";
+import {
+  captureTestBaseline,
+  finalStateWorseThanBaseline,
+  parseFailingTestIds,
+  parseRedCount,
+  runTieredOracle,
+} from "../src/verify/oracle.ts";
 
 /**
  * Regression guard for the truncation bug that silently disabled the final-state
@@ -39,5 +46,120 @@ describe("oracle output-truncation regression", () => {
     const worse = { failingIds: new Set(["a", "b", "c", "d"]), hadAnyTests: true, redCount: 4, loadError: false };
     expect(finalStateWorseThanBaseline(base, worse).worse).toBe(true);
     expect(finalStateWorseThanBaseline(base, base).worse).toBe(false);
+  });
+});
+
+/**
+ * End-to-end guard: drive the FULL oracle entry points (`captureTestBaseline`,
+ * `runTieredOracle`) — not the parsers in isolation — against a synthetic
+ * `bun test` output whose `X pass / Y fail` summary sits PAST character 4000.
+ * The subprocess is mocked so this stays pure/deterministic. This is the test
+ * that would have caught the shipped bug: if either entry point ever re-slices
+ * before parsing a verdict, the counts collapse to zero and these assertions
+ * fail loudly.
+ */
+describe("oracle end-to-end: verbose failure past the 4000-char slice", () => {
+  // Each test restores its own spy in a `finally` so the mocked spawn never
+  // leaks to a later test in this file.
+
+  // Leading noise pushes BOTH the `(fail)` lines and the summary past char 4000,
+  // exactly like a deep-recursion stack trace. A truncated read sees an empty
+  // suite (0 pass / 0 fail); the full read sees 15 red.
+  function buildVerboseRedOutput(): string {
+    const noise = "at applySearchReplace (applier.ts:329:20)\n".repeat(400); // ~16 KB, leads
+    const failLines = Array.from(
+      { length: 15 },
+      (_, i) => `(fail) verbose failure ${i} [0.1ms]`,
+    ).join("\n");
+    const out = `${noise}\n${failLines}\n 1 pass\n 15 fail\n Ran 16 tests across 1 file.\n`;
+    // Sanity: the summary genuinely lives past the feedback slice.
+    if (out.indexOf("15 fail") <= 4000) throw new Error("fixture summary must sit past char 4000");
+    return out;
+  }
+
+  function mockBunTest(output: string, exitCode = 1) {
+    return spyOn(Bun, "spawnSync").mockReturnValue({
+      stdout: new TextEncoder().encode(output),
+      stderr: new Uint8Array(),
+      exitCode,
+      success: exitCode === 0,
+      signalCode: null,
+      pid: 12345,
+      resourceUsage: null,
+      // biome-ignore lint/suspicious/noExplicitAny: minimal SyncSubprocess shim for the mock
+    } as any);
+  }
+
+  it("captureTestBaseline reads the real red count, not a truncated 0", () => {
+    const spy = mockBunTest(buildVerboseRedOutput());
+    try {
+      const baseline = captureTestBaseline("/fake/repo");
+      // The whole bug in one assertion: a truncated parse returns redCount 0,
+      // which silently disables the final-state guard. The fix keeps it at 15.
+      expect(baseline.redCount).toBe(15);
+      expect(baseline.failingIds.size).toBe(15);
+      expect(baseline.hadAnyTests).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("runTieredOracle reports 'failing' + regressed on a verbose past-slice failure", async () => {
+    const spy = mockBunTest(buildVerboseRedOutput());
+    try {
+      // Baseline is fully green (redCount 0) → the 15 reds are all NEW.
+      const verdict = await runTieredOracle("/fake/repo", {
+        baseline: { failingIds: new Set(), hadAnyTests: true, redCount: 0, loadError: false },
+      });
+      // A truncated parse would read currentRed 0 and (passCount 0) return a
+      // non-regressed "failing" — the loop would then NOT revert. Full parse
+      // sees 15 red > 0 baseline → regressed, with all 15 as new failures.
+      expect(verdict.outcome).toBe("failing");
+      expect(verdict.regressed).toBe(true);
+      expect(verdict.newFailures?.length).toBe(15);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("runTieredOracle does NOT false-'solved' a green suite whose pass line is past the slice", async () => {
+    // The dangerous inverse: a huge passing suite. If the parser truncated, it
+    // would see 0 pass / 0 fail → "absent" → fall through to typecheck, losing
+    // the proven-green early stop. Full parse must see the pass and solve.
+    const noise = "console.log noise line\n".repeat(400);
+    const greenOut = `${noise}\n 200 pass\n 0 fail\n Ran 200 tests across 3 files.\n`;
+    if (greenOut.indexOf("200 pass") <= 4000) throw new Error("fixture pass line must sit past char 4000");
+    const spy = mockBunTest(greenOut, 0); // green suite exits 0
+    try {
+      const verdict = await runTieredOracle("/fake/repo", {
+        baseline: { failingIds: new Set(), hadAnyTests: true, redCount: 0, loadError: false },
+      });
+      expect(verdict.outcome).toBe("solved");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+/**
+ * Source-level guard: any `.slice(` / `.substring(` in the oracle MUST be
+ * annotated `// feedback-only (not a verdict input)`. This forces a future
+ * editor who adds a new truncation near output handling to consciously mark it
+ * as feedback-only — or, if they truncate a verdict input, the annotation lies
+ * and code review catches it. It makes the truncation-bug class impossible to
+ * reintroduce silently.
+ */
+describe("oracle source guard: every slice is annotated feedback-only", () => {
+  const MARKER = "feedback-only (not a verdict input)";
+
+  it("no unannotated .slice(/.substring( in src/verify/oracle.ts", () => {
+    const src = readFileSync(new URL("../src/verify/oracle.ts", import.meta.url), "utf8");
+    const offenders = src
+      .split("\n")
+      .map((text, i) => ({ text, line: i + 1 }))
+      .filter(({ text }) => /\.slice\(|\.substring\(/.test(text))
+      .filter(({ text }) => !text.includes(MARKER));
+    // Every match must carry the marker. A new unmarked truncation fails here.
+    expect(offenders.map((o) => o.line)).toEqual([]);
   });
 });
