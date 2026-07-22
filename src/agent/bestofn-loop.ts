@@ -54,6 +54,15 @@ export interface BestOfNLoopOptions {
    * `deps` (plain temperature-swept Best-of-N, unchanged).
    */
   models?: EscalationRung[];
+  /**
+   * Test-only seam: override the agent loop. Defaults to the real `runLoop`
+   * import. Lets tests drive Best-of-N control flow without a model WITHOUT
+   * `mock.module`-ing loop.ts — a module mock is process-global and
+   * unrestorable in bun, so it leaks the stub to every downstream test file that
+   * imports the loop, whichever file order the platform picks (the cause of the
+   * ubuntu-CI-only agent-loop failures). Production omits this → real `runLoop`.
+   */
+  runLoop?: typeof runLoop;
 }
 
 export interface BestOfNLoopResult {
@@ -87,6 +96,7 @@ export function defaultTemperatures(n: number): number[] {
 
 export async function runBestOfNLoop(opts: BestOfNLoopOptions): Promise<BestOfNLoopResult> {
   const temps = opts.temperatures ?? defaultTemperatures(opts.n);
+  const runLoopFn = opts.runLoop ?? runLoop;
   const states: AgentState[] = [];
   const modelsUsed: string[] = [];
 
@@ -105,7 +115,7 @@ export async function runBestOfNLoop(opts: BestOfNLoopOptions): Promise<BestOfNL
     };
     modelsUsed.push(rung?.id ?? opts.deps.profile?.id ?? "base");
 
-    const final = await runLoop(state, statePath, deps, getContext);
+    const final = await runLoopFn(state, statePath, deps, getContext);
     states.push(final);
 
     if (await opts.verify(i)) {
