@@ -426,14 +426,14 @@ unless `--yes`.
 **Docs-to-update:** `README.md`, `index.html` quick-start (can drop the manual pull step).
 **Result:** _(fill in when done)_
 
-### E2-T4 — Model-id validation (registry + local ollama)  ·  P1 · S · Status: ☐ TODO
+### E2-T4 — Model-id validation (registry + local ollama)  ·  P1 · S · Status: ☑ DONE
 **Goal:** Catch a typo'd/absent model id at config time, not at first inference.
 **Files:** `src/cli/commands/config-init.ts`, `src/models/registry.ts`, `run.ts`.
 **Steps:** validate `--model`/config model against the registry (`ModelRegistry.has`) AND against
 `ollama list`; warn on registered-but-not-pulled (→ E2-T3) and error on unknown id with the list of known ids.
 **Acceptance:** unknown id → clear error listing valid ids; registered-but-unpulled → routed to E2-T3.
 **Docs-to-update:** `README.md` config section.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-23)_ DONE (PR #159). New pure `validateModelId(id, registry) → {ok, message?}` in `src/models/registry.ts` (message lists all known ids on failure). `config init` now validates `--model` against the built-in registry BEFORE writing, and errors + exits 1 with the known-id list on a typo (`smallcode config init --model qwen-typo:9b` → clean error, no config file written). run.ts already errored cleanly on an unknown id at model-resolution (`registry.get` throw → `progress.showError` + exit 1) — kept. The registered-but-not-pulled path is delivered by E2-T3 (auto-pull). **Measured:** 5 tests (validateModelId known/typo/custom-extra; config-init rejects typo with exit 1 + NO file, accepts valid + writes) + mutation-test (make validateModelId always-ok → config-init typo test RED). **Caught a real regression via the mandatory full-suite pass:** an existing `cli.test.ts` config-init test used the invalid id `qwen2.5-coder-7b` (hyphen, not `:7b`) and did not mock `process.exit`, so the new validation's `exit(1)` aborted the whole test runner — fixed the test to the valid `qwen2.5-coder:7b`. Full `bun test` 1201/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: README config note.
 
 ### E2-T5 — One-command bootstrap install  ·  P1 · M · Dep: E2-T1 · Status: ☐ TODO
 **Goal:** `curl … | sh` gets a brand-new machine to a working `smallcode run` (optionally installing Bun +

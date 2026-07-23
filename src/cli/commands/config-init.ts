@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { ModelRegistry, validateModelId } from "../../models/registry.ts";
 import type { ParsedArgs } from "../args.ts";
 
 function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
@@ -17,6 +18,14 @@ export async function configInitCommand(args: ParsedArgs): Promise<void> {
   const endpoint = flagString(args.flags, "endpoint") ?? "http://localhost:11434/v1";
   const model = flagString(args.flags, "model") ?? "vibethinker-3b";
   const force = flagBool(args.flags, "force");
+
+  // E2-T4: catch a typo'd / unknown model id NOW, at config time, instead of at
+  // the first inference several steps later.
+  const validation = validateModelId(model, new ModelRegistry());
+  if (!validation.ok) {
+    process.stderr.write(`[smallcode] Error: ${validation.message}\n`);
+    process.exit(1);
+  }
 
   if (existsSync(outputPath) && !force) {
     process.stderr.write(

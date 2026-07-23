@@ -154,3 +154,25 @@ export class ModelRegistry {
 }
 
 export const defaultRegistry = new ModelRegistry();
+
+/**
+ * Validate a model id against the registry (E2-T4): catch a typo'd/absent id at
+ * config time instead of at the first inference. Returns a clean, actionable
+ * message listing the known ids on failure. Pure; exported for testing.
+ */
+export function validateModelId(
+  id: string,
+  registry: ModelRegistry,
+): { ok: boolean; message?: string } {
+  if (registry.has(id)) return { ok: true };
+  const known = registry
+    .list()
+    .map((p) => p.id)
+    .join(", ");
+  return {
+    ok: false,
+    message:
+      `Unknown model id "${id}". Known ids: ${known}. ` +
+      `Pick one of those, or add a custom profile under "models" in your config.`,
+  };
+}
