@@ -16,7 +16,10 @@ function flagBool(flags: Record<string, string | boolean>, key: string): boolean
 export async function configInitCommand(args: ParsedArgs): Promise<void> {
   const outputPath = resolve(flagString(args.flags, "output") ?? "./smallcode.config.json");
   const endpoint = flagString(args.flags, "endpoint") ?? "http://localhost:11434/v1";
-  const model = flagString(args.flags, "model") ?? "vibethinker-3b";
+  // E2-T6: default to qwen2.5-coder:3b — fast, code-tuned, and the recommended
+  // out-of-box model. (vibethinker-3b is a slow reasoner prone to think-only
+  // spirals; still available via `--model vibethinker-3b`.)
+  const model = flagString(args.flags, "model") ?? "qwen2.5-coder:3b";
   const force = flagBool(args.flags, "force");
 
   // E2-T4: catch a typo'd / unknown model id NOW, at config time, instead of at
