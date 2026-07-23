@@ -31,8 +31,7 @@ smallcode wraps 3B–14B class models in scaffolding that compensates for their 
 curl -fsSL https://raw.githubusercontent.com/bigknoxy/smallcode-jk/main/install.sh | sh
 ```
 
-This installs smallcode to `~/.smallcode` and writes a wrapper to `~/.local/bin/smallcode`.
-If `~/.local/bin` is not on your `PATH`, the installer prints the line to add to your shell config.
+This one command bootstraps everything: it offers to install **Bun** and **Ollama** if they're missing, installs smallcode to `~/.smallcode` with a wrapper at `~/.local/bin/smallcode`, offers to pull the recommended model (`qwen2.5-coder:3b`), and finishes by running `smallcode doctor` so you can see your setup is green. A piped `curl | sh` (no TTY) proceeds automatically; run it in a terminal to be prompted before each network/OS action, or pass `--yes` to auto-confirm. If `~/.local/bin` isn't on your `PATH`, the installer prints the line to add.
 
 ### Your first fix
 

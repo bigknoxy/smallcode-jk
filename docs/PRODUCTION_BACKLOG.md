@@ -143,7 +143,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E2-T2 | Dist | Ollama health check before run | P1 | S | — | ☑ DONE |
 | E2-T3 | Dist | Auto model-pull when configured model missing | P1 | M | E2-T2 | ☑ DONE |
 | E2-T4 | Dist | Model-id validation (registry + local ollama) | P1 | S | — | ☑ DONE |
-| E2-T5 | Dist | One-command bootstrap install (bun+ollama+model) | P1 | M | E2-T1 | ☐ TODO |
+| E2-T5 | Dist | One-command bootstrap install (bun+ollama+model) | P1 | M | E2-T1 | ☑ DONE |
 | E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☑ DONE |
 | E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☐ TODO |
 | E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☐ TODO |
@@ -435,7 +435,7 @@ unless `--yes`.
 **Docs-to-update:** `README.md` config section.
 **Result:** _(2026-07-23)_ DONE (PR #159). New pure `validateModelId(id, registry) → {ok, message?}` in `src/models/registry.ts` (message lists all known ids on failure). `config init` now validates `--model` against the built-in registry BEFORE writing, and errors + exits 1 with the known-id list on a typo (`smallcode config init --model qwen-typo:9b` → clean error, no config file written). run.ts already errored cleanly on an unknown id at model-resolution (`registry.get` throw → `progress.showError` + exit 1) — kept. The registered-but-not-pulled path is delivered by E2-T3 (auto-pull). **Measured:** 5 tests (validateModelId known/typo/custom-extra; config-init rejects typo with exit 1 + NO file, accepts valid + writes) + mutation-test (make validateModelId always-ok → config-init typo test RED). **Caught a real regression via the mandatory full-suite pass:** an existing `cli.test.ts` config-init test used the invalid id `qwen2.5-coder-7b` (hyphen, not `:7b`) and did not mock `process.exit`, so the new validation's `exit(1)` aborted the whole test runner — fixed the test to the valid `qwen2.5-coder:7b`. Full `bun test` 1201/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: README config note.
 
-### E2-T5 — One-command bootstrap install  ·  P1 · M · Dep: E2-T1 · Status: ☐ TODO
+### E2-T5 — One-command bootstrap install  ·  P1 · M · Dep: E2-T1 · Status: ☑ DONE
 **Goal:** `curl … | sh` gets a brand-new machine to a working `smallcode run` (optionally installing Bun +
 Ollama + pulling the default model), then runs `smallcode doctor` at the end.
 **Files:** `install.sh` (the GitHub-hosted installer), `README.md`.
@@ -444,7 +444,7 @@ optionally pull `qwen2.5-coder:3b`; finish by invoking `smallcode doctor`. Keep 
 behind a confirmation unless `--yes`/non-interactive.
 **Acceptance:** on a clean VM, one command → `smallcode doctor` all-green. Document the exact commands.
 **Docs-to-update:** `README.md` install section, `index.html` quick-start.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-23)_ DONE (PR #162). Enhanced the existing `install.sh`: a `confirm()` consent gate (interactive TTY prompts; `--yes`/`-y`/`SMALLCODE_YES=1` or a piped no-TTY install auto-proceed); missing **Bun** → offer the official installer (was a hard error); missing **Ollama** → OS-aware offer (Linux `ollama.com/install.sh`, macOS app/brew guidance) instead of a bare warning; after install, offer to pull the default `qwen2.5-coder:3b` (skip if already present); **finish by running `smallcode doctor`** so the user sees a green setup; updated the stale vibethinker guidance. **Measured:** `sh -n` + shellcheck clean; new `tests/install-sh.test.ts` (7) locks the contract (`sh -n` parses, consent gate, bun/ollama offers, DEFAULT_MODEL=qwen2.5-coder:3b + pull, ends on `doctor`, no stale vibethinker); **live end-to-end** from a local `git archive` tarball into temp `SMALLCODE_HOME`/`BIN_DIR` with `--yes` → bun install → wrapper written → "Model qwen2.5-coder:3b already installed" → `smallcode doctor` all-✓ "Ready to run." → `smallcode --version` = v1.12.0. Full `bun test` 1215/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: README install section, index.html quickstart steps.
 
 ### E2-T6 — Sane first-run default model  ·  P2 · S · Status: ☑ DONE
 **Goal:** `smallcode config init` should default to `qwen2.5-coder:3b` (fast, recommended) rather than
