@@ -1057,26 +1057,26 @@
         <ol class="quickstart-steps" aria-label="Quick start steps">
           <li>
             <div>
-              <strong>Install Ollama + pull a model</strong>
-              <span>Download from <a href="https://ollama.com/download" style="color:var(--text-accent)" target="_blank" rel="noopener noreferrer">ollama.com/download</a> then pull qwen2.5-coder:3b (recommended)</span>
+              <strong>One-command install</strong>
+              <span><code>curl -fsSL .../install.sh | sh</code> — offers to install <a href="https://bun.sh" style="color:var(--text-accent)" target="_blank" rel="noopener noreferrer">Bun</a> + <a href="https://ollama.com/download" style="color:var(--text-accent)" target="_blank" rel="noopener noreferrer">Ollama</a>, pulls qwen2.5-coder:3b, and finishes by running <code>smallcode doctor</code></span>
             </div>
           </li>
           <li>
             <div>
-              <strong>Install dependencies</strong>
-              <span>Requires <a href="https://bun.sh" style="color:var(--text-accent)" target="_blank" rel="noopener noreferrer">Bun</a> runtime</span>
+              <strong>Verify your setup</strong>
+              <span><code>smallcode doctor</code> — ✓/✗ per check (server reachable, model pulled, config valid) with a copy-pasteable fix for anything broken</span>
             </div>
           </li>
           <li>
             <div>
-              <strong>Start the model server</strong>
-              <span>Use the bundled script for long sessions (sets KV-cache flags)</span>
+              <strong>Initialize a config in your project</strong>
+              <span><code>smallcode config init</code> — defaults to qwen2.5-coder:3b, validated up front</span>
             </div>
           </li>
           <li>
             <div>
-              <strong>Run a task or benchmark</strong>
-              <span>Point at any repo — or run the HumanEval-TS suite directly</span>
+              <strong>Fix a failing test, or run a task</strong>
+              <span><code>smallcode fix</code> (auto-fix the red build) or <code>smallcode run "&lt;task&gt;"</code> — point at any repo</span>
             </div>
           </li>
         </ol>

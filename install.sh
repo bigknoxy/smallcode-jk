@@ -17,21 +17,65 @@ log()  { printf '[smallcode] %s\n' "$*" >&2; }
 warn() { printf '[smallcode] WARNING: %s\n' "$*" >&2; }
 err()  { printf '[smallcode] ERROR: %s\n' "$*" >&2; exit 1; }
 
-# ── require bun ──────────────────────────────────────────────────────────────
+# The recommended default model (matches `smallcode config init`).
+DEFAULT_MODEL="qwen2.5-coder:3b"
+
+# ── consent (E2-T5) ───────────────────────────────────────────────────────────
+# Network/OS actions (installing bun/ollama, pulling a multi-GB model) are gated
+# behind a y/N prompt on an interactive TTY. A piped `curl | sh` install has no
+# TTY and proceeds automatically; `--yes`/`-y`/`SMALLCODE_YES=1` forces auto too.
+ASSUME_YES=0
+for _arg in "$@"; do
+  case "$_arg" in
+    -y|--yes) ASSUME_YES=1 ;;
+  esac
+done
+[ "${SMALLCODE_YES:-0}" = "1" ] && ASSUME_YES=1
+
+# confirm "<question>" → 0 (yes) / 1 (no). Auto-yes when --yes or non-interactive.
+confirm() {
+  if [ "$ASSUME_YES" = "1" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  printf '[smallcode] %s [y/N] ' "$1" >&2
+  read -r _reply </dev/tty 2>/dev/null || return 1
+  case "$_reply" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ── ensure bun ────────────────────────────────────────────────────────────────
 if ! command -v bun >/dev/null 2>&1; then
-  err "bun is required but was not found on PATH.
-  Install bun from https://bun.sh:
-    curl -fsSL https://bun.sh/install | bash
-  then re-run this installer."
+  warn "bun (JavaScript runtime) is required and was not found on PATH."
+  if confirm "Install bun now from https://bun.sh?"; then
+    log "Installing bun…"
+    curl -fsSL https://bun.sh/install | bash || err "bun install failed — install it manually from https://bun.sh and re-run."
+    # bun installs to ~/.bun/bin; make it visible for the rest of this script.
+    [ -d "$HOME/.bun/bin" ] && PATH="$HOME/.bun/bin:$PATH"
+    command -v bun >/dev/null 2>&1 || err "bun still not on PATH after install. Add ~/.bun/bin to PATH and re-run."
+  else
+    err "bun is required. Install it: curl -fsSL https://bun.sh/install | bash — then re-run this installer."
+  fi
 fi
 
 BUN_BIN="$(command -v bun)"
 log "Using bun: $BUN_BIN ($(bun --version))"
 
-# ── warn if ollama missing ────────────────────────────────────────────────────
+# ── ensure ollama ─────────────────────────────────────────────────────────────
 if ! command -v ollama >/dev/null 2>&1; then
-  warn "ollama not found on PATH. smallcode needs Ollama to serve local models."
-  warn "Install from https://ollama.com/download, then: ollama pull weiboai/vibethinker-3b"
+  warn "ollama (local model server) not found. smallcode needs it to serve models."
+  if confirm "Install Ollama now?"; then
+    if [ "$(uname -s)" = "Linux" ]; then
+      log "Installing Ollama (official installer)…"
+      curl -fsSL https://ollama.com/install.sh | sh || warn "Ollama install failed — install it manually from https://ollama.com/download."
+    else
+      # macOS/other: the official installer is a GUI .app; point the user at it.
+      warn "On macOS, install the Ollama app from https://ollama.com/download (or 'brew install ollama'), then re-run."
+    fi
+  else
+    warn "Skipping Ollama. Install it later from https://ollama.com/download — 'smallcode doctor' will remind you."
+  fi
 fi
 
 # ── resolve tarball URL ───────────────────────────────────────────────────────
@@ -159,10 +203,33 @@ case ":${PATH}:" in
     ;;
 esac
 
+# ── offer to pull the default model (E2-T5) ───────────────────────────────────
+# Only when Ollama is present and the model isn't already installed.
+if command -v ollama >/dev/null 2>&1; then
+  if ollama list 2>/dev/null | grep -q "$DEFAULT_MODEL"; then
+    log "Model $DEFAULT_MODEL already installed."
+  elif confirm "Pull the recommended model $DEFAULT_MODEL now (this downloads ~2 GB)?"; then
+    log "Pulling $DEFAULT_MODEL…"
+    ollama pull "$DEFAULT_MODEL" || warn "Model pull failed — run 'ollama pull $DEFAULT_MODEL' later."
+  else
+    log "Skipping model pull. Get it later: ollama pull $DEFAULT_MODEL (or the first run will offer)."
+  fi
+fi
+
 # ── success ──────────────────────────────────────────────────────────────────
 NEW_VERSION="$(get_installed_version "$INSTALL_DIR")"
 log ""
 log "  smallcode installed successfully!"
 log "  Version: $NEW_VERSION  (was: $OLD_VERSION)"
-log "  Run: smallcode --version"
+
+# ── final diagnosis (E2-T5) ───────────────────────────────────────────────────
+# End on `smallcode doctor` so the user sees exactly what (if anything) is left
+# to do. Non-fatal: doctor exits non-zero if a P0 check fails, but the install
+# itself already succeeded, so don't propagate that.
+log ""
+log "  Running 'smallcode doctor' to verify your setup…"
+log ""
+"$BUN_BIN" "${INSTALL_DIR}/bin/smallcode.ts" doctor || true
+log ""
+log "  Next: cd into a project, then 'smallcode config init && smallcode fix'."
 log ""
