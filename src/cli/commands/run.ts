@@ -17,6 +17,7 @@ import {
 } from "../../context/index.ts";
 import type { ContextBundle } from "../../context/types.ts";
 import { contextBudgetFor } from "../../models/context-budget.ts";
+import { ensureModelAvailable } from "../../models/ensure-model.ts";
 import { ollamaNativeBase, pingOllama } from "../../models/ollama.ts";
 import { ModelRegistry } from "../../models/registry.ts";
 import { createProvider } from "../../provider/factory.ts";
@@ -374,6 +375,17 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   const health = await pingOllama(config.provider.baseUrl);
   if (!health.ok) {
     progress.showError(ollamaUnreachableMessage(config.provider.baseUrl, health.error));
+    process.exit(1);
+  }
+  // E2-T3: ensure the active model is actually pulled — offer to pull it if not
+  // (auto with --yes; never silently in a headless run). The server is confirmed
+  // reachable above, so the model list is authoritative.
+  const ensured = await ensureModelAvailable(config.provider.baseUrl, modelId, {
+    yes: flagBool(args.flags, "yes"),
+    interactive: process.stdin.isTTY === true,
+  });
+  if (!ensured.ok) {
+    progress.showError(ensured.message);
     process.exit(1);
   }
   const provider = createProvider(config.provider, registry);
