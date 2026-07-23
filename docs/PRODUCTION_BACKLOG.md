@@ -141,7 +141,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E1-T6 | Trust | Interleaved-human-edit undo-scope test | P1 | S | — | ☑ DONE |
 | E2-T1 | Dist | `smallcode doctor` preflight command | P1 | M | — | ☑ DONE |
 | E2-T2 | Dist | Ollama health check before run | P1 | S | — | ☑ DONE |
-| E2-T3 | Dist | Auto model-pull when configured model missing | P1 | M | E2-T2 | ☐ TODO |
+| E2-T3 | Dist | Auto model-pull when configured model missing | P1 | M | E2-T2 | ☑ DONE |
 | E2-T4 | Dist | Model-id validation (registry + local ollama) | P1 | S | — | ☑ DONE |
 | E2-T5 | Dist | One-command bootstrap install (bun+ollama+model) | P1 | M | E2-T1 | ☐ TODO |
 | E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☑ DONE |
@@ -415,7 +415,7 @@ on failure print `Ollama not reachable at <url> — is 'ollama serve' running?` 
 **Docs-to-update:** `README.md` troubleshooting.
 **Result:** _(2026-07-23)_ DONE (PR #157). New shared `src/models/ollama.ts` (the native-API layer underpinning all of E2 — `pingOllama`/`listOllamaModels`/`modelIsPulled`/`pullOllamaModel`, injectable fetch+spawn, derives the native root by stripping `/v1`). Preflight added to `run.ts` (covers `fix`, which delegates) and `chat.ts`: before the provider is used, `pingOllama` (2s timeout) → on failure `progress.showError(ollamaUnreachableMessage(...))` + `process.exit(1)`. `ollamaUnreachableMessage` is pure/exported (names the native URL, the error, `ollama serve`, and `smallcode doctor`). **Measured:** 13 tests for the ollama module (ping ok/500/ECONNREFUSED/timeout, list parse+error, isPulled tag matching, pull exit0/nonzero/throw via injected fetch+runner) + 3 for the message; **live smoke** against a dead port printed the clean actionable error and exited before planning (no stack). Full `bun test` 1188/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: README troubleshooting.
 
-### E2-T3 — Auto model-pull when configured model missing  ·  P1 · M · Dep: E2-T2 · Status: ☐ TODO
+### E2-T3 — Auto model-pull when configured model missing  ·  P1 · M · Dep: E2-T2 · Status: ☑ DONE
 **Goal:** If the active model isn't in `ollama list`, offer to `ollama pull` it (auto with `--yes`).
 **Files:** `src/provider/` or a new `src/models/ensure-model.ts`; call from `run.ts`/`fix.ts`.
 **Steps:** query `ollama list`; if missing, prompt `Model <id> not found. Pull now (~N GB)? [y/N]` (auto-yes
@@ -424,7 +424,7 @@ unless `--yes`.
 **Acceptance:** missing model → guided pull → run proceeds; declined → clean exit with instructions.
 `bun test` green (mock the pull).
 **Docs-to-update:** `README.md`, `index.html` quick-start (can drop the manual pull step).
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-23)_ DONE (PR #161). New `src/models/ensure-model.ts` — `ensureModelAvailable(baseUrl, modelId, {yes, interactive, confirm?, listModels?, pull?})` implements the policy: present→proceed; missing+`--yes`/auto→pull; missing+interactive→prompt `[y/N]` then pull-or-block; missing+headless-without-`--yes`→NEVER pull silently, block with `ollama pull <id>` (reproducible). Wired into `run.ts` after the health check (covers `fix`); on `!ok` → `showError` + exit 1. list/pull/confirm injectable. **Measured:** 7 branch tests (present, --yes auto-pull, interactive-yes, interactive-no→declined, headless→blocked, pull-fails, bare-id-matches-:latest) + mutation-test (skip the present check → 5 RED). **Live:** run with the genuinely-unpulled `qwen2.5-coder-14b` headless → `✗ Error: Model "qwen2.5-coder-14b" is not installed. Pull it: ollama pull qwen2.5-coder-14b (or re-run with --yes)` and exits before planning; present model (32b) proceeds. Full `bun test` 1208/0 on bun 1.3.12 and 1.3.14 (one 1.3.14-only `InvalidLockfileVersion` nested-bun-test flake in an UNRELATED off-task-drift test, green on re-run). tsc clean. NOTE: ensures the resolved active model; escalation-ladder rung models are pulled-on-demand-at-inference (a follow-up if needed). Docs: README prereq note.
 
 ### E2-T4 — Model-id validation (registry + local ollama)  ·  P1 · S · Status: ☑ DONE
 **Goal:** Catch a typo'd/absent model id at config time, not at first inference.

@@ -19,12 +19,11 @@ smallcode wraps 3B–14B class models in scaffolding that compensates for their 
 ### Prerequisites
 
 - **[Bun](https://bun.sh)** (JavaScript runtime + package manager) — `curl -fsSL https://bun.sh/install | bash`
-- **[Ollama](https://ollama.com/download)** (local model server) — then pull the model:
+- **[Ollama](https://ollama.com/download)** (local model server):
   ```bash
-  ollama pull qwen2.5-coder:3b
-  # or: ollama pull weiboai/vibethinker-3b  # origin baseline
   ollama serve   # default: http://localhost:11434
   ```
+  You don't have to pull the model by hand — the first `smallcode run`/`fix` detects a missing model and offers to `ollama pull` it (auto with `--yes`; headless runs are told the exact command instead of downloading silently). To pull ahead of time: `ollama pull qwen2.5-coder:3b`.
 
 ### One-line install
 
