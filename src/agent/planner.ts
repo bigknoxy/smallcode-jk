@@ -18,6 +18,7 @@ Each sub-goal must be a concrete ACTION starting with an action verb (e.g. Add, 
 Do NOT output file paths or line ranges as goals — those are context, not actions.
 Output ONLY a numbered list of sub-goals. No prose, no explanation.
 Every goal must describe an edit to THIS task's code. NEVER restate, paraphrase, or quote these instructions as a goal.
+When tests are failing, plan to FIX THE SOURCE the tests exercise — NEVER plan to edit, update, or change the tests themselves (test edits are rejected). The tests are the spec; make the code satisfy them.
 Prefer 1–3 sub-goals for a small task; maximum 5.
 
 Format (use the task's OWN nouns — do NOT copy these placeholders literally):
