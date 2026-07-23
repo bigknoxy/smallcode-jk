@@ -20,6 +20,7 @@ import {
   type TestBaseline,
 } from "@/verify/oracle.ts";
 import { advanceCarousel } from "./carousel.ts";
+import { beginRun, markClean, recordOriginals, recoverIfNeeded } from "./journal.ts";
 import { derivePhase, EXPLORE_REJECT_MESSAGE } from "./phase-gate.ts";
 import { planTask } from "./planner.ts";
 import { computeEditableSet, pinNeighborsIntoContext } from "./target-set.ts";
@@ -748,6 +749,43 @@ export async function runLoop(
 
   const readFileFn = buildReadFile(state.repoRoot);
   const writeFileFn = buildWriteFile(state.repoRoot);
+  const rmFileFn = async (p: string): Promise<void> => {
+    const abs = safeResolve(state.repoRoot, p);
+    if (abs !== null) await rm(abs, { force: true });
+  };
+
+  // Write-ahead apply journal (crash recovery, SMALLCODE_APPLY_JOURNAL). BEFORE
+  // any write this run makes: (1) replay a journal left by a PREVIOUS run that
+  // was killed mid-apply on this repo — restoring the pre-crash state so the
+  // baseline below is captured on a clean tree, not a half-written one; (2) open
+  // a fresh in-progress journal for THIS run. A clean finish deletes it
+  // (markClean, just before return); a crash leaves it for the next run.
+  const journalOn = env.applyJournal;
+  if (journalOn) {
+    const rec = await recoverIfNeeded(state.repoRoot, writeFileFn, rmFileFn);
+    if (rec.recovered) {
+      console.error(
+        `[smallcode] recovered an interrupted run — restored ${rec.restored.length} file(s) and removed ` +
+          `${rec.deleted.length} created file(s) to your pre-run state.`,
+      );
+    }
+    if (rec.failed.length > 0) {
+      console.error(
+        `[smallcode] UNSAFE: could not recover ${rec.failed.join(", ")} from the previous interrupted run — ` +
+          `the working tree may be inconsistent. Recover with 'git checkout -- .' before trusting it.`,
+      );
+    }
+    await beginRun(state.repoRoot, state.sessionId, new Date(state.startedAt).toISOString());
+  }
+  // Journaling write used ONLY for edit-apply (not reverts): records each file's
+  // pre-run content the first time it is written, then writes. First-seen-wins in
+  // the journal keeps the true pre-run bytes across multi-turn edits to one file.
+  const journalWrite = journalOn
+    ? async (p: string, content: string): Promise<void> => {
+        await recordOriginals(state.repoRoot, [p], readFileFn);
+        await writeFileFn(p, content);
+      }
+    : writeFileFn;
 
   // Tool execution context. Model-emitted tool calls (run_tests, run_command,
   // read_file) were previously parsed but never executed — the agent flew blind,
@@ -1048,7 +1086,7 @@ export async function runLoop(
           const batchResult = await applyBatch(
             editBlocks,
             readFileFn,
-            writeFileFn,
+            journalWrite,
             useSet
               ? { targetPaths: lockAllowedPaths }
               : lockTargetPathForTurn !== undefined
@@ -1148,12 +1186,21 @@ export async function runLoop(
     // way applyBatch stashes the first on-disk version it sees per path — so a
     // regression can be rolled back regardless of which write path produced it.
     const toolWriteOriginals = new Map<string, string>();
+    const toolWritePaths: string[] = [];
     for (const call of toolCalls) {
       if (call.name !== "write_file") continue;
       const p = call.args["path"];
       if (typeof p !== "string" || toolWriteOriginals.has(p)) continue;
       const disk = await readFileFn(p);
       if (disk !== null) toolWriteOriginals.set(p, disk); // null = new file, nothing to revert to
+      if (!toolWritePaths.includes(p)) toolWritePaths.push(p);
+    }
+    // Journal the tool write_file targets (crash recovery) BEFORE they execute —
+    // the write_file path bypasses applyBatch/journalWrite, so record here or a
+    // kill mid-write leaves a new/overwritten file with no rollback. readFileFn
+    // returns null for a not-yet-created file → journal marks it for deletion.
+    if (journalOn && toolWritePaths.length > 0) {
+      await recordOriginals(state.repoRoot, toolWritePaths, readFileFn);
     }
 
     // Execute model-emitted side-effecting tool calls (read_file, run_command,
@@ -1738,6 +1785,12 @@ export async function runLoop(
       await saveState(state, statePath);
     }
   }
+
+  // Clean terminal state reached (loop + repairs + guard all ran in-process):
+  // whatever is on disk is intentional, so drop the journal — nothing to recover.
+  // A crash BEFORE here skips this, leaving the in-progress journal for the next
+  // run to replay. Runs last so it can never pre-empt the guard.
+  if (journalOn) await markClean(state.repoRoot);
 
   return state;
 }

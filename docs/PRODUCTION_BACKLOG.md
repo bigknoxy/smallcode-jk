@@ -134,7 +134,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | ID | Epic | Task | Pri | Eff | Dep | Status |
 |----|------|------|-----|-----|-----|--------|
 | E1-T1 | Trust | Oracle full-fidelity regression guard + slice audit | P0 | S | — | ☑ DONE |
-| E1-T2 | Trust | Atomic multi-file apply + write-ahead journal (crash recovery) | P0 | L | E1-T1 | ☐ TODO |
+| E1-T2 | Trust | Atomic multi-file apply + write-ahead journal (crash recovery) | P0 | L | E1-T1 | ☑ DONE |
 | E1-T3 | Trust | Verified revert (hash-check restoration, fail-closed) | P0 | M | — | ☑ DONE |
 | E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☐ TODO |
 | E1-T5 | Trust | Failure UX: honest "couldn't fix + why" + guard-confidence field | P1 | M | — | ☐ TODO |
@@ -220,7 +220,7 @@ bun test tests/oracle-truncation.test.ts && bun test && bunx tsc --noEmit
 
 ---
 
-### E1-T2 — Atomic multi-file apply + write-ahead journal (crash recovery)  ·  P0 · L · Status: ☐ TODO
+### E1-T2 — Atomic multi-file apply + write-ahead journal (crash recovery)  ·  P0 · L · Status: ☑ DONE
 **Goal:** A process kill / OOM / Ollama disconnect mid-apply must never leave a half-written repo with
 no recovery. This is the reliability lens's predicted *next* silent-failure class.
 
@@ -264,7 +264,7 @@ bun test tests/agent-journal.test.ts && bun test && bunx tsc --noEmit
 ```
 **Docs-to-update:** `docs/architecture.html` (add crash-recovery to the edit-apply/guard flow diagram + footer date); `docs/llms.html` (module map: add `journal.ts`); `README.md` (safety guarantees section if present).
 **Rollback:** feature-flag the journal (`SMALLCODE_APPLY_JOURNAL`, default ON); set OFF to restore prior behavior.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-22)_ DONE (PR #152). New module `src/agent/journal.ts`: `recordOriginals` (persist pre-run bytes / did-not-exist marker, first-seen-wins per path, lazy journal create), `recoverIfNeeded` (replay a surviving in-progress journal — restore originals, delete created files, **best-effort per entry** so one unrestorable file never aborts recovery or throws into the run), `markClean`, `hasPendingJournal`, `journalPathFor` (= `os.tmpdir()/smallcode-journal/<sha256(repoRoot)[:16]>.json`, per-repo keyed → eval trials never collide). Wired into `loop.ts`: `recoverIfNeeded` + `beginRun` at run start (BEFORE the baseline capture, so it reflects the restored tree), a journaling `writeFileFn` wrapper for `applyBatch`, `recordOriginals` before the `write_file` TOOL path executes, `markClean` right before `return` (after the guard — NOT in a finally, so a crash correctly leaves the journal). Flag `SMALLCODE_APPLY_JOURNAL` (default ON) in `src/config/env.ts` + `ENV_REGISTRY`. **Design note:** true byte-atomic multi-file write is impossible file-by-file; the journal delivers the equivalent — apply that is atomic at *run-granularity across a crash* (next run rolls back a half-written repo). **Measured:** module mutation-test (remove first-seen guard) flips the cross-turn test RED → restore green; full `bun test` **1160/0 on both bun 1.3.12 and 1.3.14** AND under reversed file-order (ubuntu-like) — zero cross-test journal leak; `bunx tsc --noEmit` clean. Adversarial review found ONE real defect (fixed): the `smallcode chat` REPL continues the process after a caught `runLoop` throw (unlike `run.ts`, which `process.exit(1)`s → journal survival is correct crash semantics), so a thrown task N would leave an in-progress journal that task N+1 silently replays, rolling back N's writes. Fix: `journal.ts` exports self-contained `recoverRepo(repoRoot)` (builds its own path-safe, traversal-guarded write/rm); `chat.ts`'s catch calls it to roll the failed task back to pre-task state and report `rolled back N partial edit(s)`, keeping each REPL task atomic (test added). Review confirmed all other axes sound (baseline-before-recovery, single-return markClean, BoN/eval isolation via sequential-await + process.exit + per-attempt trial dirs, first-seen-wins across turns AND within a batch, effectivePath journaling, guard-before-markClean, no concurrency race). Docs: architecture.html (new crash-recovery section + flow), llms.html (module-map row), README.md (env entry), env-registry count 23→24. Final: full `bun test` 1161/0 on both bun 1.3.12 and 1.3.14; tsc clean.
 
 ---
 
