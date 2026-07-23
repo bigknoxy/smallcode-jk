@@ -169,7 +169,19 @@ export interface AgentState {
    * Absent on solved runs and on unsolved-but-not-worse runs (partial progress
    * is kept).
    */
-  finalStateReverted?: { newFailures: string[]; startRed: number; endRed: number; filesRestored: number };
+  finalStateReverted?: {
+    newFailures: string[];
+    startRed: number;
+    endRed: number;
+    filesRestored: number;
+    /**
+     * True iff every restored file was read back and its bytes matched the
+     * pristine snapshot (and every created file was confirmed deleted). False =
+     * the restore could NOT be proven — the working tree may be inconsistent and
+     * the "never leave the repo worse" guarantee is unverified (fail-closed).
+     */
+    restoreVerified: boolean;
+  };
   /**
    * Set-carousel (SMALLCODE_SET_CAROUSEL). Tracks the model's current ATTENTION
    * focus within `editablePaths` when the harness deterministically decomposes a

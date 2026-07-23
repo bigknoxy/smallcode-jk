@@ -186,6 +186,51 @@ describe("GAP#2 revertFiles helper", () => {
     });
     expect(calls).toBe(0);
   });
+
+  // E1-T3: verified revert. When a readFileFn is supplied, the restore is PROVEN
+  // by reading the bytes back, not assumed from the absence of a write throw.
+  it("verified:true when every read-back matches the intended original", async () => {
+    const originals = new Map<string, string>([["src/a.ts", "ORIGINAL A"], ["src/b.ts", "ORIGINAL B"]]);
+    const disk = new Map<string, string>();
+    const res = await revertFiles(
+      originals,
+      async (p, c) => void disk.set(p, c),
+      async (p) => disk.get(p) ?? null,
+    );
+    expect(res.verified).toBe(true);
+    expect(res.mismatched).toEqual([]);
+  });
+
+  it("verified:false + names the file when a write lands the WRONG bytes (partial/failed write)", async () => {
+    const originals = new Map<string, string>([["src/a.ts", "ORIGINAL A"], ["src/b.ts", "ORIGINAL B"]]);
+    const disk = new Map<string, string>();
+    const res = await revertFiles(
+      originals,
+      // Simulate a partial write: src/b.ts silently ends up truncated on disk.
+      async (p, c) => void disk.set(p, p === "src/b.ts" ? c.slice(0, 3) : c),
+      async (p) => disk.get(p) ?? null,
+    );
+    expect(res.verified).toBe(false);
+    expect(res.mismatched).toEqual(["src/b.ts"]);
+  });
+
+  it("verified:false when a restored file cannot be read back at all (write dropped)", async () => {
+    const originals = new Map<string, string>([["src/a.ts", "ORIGINAL A"]]);
+    const res = await revertFiles(
+      originals,
+      async () => {}, // write is a no-op — nothing lands on disk
+      async () => null, // read-back finds nothing
+    );
+    expect(res.verified).toBe(false);
+    expect(res.mismatched).toEqual(["src/a.ts"]);
+  });
+
+  it("fail-closed: verified:false when NO readFileFn is supplied (restore unproven)", async () => {
+    const originals = new Map<string, string>([["src/a.ts", "ORIGINAL A"]]);
+    const res = await revertFiles(originals, async () => {});
+    expect(res.verified).toBe(false);
+    expect(res.mismatched).toEqual([]);
+  });
 });
 
 // Mirror of the loop's revert decision: revert iff a true regression occurred.

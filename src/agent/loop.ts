@@ -255,13 +255,36 @@ function buildWriteFile(repoRoot: string): (p: string, content: string) => Promi
  * (relative to repoRoot) to its captured content. Only files that existed before
  * the edit are captured, so every entry is a plain content restore.
  */
+export interface RevertResult {
+  /**
+   * True only when a `readFileFn` was supplied AND every restored file was read
+   * back and its on-disk bytes matched the captured original. Fail-closed: when
+   * no `readFileFn` is given (verification not requested) this is `false` — an
+   * unverified restore is never reported as verified.
+   */
+  verified: boolean;
+  /** Paths whose on-disk bytes did NOT match the intended original after write. */
+  mismatched: string[];
+}
+
 export async function revertFiles(
   originals: Map<string, string>,
   writeFileFn: (p: string, content: string) => Promise<void>,
-): Promise<void> {
+  // Optional read-back so the restore can be PROVEN, not assumed from the
+  // absence of a write throw. A partial/failed write leaves stale bytes on disk;
+  // without this check the guard concludes "restored" and reports safety it
+  // cannot back up. When supplied, every file is re-read and byte-compared.
+  readFileFn?: (p: string) => Promise<string | null>,
+): Promise<RevertResult> {
+  const mismatched: string[] = [];
   for (const [filePath, content] of originals) {
     await writeFileFn(filePath, content);
+    if (readFileFn) {
+      const readBack = await readFileFn(filePath);
+      if (readBack !== content) mismatched.push(filePath);
+    }
   }
+  return { verified: readFileFn !== undefined && mismatched.length === 0, mismatched };
 }
 
 /**
@@ -659,6 +682,9 @@ export async function runFinalStateGuard(
   state: AgentState,
   testBaseline: TestBaseline,
   writeFileFn: (p: string, content: string) => Promise<void>,
+  // Read-back used to PROVE the restore landed. Defaults to a real disk read of
+  // `state.repoRoot`; injectable so tests can simulate a partial/failed write.
+  readFileFn: (p: string) => Promise<string | null> = buildReadFile(state.repoRoot),
 ): Promise<boolean> {
   // No test signal at baseline → nothing to compare a "worse" against.
   if (!testBaseline.hadAnyTests) return false;
@@ -670,24 +696,38 @@ export async function runFinalStateGuard(
   const { originals, created } = pristineRunSnapshot(state);
   if (originals.size === 0 && created.length === 0) return false; // agent changed nothing on disk
 
-  await revertFiles(originals, writeFileFn);
+  // Verified restore: write each pristine file back, then re-read and byte-check.
+  const revertRes = await revertFiles(originals, writeFileFn, readFileFn);
+  // Created files must end up GONE; confirm each deletion (fail-closed).
+  const createdNotDeleted: string[] = [];
   for (const rel of created) {
     const abs = safeResolve(state.repoRoot, rel);
     if (abs !== null) await rm(abs, { force: true });
+    if ((await readFileFn(rel)) !== null) createdNotDeleted.push(rel);
   }
 
+  const restoreVerified = revertRes.verified && createdNotDeleted.length === 0;
   const restored = captureTestBaseline(state.repoRoot);
   console.error(
     `[final-state-guard] reverted ${originals.size + created.length} file(s): run ended UNSOLVED and worse than baseline ` +
       `(red ${testBaseline.redCount}→${finalState.redCount}${newFailures.length ? `, new failures: ${newFailures.join(", ")}` : ""}). ` +
       `Restored to pristine (red now ${restored.redCount}).`,
   );
+  if (!restoreVerified) {
+    const bad = [...revertRes.mismatched, ...createdNotDeleted].join(", ");
+    console.error(
+      `[final-state-guard] UNSAFE: could not verify the restore of ${bad} — the working tree may be ` +
+        `inconsistent. Recover before trusting it: 'git checkout -- .' (or restore from the write-ahead ` +
+        `journal). The "never leave the repo worse" guarantee is UNVERIFIED for this run.`,
+    );
+  }
 
   state.finalStateReverted = {
     newFailures,
     startRed: testBaseline.redCount,
     endRed: finalState.redCount,
     filesRestored: originals.size + created.length,
+    restoreVerified,
   };
   return true;
 }
@@ -1249,9 +1289,15 @@ export async function runLoop(
     let reverted = false;
     if (verdict?.regressed === true && revertOriginals.size > 0) {
       try {
-        await revertFiles(revertOriginals, writeFileFn);
+        const res = await revertFiles(revertOriginals, writeFileFn, readFileFn);
         revertedNewFailures = [...(verdict.newFailures ?? [])];
         reverted = true;
+        if (!res.verified) {
+          console.error(
+            `[per-turn-revert] UNSAFE: could not verify the restore of ${res.mismatched.join(", ")} — ` +
+              `the working tree may be inconsistent for the next turn.`,
+          );
+        }
       } catch {
         // Restore failure is non-fatal: leave the edit in place and continue.
       }
@@ -1688,7 +1734,7 @@ export async function runLoop(
   // disk is never worse) and on unsolved-but-not-worse runs (partial progress is
   // preserved). Eval-neutral: an unsolved trial stays unsolved either way.
   if (env.finalStateGuard && !state.verified) {
-    if (await runFinalStateGuard(state, testBaseline, writeFileFn)) {
+    if (await runFinalStateGuard(state, testBaseline, writeFileFn, readFileFn)) {
       await saveState(state, statePath);
     }
   }
