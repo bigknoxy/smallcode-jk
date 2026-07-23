@@ -139,12 +139,12 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☑ DONE |
 | E1-T5 | Trust | Failure UX: honest "couldn't fix + why" + guard-confidence field | P1 | M | — | ☑ DONE |
 | E1-T6 | Trust | Interleaved-human-edit undo-scope test | P1 | S | — | ☑ DONE |
-| E2-T1 | Dist | `smallcode doctor` preflight command | P1 | M | — | ☐ TODO |
-| E2-T2 | Dist | Ollama health check before run | P1 | S | — | ☐ TODO |
+| E2-T1 | Dist | `smallcode doctor` preflight command | P1 | M | — | ☑ DONE |
+| E2-T2 | Dist | Ollama health check before run | P1 | S | — | ☑ DONE |
 | E2-T3 | Dist | Auto model-pull when configured model missing | P1 | M | E2-T2 | ☐ TODO |
-| E2-T4 | Dist | Model-id validation (registry + local ollama) | P1 | S | — | ☐ TODO |
+| E2-T4 | Dist | Model-id validation (registry + local ollama) | P1 | S | — | ☑ DONE |
 | E2-T5 | Dist | One-command bootstrap install (bun+ollama+model) | P1 | M | E2-T1 | ☐ TODO |
-| E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☐ TODO |
+| E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☑ DONE |
 | E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☐ TODO |
 | E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☐ TODO |
 | E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☐ TODO |
@@ -446,13 +446,13 @@ behind a confirmation unless `--yes`/non-interactive.
 **Docs-to-update:** `README.md` install section, `index.html` quick-start.
 **Result:** _(fill in when done)_
 
-### E2-T6 — Sane first-run default model  ·  P2 · S · Status: ☐ TODO
+### E2-T6 — Sane first-run default model  ·  P2 · S · Status: ☑ DONE
 **Goal:** `smallcode config init` should default to `qwen2.5-coder:3b` (fast, recommended) rather than
 `vibethinker-3b` (slow reasoner, think-only spiral risk).
 **Files:** `src/cli/commands/config-init.ts` (default model), README/docs examples.
 **Acceptance:** fresh `config init` writes `qwen2.5-coder:3b`; tests updated.
 **Docs-to-update:** `README.md`, `docs/llms.html`.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-23)_ DONE (PR #160). `config-init.ts` default model `vibethinker-3b` → `qwen2.5-coder:3b` (fast, code-tuned, no think-only spiral; vibethinker still available via `--model`). Updated the two config-init default assertions in `tests/cli.test.ts` (242, 316) + the README gotcha. **Live-verified:** `smallcode config init` (no `--model`) writes `"activeModel": "qwen2.5-coder:3b"`. Full `bun test` 1201/0 on bun 1.3.12 and 1.3.14; tsc clean. (Also synced the §4 Master Board rows for E2-T1/T2/T4 that lagged their DONE cards.)
 
 ---
 
