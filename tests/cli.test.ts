@@ -254,7 +254,7 @@ describe("configInitCommand", () => {
       positionals: [],
       flags: {
         output: outputPath,
-        model: "qwen2.5-coder-7b",
+        model: "qwen2.5-coder:7b",
         endpoint: "http://localhost:8080/v1",
       },
     });
@@ -263,7 +263,7 @@ describe("configInitCommand", () => {
     const cfg = JSON.parse(raw) as {
       config: { activeModel: string; provider: { baseUrl: string } };
     };
-    expect(cfg.config.activeModel).toBe("qwen2.5-coder-7b");
+    expect(cfg.config.activeModel).toBe("qwen2.5-coder:7b");
     expect(cfg.config.provider.baseUrl).toBe("http://localhost:8080/v1");
   });
 

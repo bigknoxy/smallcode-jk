@@ -46,7 +46,7 @@ cd your-project
 smallcode config init --model qwen2.5-coder:3b
 ```
 
-Writes `smallcode.config.json` pointed at `http://localhost:11434/v1`, with `sandbox.requireApproval: true` (each edit is shown for a `y/N` in an interactive terminal — nothing lands without your OK) and the default escalation ladder `["qwen2.5-coder:3b", "qwen2.5-coder:7b"]` (climbs to 7b only if 3b's fix doesn't pass the test oracle). **Gotcha:** without `--model`, `config init` defaults to `vibethinker-3b` — pass `--model qwen2.5-coder:3b` for the recommended model.
+Writes `smallcode.config.json` pointed at `http://localhost:11434/v1`, with `sandbox.requireApproval: true` (each edit is shown for a `y/N` in an interactive terminal — nothing lands without your OK) and the default escalation ladder `["qwen2.5-coder:3b", "qwen2.5-coder:7b"]` (climbs to 7b only if 3b's fix doesn't pass the test oracle). **Gotcha:** without `--model`, `config init` defaults to `vibethinker-3b` — pass `--model qwen2.5-coder:3b` for the recommended model. `config init` validates the model id against the registry and rejects a typo up front (listing the valid ids), so a bad id never lands in your config to fail later at inference.
 
 **2. Verify your setup**
 
