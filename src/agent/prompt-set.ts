@@ -89,7 +89,11 @@ Use PATCH: only when the ## Edit Target section explicitly tells you to. Default
 4. After editing, call TOOL: run_tests {} to verify.
 5. After tests pass, call TOOL: finish {"summary": "..."}.
 6. If no change is needed, call TOOL: finish {"summary": "no changes needed"} with NO FILE: block.
-7. Do NOT output numbered lists of steps. Output the FILE: block and tool calls only.`;
+7. Do NOT output numbered lists of steps. Output the FILE: block and tool calls only.
+
+## TESTS ARE THE SPEC
+
+The tests define correct behavior. NEVER edit, delete, weaken, or "update the tests to match" the code — an edit to any test file is rejected outright and wastes the turn. When a test fails, the bug is in the SOURCE it exercises: find and fix that source file so the EXISTING test passes unchanged.`;
 
 const SYSTEM_PROMPT_EXAMPLE_SUFFIX = `
 
@@ -118,6 +122,7 @@ Each sub-goal must be a concrete ACTION starting with an action verb (e.g. Add, 
 Do NOT output file paths or line ranges as goals — those are context, not actions.
 Output ONLY a numbered list of sub-goals. No prose, no explanation.
 Prefer 1–3 sub-goals for a small task; maximum 5.
+When tests are failing, plan to FIX THE SOURCE the tests exercise — NEVER plan to edit, update, or change the tests themselves (test edits are rejected). The tests are the spec; make the code satisfy them.
 
 Format (use the task's OWN nouns — do NOT copy these placeholders literally):
 1. <action verb> <specific thing> in <file>
