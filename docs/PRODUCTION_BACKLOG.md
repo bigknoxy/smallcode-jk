@@ -137,8 +137,8 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E1-T2 | Trust | Atomic multi-file apply + write-ahead journal (crash recovery) | P0 | L | E1-T1 | ☑ DONE |
 | E1-T3 | Trust | Verified revert (hash-check restoration, fail-closed) | P0 | M | — | ☑ DONE |
 | E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☑ DONE |
-| E1-T5 | Trust | Failure UX: honest "couldn't fix + why" + guard-confidence field | P1 | M | — | ☐ TODO |
-| E1-T6 | Trust | Interleaved-human-edit undo-scope test | P1 | S | — | ☐ TODO |
+| E1-T5 | Trust | Failure UX: honest "couldn't fix + why" + guard-confidence field | P1 | M | — | ☑ DONE |
+| E1-T6 | Trust | Interleaved-human-edit undo-scope test | P1 | S | — | ☑ DONE |
 | E2-T1 | Dist | `smallcode doctor` preflight command | P1 | M | — | ☐ TODO |
 | E2-T2 | Dist | Ollama health check before run | P1 | S | — | ☐ TODO |
 | E2-T3 | Dist | Auto model-pull when configured model missing | P1 | M | E2-T2 | ☐ TODO |
@@ -336,7 +336,7 @@ bun test tests/loop-repair-throw-restore.test.ts && bun test
 
 ---
 
-### E1-T5 — Failure UX: honest "couldn't fix + why" + guard-confidence field  ·  P1 · M · Status: ☐ TODO
+### E1-T5 — Failure UX: honest "couldn't fix + why" + guard-confidence field  ·  P1 · M · Status: ☑ DONE
 **Goal:** When the model fails, say so plainly and legibly. Silent mediocrity (a confidently-wrong diff
 with no "this might be wrong" signal) kills trust faster than an honest failure.
 
@@ -364,11 +364,11 @@ bun test && bunx tsc --noEmit
 # manual: run on a bug the 3B can't fix → verify the honest failure block + unchanged tree
 ```
 **Docs-to-update:** `README.md` (output examples), `docs/llms.html` (CLI contract), `index.html` if it shows sample output.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-22)_ DONE (PR #154). Added pure, exported `summarizeOutcome(finalState, escalatedTo?) → RunOutcomeSummary` in `run.ts`: derives `solved`, `mechanism` (`model` / `harness-rescue` — a turn carries `mutationRepair` / `escalated` — solved by a ladder rung / `none`), `guardFired` + `restoreVerified` + `filesRestored` (from `finalStateReverted`, E1-T3), `failingTests` (guard regression list, else last turn's revert/diagnostic), and a human `reason`. Renderers `renderSolvedAttribution` (one-line "how solved") and `renderFailureBlock` ("Could not fix — why; tree state; still-failing tests"). Wired into `run.ts`: solved path prints the attribution, unsolved path prints the honest failure block before the tone message; `solvedByEscalation` threaded from the escalation result. `--json` (`formatRunJson` + `RunJsonResult`) extended with the six new fields. **Measured:** mutation-test (ignore `mutationRepair`) flips the harness-rescue test RED → restore green; new `tests/run-outcome.test.ts` (13) + updated `tests/run-json.test.ts`. Full `bun test` **1171/0 on both bun 1.3.12 and 1.3.14**; `bunx tsc --noEmit` clean. Docs: README `--json` field list + honest-output note, llms.html run-contract row. (Mechanism attribution overlaps E5-T1 — this is the run-time surface; E5-T1 remains the offline pass-quality analysis.)
 
 ---
 
-### E1-T6 — Interleaved-human-edit undo-scope test  ·  P1 · S · Status: ☐ TODO
+### E1-T6 — Interleaved-human-edit undo-scope test  ·  P1 · S · Status: ☑ DONE
 **Goal:** Prove `undo` only touches the agent's own files, never the user's concurrent edits. (#68 scoped
 undo to agent changes; add the test that simulates interleaving.)
 
@@ -383,7 +383,7 @@ undo to agent changes; add the test that simulates interleaving.)
 **Acceptance criteria:** test proves user edits survive undo; ambiguous overlap fails safe (refuses, warns).
 **Verification:** `bun test tests/undo-scope-interleaved.test.ts && bun test`
 **Docs-to-update:** `README.md` undo section if behavior clarified.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-22)_ DONE (PR #154). Test-only — the #68 behavior already holds: `recordAgentChanges` computes the manifest as `(dirty after) − (dirty before run)`, so any file the user had already dirtied is EXCLUDED and `undo` never `git restore`s it. New `tests/undo-scope-interleaved.test.ts` (2) drives the interleaving directly: user pre-edits B and A, agent then edits A + a clean file D + creates C. Asserts `revertAgentChanges` reverts only D (agent-only) + deletes C (agent-created); B and A are left byte-identical (user work survives, the ambiguous overlap on A fails safe = left alone, never clobbered); a purely-user session records nothing → undo is a no-op. **Measured:** mutation-test (drop the `before` exclusion so ALL dirty files are claimed) flips both tests RED (A would be clobbered) → restore green. `bun test` green; behavior unchanged so `docs: no public-page impact` for this task (README undo section already accurate).
 
 ---
 

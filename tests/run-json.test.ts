@@ -14,8 +14,8 @@ import { formatRunJson } from "../src/cli/commands/run.ts";
 const STATE_PATH = "/tmp/test/.smallcode/state.json";
 
 function makeState(
-  overrides: Partial<Pick<AgentState, "status" | "verified" | "turns">>,
-): Pick<AgentState, "status" | "verified" | "turns"> {
+  overrides: Partial<Pick<AgentState, "status" | "verified" | "turns" | "finalStateReverted">>,
+): Pick<AgentState, "status" | "verified" | "turns" | "finalStateReverted"> {
   return {
     status: "done",
     verified: true,
@@ -62,6 +62,13 @@ describe("formatRunJson", () => {
       added: 5,
       removed: 2,
       reason: "",
+      // E1-T5 outcome fields: solved by the model, no guard, no rescue.
+      mechanism: "model",
+      mechanismDetail: "",
+      guardFired: false,
+      restoreVerified: null,
+      filesRestored: 0,
+      failingTests: [],
     });
   });
 

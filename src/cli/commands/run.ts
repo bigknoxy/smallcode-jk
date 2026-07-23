@@ -101,6 +101,129 @@ export function classifyCompletion(
   };
 }
 
+// ---------------------------------------------------------------------------
+// E1-T5 — honest run outcome: WHY it failed / HOW it was solved. Pure, exported
+// for unit tests. Silent mediocrity (a confidently-wrong diff with no signal)
+// kills trust faster than an honest failure, so every run states plainly whether
+// it solved the task, by what mechanism, and — when it didn't — why + the tree state.
+// ---------------------------------------------------------------------------
+
+export interface RunOutcomeSummary {
+  solved: boolean;
+  /** How a SOLVED run was solved; "none" when unsolved. */
+  mechanism: "model" | "harness-rescue" | "escalated" | "none";
+  /** Rescue label / escalated model id; "" otherwise. */
+  mechanismDetail: string;
+  /** The final-state guard fired (the run was left worse and reverted). */
+  guardFired: boolean;
+  /** E1-T3 verified restore; null when the guard did not fire. */
+  restoreVerified: boolean | null;
+  /** Files the guard restored to pristine (0 when it didn't fire). */
+  filesRestored: number;
+  /** Best-known failing test names on a non-solve. */
+  failingTests: string[];
+  /** Human "why not solved" (empty when solved). */
+  reason: string;
+}
+
+/**
+ * Derive the honest outcome from the finished state. Pure. `escalatedTo` is the
+ * model id that solved it via the escalation ladder (known only to run.ts's
+ * EscalateResult, not to `finalState`) — pass it so a solved-by-escalation run is
+ * attributed correctly; omit otherwise.
+ */
+export function summarizeOutcome(
+  finalState: Pick<AgentState, "status" | "verified" | "turns" | "finalStateReverted">,
+  escalatedTo?: string,
+): RunOutcomeSummary {
+  const solved = finalState.verified === true;
+  const rescueTurn = finalState.turns.find((t) => t.mutationRepair !== undefined);
+  const guard = finalState.finalStateReverted;
+
+  let mechanism: RunOutcomeSummary["mechanism"] = "none";
+  let mechanismDetail = "";
+  if (solved) {
+    if (escalatedTo) {
+      mechanism = "escalated";
+      mechanismDetail = escalatedTo;
+    } else if (rescueTurn?.mutationRepair) {
+      mechanism = "harness-rescue";
+      mechanismDetail = rescueTurn.mutationRepair.label;
+    } else {
+      mechanism = "model";
+    }
+  }
+
+  // Best-known failing tests: the guard's regression list if it fired, else the
+  // most recent turn that recorded a revert or a structured diagnostic.
+  let failingTests: string[] = guard?.newFailures ? [...guard.newFailures] : [];
+  if (failingTests.length === 0) {
+    for (let i = finalState.turns.length - 1; i >= 0 && failingTests.length === 0; i--) {
+      const t = finalState.turns[i];
+      if (t?.reverted?.newFailures?.length) failingTests = [...t.reverted.newFailures];
+      else if (t?.diagnostic?.assertionId) failingTests = [t.diagnostic.assertionId];
+    }
+  }
+
+  let reason = "";
+  if (!solved) {
+    if (guard) {
+      reason =
+        `the run left the repo worse (red ${guard.startRed}→${guard.endRed}), so it was restored to ` +
+        `its original state — no edits kept`;
+    } else if (finalState.status === "max_turns") {
+      reason = "ran out of turns without a green test result";
+    } else if (finalState.status === "done") {
+      reason = "finished without a test verifying the change as passing";
+    } else if (finalState.status === "failed") {
+      reason = "the run failed internally";
+    } else {
+      reason = `ended with status "${finalState.status}"`;
+    }
+  }
+
+  return {
+    solved,
+    mechanism,
+    mechanismDetail,
+    guardFired: guard !== undefined,
+    restoreVerified: guard ? guard.restoreVerified : null,
+    filesRestored: guard?.filesRestored ?? 0,
+    failingTests,
+    reason,
+  };
+}
+
+/** One-line "how this was solved" attribution for a solved run. */
+export function renderSolvedAttribution(s: RunOutcomeSummary): string {
+  switch (s.mechanism) {
+    case "escalated":
+      return `Solved after escalating to ${s.mechanismDetail}.`;
+    case "harness-rescue":
+      return `Solved by a harness rescue (operator/statement repair: ${s.mechanismDetail}) — not the model.`;
+    default:
+      return "Solved by the model.";
+  }
+}
+
+/** The honest "couldn't fix + why + tree state" block for an unsolved run. */
+export function renderFailureBlock(s: RunOutcomeSummary): string[] {
+  const lines = [`Could not fix — ${s.reason}.`];
+  if (s.guardFired) {
+    lines.push(
+      `Repo left unchanged: the guard restored ${s.filesRestored} file(s) to their original state` +
+        (s.restoreVerified === false ? " (restore UNVERIFIED — see warnings above)" : " (restore verified)") +
+        ".",
+    );
+  } else {
+    lines.push("No edits were kept (nothing verified green).");
+  }
+  if (s.failingTests.length > 0) {
+    lines.push(`Still failing: ${s.failingTests.slice(0, 5).join(", ")}.`);
+  }
+  return lines;
+}
+
 function flagString(flags: Record<string, string | boolean>, key: string): string | undefined {
   const val = flags[key];
   if (typeof val === "string") return val;
@@ -134,6 +257,13 @@ export interface RunJsonResult {
   added: number;
   removed: number;
   reason: string;
+  // E1-T5 honest-outcome fields (structured mirror of the human verdict).
+  mechanism: RunOutcomeSummary["mechanism"];
+  mechanismDetail: string;
+  guardFired: boolean;
+  restoreVerified: boolean | null;
+  filesRestored: number;
+  failingTests: string[];
 }
 
 /**
@@ -142,11 +272,13 @@ export interface RunJsonResult {
  * stays byte-for-byte consistent with the human-facing verdict.
  */
 export function formatRunJson(
-  finalState: Pick<AgentState, "status" | "verified" | "turns">,
+  finalState: Pick<AgentState, "status" | "verified" | "turns" | "finalStateReverted">,
   classification: CompletionClassification,
   changes: { filesChanged: string[]; added: number; removed: number },
   modelId: string,
+  escalatedTo?: string,
 ): RunJsonResult {
+  const outcome = summarizeOutcome(finalState, escalatedTo);
   return {
     ok: classification.ok,
     verified: finalState.verified === true,
@@ -157,6 +289,12 @@ export function formatRunJson(
     added: changes.added,
     removed: changes.removed,
     reason: classification.ok ? "" : classification.message,
+    mechanism: outcome.mechanism,
+    mechanismDetail: outcome.mechanismDetail,
+    guardFired: outcome.guardFired,
+    restoreVerified: outcome.restoreVerified,
+    filesRestored: outcome.filesRestored,
+    failingTests: outcome.failingTests,
   };
 }
 
@@ -387,6 +525,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     (escalationBaseline.failingIds.size > 0 || escalationBaseline.redCount > 0);
 
   let finalState: typeof state;
+  let solvedByEscalation: string | undefined; // set when the escalation ladder solved it (E1-T5 attribution)
   if (bestOfN > 1) {
     // Guard: BoN rolls the working tree back between attempts, so it needs a git
     // repo with nothing uncommitted to clobber.
@@ -471,6 +610,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
       });
       finalState = result.finalState;
       if (result.solvedModelId) {
+        solvedByEscalation = result.solvedModelId;
         process.stderr.write(
           `[smallcode] solved by ${result.solvedModelId} on attempt ${result.attemptsUsed}/${escalationSpec.length}.\n`,
         );
@@ -533,16 +673,26 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     const jsonChanges = isGitRepo(repoRoot)
       ? numstatChanges(repoRoot)
       : { filesChanged: [], added: 0, removed: 0 };
-    const payload = formatRunJson(finalState, classification, jsonChanges, modelId);
+    const payload = formatRunJson(finalState, classification, jsonChanges, modelId, solvedByEscalation);
     process.stdout.write(`${JSON.stringify(payload)}\n`);
     if (classification.ok) return;
     process.exit(1);
   }
 
+  const outcome = summarizeOutcome(finalState, solvedByEscalation);
+
   if (classification.ok) {
     progress.showComplete(finalState);
+    // E1-T5: one-line "how this was solved" attribution so a solve is never a
+    // black box (model vs harness-rescue vs escalation).
+    process.stderr.write(`[smallcode] ${renderSolvedAttribution(outcome)}\n`);
     return;
   }
+
+  // E1-T5: honest "couldn't fix + why + tree state" block. Print BEFORE the
+  // (possibly oracle-free) tone message so the failure is legible and the tree
+  // state is explicit — never a silent, confidently-wrong diff.
+  for (const line of renderFailureBlock(outcome)) process.stderr.write(`[smallcode] ${line}\n`);
 
   // Oracle-free honesty: a non-verified end (unverified finish OR max_turns) often
   // just means NO TEST covered the change — not that anything failed. Run one final
