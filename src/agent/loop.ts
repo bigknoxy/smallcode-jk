@@ -140,6 +140,13 @@ export interface LoopDependencies {
    * automated runs are unchanged.
    */
   approveEdit?: (blocks: import("@/edit/types.ts").EditBlock[]) => Promise<boolean>;
+  /**
+   * Test-only seam: override the final-state guard. Defaults to the real
+   * `runFinalStateGuard`. Lets a test force the terminal guard to throw and
+   * assert the fail-closed wrapper rolls the run back (E1-T4). Per-call, so it
+   * never leaks across runs. Production leaves it unset.
+   */
+  finalStateGuardFn?: typeof runFinalStateGuard;
 }
 
 interface ParsedToolCall {
@@ -1780,17 +1787,41 @@ export async function runLoop(
   // never leave the repo worse than it found it. No-op on solved runs (green
   // disk is never worse) and on unsolved-but-not-worse runs (partial progress is
   // preserved). Eval-neutral: an unsolved trial stays unsolved either way.
-  if (env.finalStateGuard && !state.verified) {
-    if (await runFinalStateGuard(state, testBaseline, writeFileFn, readFileFn)) {
-      await saveState(state, statePath);
+  // Fail-closed terminal finalize (E1-T4). The guard is the "never leave worse"
+  // net, but the guard call itself — and its `saveState`, and `markClean` — sit
+  // BELOW the repair try/catch, so a throw here (e.g. `captureTestBaseline`'s
+  // `bun test` spawn failing, or a disk error on save) would escape `runLoop`
+  // with the repo possibly left worse and the journal not yet consumed. Wrap it:
+  // on ANY throw, replay the write-ahead journal to roll the run back to its
+  // exact pre-run state BEFORE propagating, so an internal error can never leave
+  // the repo worse than baseline (fail-closed). A clean pass runs the guard then
+  // drops the journal (markClean) — a crash before that leaves it for the next
+  // run to replay.
+  const guardFn = deps.finalStateGuardFn ?? runFinalStateGuard;
+  try {
+    if (env.finalStateGuard && !state.verified) {
+      if (await guardFn(state, testBaseline, writeFileFn, readFileFn)) {
+        await saveState(state, statePath);
+      }
     }
+    if (journalOn) await markClean(state.repoRoot);
+  } catch (err) {
+    if (journalOn) {
+      try {
+        const rec = await recoverIfNeeded(state.repoRoot, writeFileFn, rmFileFn);
+        if (rec.recovered) {
+          console.error(
+            `[final-state-guard] the terminal guard/finalize step threw — rolled the run back to its ` +
+              `pre-run state (${rec.restored.length + rec.deleted.length} file(s)) so the repo is left no ` +
+              `worse than baseline.`,
+          );
+        }
+      } catch {
+        // Recovery is best-effort; never mask the original error with a new one.
+      }
+    }
+    throw err;
   }
-
-  // Clean terminal state reached (loop + repairs + guard all ran in-process):
-  // whatever is on disk is intentional, so drop the journal — nothing to recover.
-  // A crash BEFORE here skips this, leaving the in-progress journal for the next
-  // run to replay. Runs last so it can never pre-empt the guard.
-  if (journalOn) await markClean(state.repoRoot);
 
   return state;
 }
