@@ -1646,7 +1646,10 @@ export async function runLoop(
         state,
         testBaseline,
         readFileFn,
-        writeFileFn,
+        // journalWrite (not raw writeFileFn): a repair pass is a SECOND on-disk
+        // write path — a crash mid-repair must be crash-recoverable too, so its
+        // first write to the target records the pre-repair bytes in the journal.
+        journalWrite,
       );
       if (repaired !== null) {
         console.error(
@@ -1693,7 +1696,7 @@ export async function runLoop(
       state.lockedTargetPath !== undefined &&
       !testBaseline.loadError
     ) {
-      const repaired = await runLiteralRepair(state, testBaseline, readFileFn, writeFileFn);
+      const repaired = await runLiteralRepair(state, testBaseline, readFileFn, journalWrite);
       if (repaired !== null) {
         console.error(
           `[literal-repair] SOLVED ${repaired.file} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
@@ -1741,7 +1744,7 @@ export async function runLoop(
       state.lockedTargetPath !== undefined &&
       !testBaseline.loadError
     ) {
-      const repaired = await runStatementRepair(state, testBaseline, readFileFn, writeFileFn);
+      const repaired = await runStatementRepair(state, testBaseline, readFileFn, journalWrite);
       if (repaired !== null) {
         console.error(
           `[statement-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,

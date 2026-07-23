@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -25,6 +25,15 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
  * `os.tmpdir()/smallcode-journal/`, so it (a) survives even when the repo dir is
  * what's being written, and (b) is per-repo — eval trials in distinct throwaway
  * dirs never collide or leak recovery into one another.
+ *
+ * SINGLE-WRITER assumption: the journal is one file per repo with no lock, so it
+ * assumes ONE `smallcode` process operates on a given repo checkout at a time —
+ * the normal local-tool usage. Two concurrent runs on the SAME repo dir (e.g. a
+ * background `run` plus an interactive `chat`, or two eval workers mis-pointed at
+ * one dir) would have the second run's `beginRun`/`recoverIfNeeded` clobber or
+ * replay the first's in-progress journal. Eval is safe because each trial gets a
+ * distinct throwaway dir (a distinct journal). For genuinely concurrent work on
+ * one repo, use separate worktrees (distinct repoRoots → distinct journals).
  */
 
 export interface JournalFileEntry {
@@ -53,15 +62,6 @@ const JOURNAL_DIR = join(tmpdir(), "smallcode-journal");
 export function journalPathFor(repoRoot: string): string {
   const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 16);
   return join(JOURNAL_DIR, `${hash}.json`);
-}
-
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function readJournal(repoRoot: string): Promise<Journal | null> {
@@ -207,7 +207,8 @@ export async function recoverRepo(repoRoot: string): Promise<RecoveryResult> {
 
 /** True when an `in-progress` journal exists for this repo. Exported for tests/diag. */
 export async function hasPendingJournal(repoRoot: string): Promise<boolean> {
-  if (!(await pathExists(journalPathFor(repoRoot)))) return false;
+  // readJournal already returns null for a missing/corrupt file, so it doubles
+  // as the existence check — no separate stat needed.
   const j = await readJournal(repoRoot);
   return j !== null && j.status === "in-progress";
 }
