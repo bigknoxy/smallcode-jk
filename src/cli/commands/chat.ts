@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { git } from "@/util/git.ts";
+import { recoverRepo } from "../../agent/journal.ts";
 import { runLoop } from "../../agent/loop.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
@@ -119,6 +120,17 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
       );
     } catch (err) {
       process.stderr.write(`[smallcode] agent loop failed: ${String(err)}\n`);
+      // The REPL keeps running on this repo, so an in-progress apply journal left
+      // by the thrown task would be replayed by the NEXT task's runLoop and
+      // silently roll back its start state. Reconcile it now: roll this task's
+      // partial writes back to their pre-task state (each REPL task stays atomic)
+      // and report it, rather than deferring a surprise rollback onto task N+1.
+      const rec = await recoverRepo(repoRoot).catch(() => null);
+      if (rec?.recovered) {
+        process.stderr.write(
+          `[smallcode] rolled back ${rec.restored.length + rec.deleted.length} partial edit(s) from the failed task.\n`,
+        );
+      }
       return;
     }
     if (isGit) await recordAgentChanges(repoRoot, beforeDirty).catch(() => {});

@@ -669,6 +669,26 @@ flowchart TD
         deterministic unit test without a global module mock.
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Write-ahead apply journal / crash recovery</strong>
+        (<code>SMALLCODE_APPLY_JOURNAL</code>, <strong>default ON, E1-T2 2026-07-22</strong>). Every guard
+        above runs <em>in the same process</em> — so a process kill / OOM / model-backend disconnect
+        <em>mid-apply</em> (file 1 written, file 2 not) skips all of them and leaves a half-written repo with
+        no rollback: the reliability lens's predicted next silent-failure class. The journal
+        (<code>src/agent/journal.ts</code>) closes it. Before each on-disk edit — routed through both
+        <code>applyBatch</code> (via a journaling <code>writeFileFn</code> wrapper) and the
+        <code>write_file</code> TOOL path — it persists that file's PRE-RUN content (or a "did-not-exist"
+        marker for files the run creates) to a journal OUTSIDE the repo
+        (<code>os.tmpdir()/smallcode-journal/&lt;hash(repoRoot)&gt;.json</code>, per-repo keyed so eval trials
+        never collide), first-seen-wins per path. On the NEXT invocation, <code>recoverIfNeeded</code> finds
+        any surviving <code>in-progress</code> journal (a run that never reached its clean terminal state),
+        REPLAYS it — restore each original, delete created files (best-effort per entry) — returns the tree
+        to its exact pre-run state, and logs <code>[smallcode] recovered an interrupted run — restored N
+        file(s)…</code>. A clean run deletes its journal (<code>markClean</code>, right before
+        <code>runLoop</code> returns, after the guard); a crash leaves it. Net effect: edit-apply is
+        <strong>atomic at run-granularity across a crash</strong>. Recovery runs before the run-start
+        baseline is captured, so the baseline reflects the restored tree, not a half-written one.
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">Off-task-drift guard</strong> (dogfood #1 blocker,
         found via 2 live 7b runs: turn 1 lands a wrong edit on the correct target file, then turns 2-8
         wander into unrelated files and never touch it again). While the harness has confidently pinned a
