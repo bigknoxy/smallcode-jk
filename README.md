@@ -163,6 +163,8 @@ curl http://localhost:11434/v1/models
 
 The Ollama OpenAI-compatible endpoint is at `http://localhost:11434/v1`. Use this as `provider.baseUrl` in your config.
 
+**Troubleshooting — "Ollama not reachable":** `run`, `fix`, and `chat` preflight the server before the first model call, so if Ollama is down or the endpoint is wrong you get an immediate, actionable message (`Ollama not reachable at <url> — start it with 'ollama serve'`) with a non-zero exit, instead of a cryptic inference timeout. Run `smallcode doctor` for a full setup diagnosis.
+
 **Long sessions (recommended):** For sessions longer than ~1 hour, launch Ollama via the provided script instead of `ollama serve`. It sets `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0`, which halve KV-cache VRAM usage and slow the llama.cpp KV-cache fragmentation that causes throughput decay on Apple Silicon:
 
 ```bash
