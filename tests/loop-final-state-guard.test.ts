@@ -196,6 +196,23 @@ describe("runFinalStateGuard (mechanism)", () => {
     // Disk restored to pristine → suite green again.
     expect(await readFile(join(testDir, LIB_PATH), "utf-8")).toBe(GOOD_LIB);
     expect(captureTestBaseline(testDir).redCount).toBe(0);
+    // E1-T3: the restore was PROVEN (bytes read back and matched), not assumed.
+    expect(state.finalStateReverted?.restoreVerified).toBe(true);
+  });
+
+  it("E1-T3 fail-closed: restoreVerified is false when the read-back does NOT match", async () => {
+    const base = await setupGreenRepo();
+    const state = stateEditedLib();
+    await writeFile(join(testDir, LIB_PATH), BROKEN_LIB, "utf-8");
+
+    // Inject a read-back that reports stale/wrong bytes for the restored file —
+    // i.e. the write silently didn't fully land. The guard must still revert but
+    // must NOT claim the restore is verified.
+    const lyingRead = async (_p: string): Promise<string | null> => "NOT THE ORIGINAL";
+    const reverted = await runFinalStateGuard(state, base, writeRel(), lyingRead);
+
+    expect(reverted).toBe(true);
+    expect(state.finalStateReverted?.restoreVerified).toBe(false);
   });
 
   it("also deletes brand-new files the agent created when reverting", async () => {

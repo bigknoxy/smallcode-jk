@@ -135,7 +135,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 |----|------|------|-----|-----|-----|--------|
 | E1-T1 | Trust | Oracle full-fidelity regression guard + slice audit | P0 | S | — | ☑ DONE |
 | E1-T2 | Trust | Atomic multi-file apply + write-ahead journal (crash recovery) | P0 | L | E1-T1 | ☐ TODO |
-| E1-T3 | Trust | Verified revert (hash-check restoration, fail-closed) | P0 | M | — | ☐ TODO |
+| E1-T3 | Trust | Verified revert (hash-check restoration, fail-closed) | P0 | M | — | ☑ DONE |
 | E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☐ TODO |
 | E1-T5 | Trust | Failure UX: honest "couldn't fix + why" + guard-confidence field | P1 | M | — | ☐ TODO |
 | E1-T6 | Trust | Interleaved-human-edit undo-scope test | P1 | S | — | ☐ TODO |
@@ -268,7 +268,7 @@ bun test tests/agent-journal.test.ts && bun test && bunx tsc --noEmit
 
 ---
 
-### E1-T3 — Verified revert (hash-check restoration, fail-closed)  ·  P0 · M · Status: ☐ TODO
+### E1-T3 — Verified revert (hash-check restoration, fail-closed)  ·  P0 · M · Status: ☑ DONE
 **Goal:** Never *assume* a revert worked. Prove the bytes are back.
 
 **Problem (verified):** `revertFiles` (`src/agent/loop.ts:258`) and `runFinalStateGuard`
@@ -300,7 +300,7 @@ bun test tests/loop-final-state-guard.test.ts tests/applier-feedback-revert.test
 ```
 **Docs-to-update:** `docs/architecture.html` (guard/revert description + footer). 
 **Rollback:** revert the added checks.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-22)_ DONE (PR #150). `revertFiles` now takes an optional `readFileFn`, reads every restored file back, byte-compares to the captured original, and returns `{ verified, mismatched }` (`src/agent/loop.ts`). `runFinalStateGuard` threads it (real disk read by default, injectable for tests), also confirms each created file was actually deleted, records `finalStateReverted.restoreVerified` (new field in `src/agent/types.ts`), and on mismatch logs a fail-closed `[final-state-guard] UNSAFE …` line naming the path + recovery (`git checkout -- .` / journal). The per-turn revert carries the same read-back check. Used direct byte-compare (content already in memory) rather than hashing — exact and simpler. **Measured:** mutation-test (force `verified:true`) flips exactly the 4 new fail-closed tests RED, then restore → green. `bun test tests/loop-final-state-guard.test.ts tests/applier-feedback-revert.test.ts` 36/36; full `bun test` 1153/0 on **both bun 1.3.12 and 1.3.14**; `bunx tsc --noEmit` clean. Adversarial review: clean. Docs: `docs/architecture.html` guard section + footer updated.
 
 ---
 
