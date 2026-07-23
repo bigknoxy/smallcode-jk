@@ -17,6 +17,7 @@ import {
 } from "../../context/index.ts";
 import type { ContextBundle } from "../../context/types.ts";
 import { contextBudgetFor } from "../../models/context-budget.ts";
+import { ollamaNativeBase, pingOllama } from "../../models/ollama.ts";
 import { ModelRegistry } from "../../models/registry.ts";
 import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
@@ -36,6 +37,20 @@ import {
 // ---------------------------------------------------------------------------
 // classifyCompletion — pure helper; no I/O; exported for unit tests.
 // ---------------------------------------------------------------------------
+
+/**
+ * E2-T2: the human-facing message when Ollama can't be reached before a run.
+ * Pure/exported so the exact copy is unit-tested. Leads with WHAT is wrong and
+ * the ONE command that fixes it, then points at `doctor` for a full diagnosis.
+ */
+export function ollamaUnreachableMessage(baseUrl: string, error?: string): string {
+  const url = ollamaNativeBase(baseUrl);
+  return (
+    `Ollama not reachable at ${url}${error ? ` (${error})` : ""}. ` +
+    `Is the server running? Start it with 'ollama serve' (or open the Ollama app), then re-run. ` +
+    `Run 'smallcode doctor' for a full setup check.`
+  );
+}
 
 export interface CompletionClassification {
   /** True only when the run genuinely succeeded: tests oracle-verified green. */
@@ -354,6 +369,13 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   }
 
   // 4. Create provider + reasoning handler
+  // E2-T2: fail fast with a human message if Ollama is unreachable, instead of a
+  // cryptic inference timeout on the first model call several seconds in.
+  const health = await pingOllama(config.provider.baseUrl);
+  if (!health.ok) {
+    progress.showError(ollamaUnreachableMessage(config.provider.baseUrl, health.error));
+    process.exit(1);
+  }
   const provider = createProvider(config.provider, registry);
   const reasoningHandler = profile.reasoningTags
     ? new ReasoningHandler(profile.reasoningTags)

@@ -406,14 +406,14 @@ P0 check fails. `bun test tests/cli-doctor.test.ts` green.
 **Docs-to-update:** `README.md` quick-start (lead with `smallcode doctor`), `docs/llms.html` command list.
 **Result:** _(fill in when done)_
 
-### E2-T2 — Ollama health check before run  ·  P1 · S · Status: ☐ TODO
+### E2-T2 — Ollama health check before run  ·  P1 · S · Status: ☑ DONE
 **Goal:** Fail fast with a human message if Ollama is unreachable, instead of a cryptic inference timeout.
 **Files:** `src/provider/` (client), `src/cli/commands/run.ts`, `fix.ts`, `chat.ts`.
 **Steps:** before the first model call, `GET {baseUrl}/../api/tags` (or `/v1/models`) with a short timeout;
 on failure print `Ollama not reachable at <url> — is 'ollama serve' running?` and exit cleanly.
 **Acceptance:** server down → clean actionable error, no stack trace, non-zero exit. `bun test` green.
 **Docs-to-update:** `README.md` troubleshooting.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-23)_ DONE (PR #157). New shared `src/models/ollama.ts` (the native-API layer underpinning all of E2 — `pingOllama`/`listOllamaModels`/`modelIsPulled`/`pullOllamaModel`, injectable fetch+spawn, derives the native root by stripping `/v1`). Preflight added to `run.ts` (covers `fix`, which delegates) and `chat.ts`: before the provider is used, `pingOllama` (2s timeout) → on failure `progress.showError(ollamaUnreachableMessage(...))` + `process.exit(1)`. `ollamaUnreachableMessage` is pure/exported (names the native URL, the error, `ollama serve`, and `smallcode doctor`). **Measured:** 13 tests for the ollama module (ping ok/500/ECONNREFUSED/timeout, list parse+error, isPulled tag matching, pull exit0/nonzero/throw via injected fetch+runner) + 3 for the message; **live smoke** against a dead port printed the clean actionable error and exited before planning (no stack). Full `bun test` 1188/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: README troubleshooting.
 
 ### E2-T3 — Auto model-pull when configured model missing  ·  P1 · M · Dep: E2-T2 · Status: ☐ TODO
 **Goal:** If the active model isn't in `ollama list`, offer to `ollama pull` it (auto with `--yes`).
