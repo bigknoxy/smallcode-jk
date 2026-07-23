@@ -154,15 +154,15 @@ export function summarizeOutcome(
     }
   }
 
-  // Best-known failing tests: the guard's regression list if it fired, else the
-  // most recent turn that recorded a revert or a structured diagnostic.
+  // Best-known failing tests: the guard's regression list if it fired (the
+  // authoritative end-state signal), else ONLY the LAST turn's revert/diagnostic
+  // — never an older turn's, which may name a failure a later turn already fixed
+  // (that would be a misleading "still failing" line).
   let failingTests: string[] = guard?.newFailures ? [...guard.newFailures] : [];
   if (failingTests.length === 0) {
-    for (let i = finalState.turns.length - 1; i >= 0 && failingTests.length === 0; i--) {
-      const t = finalState.turns[i];
-      if (t?.reverted?.newFailures?.length) failingTests = [...t.reverted.newFailures];
-      else if (t?.diagnostic?.assertionId) failingTests = [t.diagnostic.assertionId];
-    }
+    const last = finalState.turns[finalState.turns.length - 1];
+    if (last?.reverted?.newFailures?.length) failingTests = [...last.reverted.newFailures];
+    else if (last?.diagnostic?.assertionId) failingTests = [last.diagnostic.assertionId];
   }
 
   let reason = "";

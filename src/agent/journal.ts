@@ -25,6 +25,15 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
  * `os.tmpdir()/smallcode-journal/`, so it (a) survives even when the repo dir is
  * what's being written, and (b) is per-repo — eval trials in distinct throwaway
  * dirs never collide or leak recovery into one another.
+ *
+ * SINGLE-WRITER assumption: the journal is one file per repo with no lock, so it
+ * assumes ONE `smallcode` process operates on a given repo checkout at a time —
+ * the normal local-tool usage. Two concurrent runs on the SAME repo dir (e.g. a
+ * background `run` plus an interactive `chat`, or two eval workers mis-pointed at
+ * one dir) would have the second run's `beginRun`/`recoverIfNeeded` clobber or
+ * replay the first's in-progress journal. Eval is safe because each trial gets a
+ * distinct throwaway dir (a distinct journal). For genuinely concurrent work on
+ * one repo, use separate worktrees (distinct repoRoots → distinct journals).
  */
 
 export interface JournalFileEntry {
