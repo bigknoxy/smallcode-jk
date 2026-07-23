@@ -136,7 +136,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E1-T1 | Trust | Oracle full-fidelity regression guard + slice audit | P0 | S | — | ☑ DONE |
 | E1-T2 | Trust | Atomic multi-file apply + write-ahead journal (crash recovery) | P0 | L | E1-T1 | ☑ DONE |
 | E1-T3 | Trust | Verified revert (hash-check restoration, fail-closed) | P0 | M | — | ☑ DONE |
-| E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☐ TODO |
+| E1-T4 | Trust | Guard-cannot-be-bypassed audit + fail-closed wrapper | P0 | M | E1-T3 | ☑ DONE |
 | E1-T5 | Trust | Failure UX: honest "couldn't fix + why" + guard-confidence field | P1 | M | — | ☐ TODO |
 | E1-T6 | Trust | Interleaved-human-edit undo-scope test | P1 | S | — | ☐ TODO |
 | E2-T1 | Dist | `smallcode doctor` preflight command | P1 | M | — | ☐ TODO |
@@ -304,7 +304,7 @@ bun test tests/loop-final-state-guard.test.ts tests/applier-feedback-revert.test
 
 ---
 
-### E1-T4 — Guard-cannot-be-bypassed audit + fail-closed wrapper  ·  P0 · M · Status: ☐ TODO
+### E1-T4 — Guard-cannot-be-bypassed audit + fail-closed wrapper  ·  P0 · M · Status: ☑ DONE
 **Goal:** No code path — BoN, escalation, tool `write_file`, any repair, or an unhandled throw — can end a
 run with the repo edited but the guard skipped.
 
@@ -332,7 +332,7 @@ bun test tests/loop-repair-throw-restore.test.ts && bun test
 ```
 **Docs-to-update:** `docs/architecture.html` (guard coverage) + footer.
 **Rollback:** revert the wrapper.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-22)_ DONE (PR #153). **Audit (step 1):** the #152 review already traced every terminal path — `runLoop` has exactly one `return state`; per-turn executor throws AND the `write_file` tool path are caught by the per-turn try/catch (guard still runs); repair-pass throws by the repair try/catch (PR #127); BoN/escalation callers `process.exit(1)` on throw (→ next-run journal replay) or use per-attempt fresh trial dirs; the `chat` REPL now reconciles the journal on a caught throw (E1-T2). The ONE remaining in-process gap: the guard call + its `saveState` + `markClean` sit BELOW the repair try/catch, so a throw there (e.g. `captureTestBaseline`'s `bun test` spawn failing, a disk error on save) escaped `runLoop`. **Fix (step 2):** wrapped the terminal guard/finalize in try/catch — on ANY throw it replays the write-ahead journal (`recoverIfNeeded`) to roll the run back to its exact pre-run state before propagating (fail-closed: repo left no worse than baseline, never half-reverted). Added a per-call `finalStateGuardFn` seam to `LoopDependencies` (no global state) so a test can force the guard to throw. **Measured:** new integration test drives a full `runLoop` (red baseline, model creates a junk file, forced-throwing guard) → asserts the created file is deleted (journal rollback) and the throw propagates; mutation-test (make the fail-closed catch skip recovery) flips it RED → restore green. Full `bun test` **1162/0 on both bun 1.3.12 and 1.3.14**; `bunx tsc --noEmit` clean. Docs: architecture.html fail-closed-guard paragraph + footer. **Note:** chose a targeted terminal-wrapper over the card's literal whole-`runLoop` try/finally — the journal already delivers whole-run rollback for every uncaught throw (next-run or caller-side), and the wrapper closes the one in-process guard-tail gap; re-indenting the entire 1000-line loop body would be a high-risk diff for no additional guarantee.
 
 ---
 

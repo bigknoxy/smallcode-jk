@@ -3,6 +3,7 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createState, runLoop } from "../src/agent/index.ts";
+import { hasPendingJournal, journalPathFor } from "../src/agent/journal.ts";
 import { pristineRunSnapshot, runFinalStateGuard } from "../src/agent/loop.ts";
 import type { AgentConfig, AgentState, TurnRecord } from "../src/agent/types.ts";
 import type { ContextBundle } from "../src/context/types.ts";
@@ -329,5 +330,60 @@ describe("Lever 1 — final-state guard eval-neutrality through runLoop", () => 
     expect(finalState.verified).toBe(true);
     expect(finalState.finalStateReverted).toBeUndefined(); // solved → guard never ran
     expect(await readFile(join(testDir, LIB_PATH), "utf-8")).toBe(GOOD_LIB); // fix left on disk
+  });
+});
+
+// --- E1-T4: the terminal guard/finalize is fail-closed ----------------------
+// If the guard itself throws (it sits BELOW the repair try/catch — e.g.
+// captureTestBaseline's `bun test` spawn failing, or a disk error), the run must
+// NOT propagate leaving the repo worse. The write-ahead journal is replayed in
+// the fail-closed catch, rolling the run back to its pre-run state first.
+describe("E1-T4 — fail-closed terminal guard wrapper", () => {
+  it("a throwing guard rolls the run back (created file deleted) before propagating", async () => {
+    process.env["SMALLCODE_FINAL_STATE_GUARD"] = "1";
+    process.env["SMALLCODE_APPLY_JOURNAL"] = "1";
+    // Red baseline: lib.ts broken (test wants 42) → the run stays UNSOLVED, so
+    // the guard runs. The model creates a brand-new junk file and never fixes the
+    // bug, so at max_turns the guard fires — and we force it to THROW.
+    testDir = join(tmpdir(), `smallcode-fsguard-failclosed-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(join(testDir, "src"), { recursive: true });
+    await mkdir(join(testDir, "tests"), { recursive: true });
+    await writeFile(join(testDir, "package.json"), '{"name":"t","type":"module"}', "utf-8");
+    await writeFile(join(testDir, "src", "lib.ts"), BROKEN_LIB, "utf-8");
+    await writeFile(
+      join(testDir, "tests", "lib.test.ts"),
+      'import { test, expect } from "bun:test";\nimport { answer } from "../src/lib.ts";\ntest("answer", () => { expect(answer).toBe(42); });\n',
+      "utf-8",
+    );
+
+    const cfg: AgentConfig = { repoRoot: testDir, modelId: "test-model", maxTurns: 1, bestOfN: 1 };
+    const state = createState(cfg, "Fix answer in src/lib.ts");
+    state.goals = [{ id: "g1", description: "fix answer in src/lib.ts", status: "pending" }];
+    // Creates a new file (journaled as created), does NOT fix lib.ts, no finish.
+    const responses = [`FILE: ${NEW_BROKEN}\n\`\`\`ts\nexport const junk = 1;\n\`\`\``];
+    const deps = {
+      provider: makeSequentialProvider(responses),
+      profile: makeProfile(),
+      reasoningHandler: new ReasoningHandler({ open: "<think>", close: "</think>" }),
+      config: cfg,
+      // Force the terminal guard to throw — the fail-closed wrapper must recover.
+      finalStateGuardFn: async () => {
+        throw new Error("forced guard failure");
+      },
+    };
+
+    // The junk file lands during the turn; the forced guard throw then propagates.
+    await expect(
+      runLoop(state, join(testDir, "state.json"), deps, async () => makeContext()),
+    ).rejects.toThrow("forced guard failure");
+
+    // Fail-closed: the run's created file was rolled back by the journal replay,
+    // so the repo is left no worse than the (red) baseline, not red + junk.
+    expect(await exists(join(testDir, NEW_BROKEN))).toBe(false);
+    expect(await hasPendingJournal(testDir)).toBe(false); // journal consumed
+  });
+
+  afterEach(async () => {
+    await rm(journalPathFor(testDir), { force: true });
   });
 });

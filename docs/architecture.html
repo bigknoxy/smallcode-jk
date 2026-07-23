@@ -689,6 +689,21 @@ flowchart TD
         baseline is captured, so the baseline reflects the restored tree, not a half-written one.
       </p>
       <p>
+        <strong style="color: var(--text-primary);">Fail-closed terminal guard</strong> (E1-T4,
+        2026-07-22). The final-state guard is the "never leave worse" net, but the guard call itself — plus
+        its <code>saveState</code> and <code>markClean</code> — sits BELOW the repair try/catch, so a throw
+        there (e.g. <code>captureTestBaseline</code>'s <code>bun test</code> spawn failing, or a disk error
+        on save) would escape <code>runLoop</code> with the repo possibly left worse and the journal not yet
+        consumed. The terminal sequence is now wrapped: on ANY throw it replays the write-ahead journal to
+        roll the run back to its exact pre-run state BEFORE propagating, so an internal error is
+        <strong>fail-closed</strong> — the repo ends no worse than baseline, never half-reverted. This
+        completes the guard-cannot-be-bypassed audit: per-turn executor throws and the <code>write_file</code>
+        tool path are caught by the per-turn try/catch (guard still runs), repair-pass throws by the repair
+        try/catch, and now the guard/finalize tail by this wrapper; every caller that keeps the process
+        alive (the <code>chat</code> REPL) reconciles the journal on a caught throw, and the one-shot
+        <code>run</code> path <code>process.exit(1)</code>s so the next invocation replays it.
+      </p>
+      <p>
         <strong style="color: var(--text-primary);">Off-task-drift guard</strong> (dogfood #1 blocker,
         found via 2 live 7b runs: turn 1 lands a wrong edit on the correct target file, then turns 2-8
         wander into unrelated files and never touch it again). While the harness has confidently pinned a
