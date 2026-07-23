@@ -5,6 +5,7 @@ import { fixCommand } from "../src/cli/commands/fix.ts";
 import { configInitCommand } from "../src/cli/commands/config-init.ts";
 import { configModelsCommand } from "../src/cli/commands/config-models.ts";
 import { configEnvCommand } from "../src/cli/commands/config-env.ts";
+import { doctorCommand } from "../src/cli/commands/doctor.ts";
 import { updateCommand, uninstallCommand } from "../src/cli/commands/selfmanage.ts";
 import { diffCommand, undoCommand } from "../src/cli/commands/review.ts";
 import { chatCommand } from "../src/cli/commands/chat.ts";
@@ -40,6 +41,7 @@ Usage:
   smallcode config init [--model <id>] [--endpoint <url>] [--output <path>] [--force]
   smallcode config list-models
   smallcode config env
+  smallcode doctor [--endpoint <url>] [--repo <path>] [--config <path>] [--json]   # diagnose your setup
   smallcode update
   smallcode uninstall [--yes|-y]
   smallcode --version
@@ -114,6 +116,10 @@ try {
         printUsage();
         process.exit(1);
       }
+      break;
+
+    case "doctor":
+      await doctorCommand(parsed);
       break;
 
     case "update":

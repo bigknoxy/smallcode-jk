@@ -48,7 +48,15 @@ smallcode config init --model qwen2.5-coder:3b
 
 Writes `smallcode.config.json` pointed at `http://localhost:11434/v1`, with `sandbox.requireApproval: true` (each edit is shown for a `y/N` in an interactive terminal — nothing lands without your OK) and the default escalation ladder `["qwen2.5-coder:3b", "qwen2.5-coder:7b"]` (climbs to 7b only if 3b's fix doesn't pass the test oracle). **Gotcha:** without `--model`, `config init` defaults to `vibethinker-3b` — pass `--model qwen2.5-coder:3b` for the recommended model.
 
-**2. Point it at a repo with a failing test and let it fix that test**
+**2. Verify your setup**
+
+```bash
+smallcode doctor
+```
+
+Checks the whole setup in one shot — Bun, the Ollama CLI, the Ollama **server** (reachable?), your config (valid? model id known?), whether the active model is **pulled**, and git/test-runner — and prints a copy-pasteable fix for anything broken (e.g. `ollama serve`, `ollama pull qwen2.5-coder:3b`). Exits non-zero if anything blocking is wrong, so it drops cleanly into CI/scripts (`--json` for a machine-readable report). Run it first whenever a run misbehaves.
+
+**3. Point it at a repo with a failing test and let it fix that test**
 
 ```bash
 smallcode fix --repo /path/to/repo
@@ -64,7 +72,7 @@ smallcode run "add input validation to src/api/handler.ts" --repo /path/to/repo
 
 Success means the change was **oracle-verified**: the test suite (or, for untested code, a static-confidence grade) confirmed the fix, not just that the model claimed to be done.
 
-**3. Review, and undo if needed**
+**4. Review, and undo if needed**
 
 ```bash
 smallcode diff --repo /path/to/repo         # see exactly what changed
@@ -282,6 +290,7 @@ All commands are invoked via `bun bin/smallcode.ts <command>` (or the installed 
 | `run` | `<task description>` (positional) `--repo <path>` `--config <path>` `--model <id>` `--max-turns <n>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--json` `--yes` | Run the agent on a coding task inside the given repo directory, e.g. `smallcode run "add input validation to src/api/handler.ts" --repo .`. Ends with a diff summary + how to review/undo. `--json` prints exactly one JSON line (`{ok, verified, status, model, turnsUsed, filesChanged, added, removed, reason, mechanism, mechanismDetail, guardFired, restoreVerified, filesRestored, failingTests}`) to stdout instead — for scripting/CI, exit code is unchanged (0 iff verified). Every run also ends with an honest one-liner: a solve says HOW (`Solved by the model.` / `…by a harness rescue…` / `…after escalating to <model>.`); a failure says WHY + the tree state (`Could not fix — ran out of turns…; the guard restored N file(s) (restore verified); Still failing: …`) so a run is never a silent, confidently-wrong diff. |
 | `fix` | `--repo <path>` `--test "<cmd>"` `--model <id>` `--best-of-n <n>` `--escalation <m1,m2,..>` `--max-turns <n>` `--json` | Test-driven auto-fix: runs the test command (default `bun test`); if GREEN, exits 0 immediately ("nothing to fix"); if RED, derives a task from the failing output and runs the SAME pipeline as `run`. The pre-commit / delegation primitive — point a hook or another agent at it and it either no-ops or drives the loop until tests pass (or gives up honestly). |
 | `chat` | `--repo <path>` `--model <id>` `--config <path>` | Interactive multi-task session — keeps the repo index + model warm across tasks. Slash-commands: `/add` `/drop` `/files` (pin context), `/diff` `/undo` (review/revert), `/model` `/clear` `/help` `/exit`. Any other line is a coding task. |
+| `doctor` | `--endpoint <url>` `--repo <path>` `--config <path>` `--json` | Diagnose the whole local setup in one command — Bun, Ollama CLI, Ollama **server** reachable, config valid + model id known, active model **pulled**, git repo + test runner. Prints ✓/✗ per check with a copy-pasteable fix (`ollama serve`, `ollama pull <id>`, `smallcode config init`). Exits non-zero if any blocking (P0) check fails; `--json` for a machine-readable report. Run it first when a run misbehaves. |
 | `diff` | `--repo <path>` | Show what the agent changed (unified diff + any new files). |
 | `undo` | `--repo <path>` `--yes` | Revert **only** what the agent changed — a run records its own edits to `.smallcode/agent-changes.json`, so undo restores those tracked files + deletes those new files and **never touches your own uncommitted work**. **Dry-run without `--yes`**; committed history is never touched. |
 | `eval run` | `--suite <path>` `--model <id>` `--config <path>` `--trials <n>` `--transcripts-dir <path>` `--fixtures-root <path>` `--output json\|text` | Run an eval suite and report pass@1, pass@k, and partial scores. Exits 1 if any tasks fail. |

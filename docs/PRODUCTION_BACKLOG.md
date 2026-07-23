@@ -394,7 +394,7 @@ undo to agent changes; add the test that simulates interleaving.)
 tool fails at the first inference call if Ollama is down or the model isn't pulled (no health check, no
 auto-pull, no model validation).
 
-### E2-T1 — `smallcode doctor` preflight command  ·  P1 · M · Status: ☐ TODO
+### E2-T1 — `smallcode doctor` preflight command  ·  P1 · M · Status: ☑ DONE
 **Goal:** One command that diagnoses the whole setup and prints exact fix-its.
 **Files:** new `src/cli/commands/doctor.ts`; register in `bin/smallcode.ts` + `src/cli/args.ts`.
 **Checks (each prints ✓/✗ + the fix command on ✗):** bun on PATH & version; Ollama installed; Ollama
@@ -404,7 +404,7 @@ config file valid (parses, model id is registered); repo is a git repo with a te
 P0 check fails. `bun test tests/cli-doctor.test.ts` green.
 **Verification:** `bun bin/smallcode.ts doctor` on a clean machine mock; `bun test && bunx tsc --noEmit`.
 **Docs-to-update:** `README.md` quick-start (lead with `smallcode doctor`), `docs/llms.html` command list.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-23)_ DONE (PR #158). New `src/cli/commands/doctor.ts` split PURE `buildDoctorChecks(facts)→DoctorCheck[]` + `hasFatalFailure`/`renderDoctor` (unit-tested) vs I/O `gatherDoctorFacts` (probes Bun, `ollama` CLI on PATH, Ollama server via `pingOllama`, `loadConfig`+`ModelRegistry.has`, model-pulled via `listOllamaModels`+`modelIsPulled`, git+package.json). 8 checks, each with `level` (P0 blocks→non-zero exit; warn advisory) + copy-pasteable `fix` (`ollama serve`, `ollama pull <id>`, `smallcode config init`, `git init`). `--json` emits `{ok, checks}`. Registered in `bin/smallcode.ts` + `args.ts` + usage. Model-pulled downgrades to a warn "can't check" when the server is down (avoids a confusing second P0). **Measured:** 8 unit tests (healthy all-✓, server-down, model-not-pulled exact `ollama pull` fix, invalid-config skips model-id check, unknown-id, no-git/no-runner=warn-not-fatal, ollama-CLI-missing) + mutation-test (make `hasFatalFailure` always-false → 4 RED) → restore green. **Live smoke:** healthy repo → all 8 ✓ "Ready to run."; dead endpoint → ✗ server + ✗ model-pulled(warn) + fixes + "Not ready" + non-zero; `--json` verified. Full `bun test` 1196/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: README quickstart step + command table, llms.html doctor.ts + ollama.ts rows.
 
 ### E2-T2 — Ollama health check before run  ·  P1 · S · Status: ☑ DONE
 **Goal:** Fail fast with a human message if Ollama is unreachable, instead of a cryptic inference timeout.
