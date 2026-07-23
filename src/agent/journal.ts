@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -62,15 +62,6 @@ const JOURNAL_DIR = join(tmpdir(), "smallcode-journal");
 export function journalPathFor(repoRoot: string): string {
   const hash = createHash("sha256").update(repoRoot).digest("hex").slice(0, 16);
   return join(JOURNAL_DIR, `${hash}.json`);
-}
-
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function readJournal(repoRoot: string): Promise<Journal | null> {
@@ -216,7 +207,8 @@ export async function recoverRepo(repoRoot: string): Promise<RecoveryResult> {
 
 /** True when an `in-progress` journal exists for this repo. Exported for tests/diag. */
 export async function hasPendingJournal(repoRoot: string): Promise<boolean> {
-  if (!(await pathExists(journalPathFor(repoRoot)))) return false;
+  // readJournal already returns null for a missing/corrupt file, so it doubles
+  // as the existence check — no separate stat needed.
   const j = await readJournal(repoRoot);
   return j !== null && j.status === "in-progress";
 }
