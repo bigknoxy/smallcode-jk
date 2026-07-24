@@ -1773,6 +1773,19 @@ bun scripts/classify-pass-quality.ts                          # model-solved vs 
       <pre style="overflow-x:auto;"><code>bun scripts/vendor-swebench.ts            # ingest SWE-bench-Lite → evals/suites/swebench-lite/
 SWEBENCH_LIMIT=5 SMALLCODE_MODEL=qwen2.5-coder:7b bun scripts/run-swebench.ts
 # reports: runnable/total, skip breakdown, pass@1 over the runnable subset, edit-format %, model-vs-rescue split</code></pre>
+      <p>
+        <strong style="color: var(--text-primary);">Dogfood over smallcode's own history (E3-T3)</strong> — the
+        highest-fidelity real test. <code>scripts/dogfood-history.ts</code> takes real past bug-fix commits from this
+        repo (<code>evals/suites/dogfood/commits.json</code>), and for each: creates a git worktree <em>at the
+        commit</em> (so its own diff reverse-applies cleanly), reverse-applies <strong>only its SOURCE hunks</strong>
+        to re-introduce the bug while KEEPING the guarding test the commit added, confirms the test now goes RED, then
+        runs the CURRENT agent to re-fix it — graded by smallcode's own <code>bun test</code>. Reports pass +
+        model-vs-harness-rescue attribution + a single-site/cross-file label. Setup validated deterministically:
+        <strong>4/4 real commits reproduce the bug</strong> (1 single-site oracle fix + 3 cross-file, incl. loop.ts +
+        env.ts/watchdog.ts). Pure helpers in <code>src/eval/dogfood-history.ts</code> are unit-tested. Run:
+      </p>
+      <pre style="overflow-x:auto;"><code>bun scripts/dogfood-history.ts                                    # setup-only: verify each bug reproduces
+DOGFOOD_AGENT=1 SMALLCODE_MODEL=qwen2.5-coder:7b bun scripts/dogfood-history.ts   # + run the agent, attributed</code></pre>
     </section>
 
   </div><!-- /container -->

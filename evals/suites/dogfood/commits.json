@@ -1,0 +1,9 @@
+{
+  "description": "E3-T3 dogfood: real past bug-fix commits from smallcode's own history. Each is re-introduced by reverse-applying its SOURCE hunks (the guarding test it added is kept), then the current agent must re-fix it, graded by `bun test`.",
+  "commits": [
+    { "commit": "d94c7db", "note": "oracle red-count parsed from full output (single src file + test) — the single-site control" },
+    { "commit": "55e1763", "note": "watchdog abstains on large prompts (env.ts + watchdog.ts) — cross-file" },
+    { "commit": "a6f68cc", "note": "contain repair-pass oracle throws so the guard always runs (loop.ts + index.ts) — cross-file, large" },
+    { "commit": "06545f9", "note": "scope repair to target fn + gate to assertion reds (loop.ts + types.ts + context) — cross-file" }
+  ]
+}
