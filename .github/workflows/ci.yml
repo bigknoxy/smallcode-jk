@@ -28,5 +28,8 @@ jobs:
       - name: Type check
         run: bunx tsc --noEmit
 
+      - name: Docs sync (env flags + commands documented)
+        run: bun scripts/check-docs-sync.ts
+
       - name: Test
         run: bun test
