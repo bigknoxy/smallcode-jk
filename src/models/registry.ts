@@ -118,6 +118,30 @@ const BUILT_IN_PROFILES: ModelProfile[] = [
     notes:
       "Gemma 12B instruct (non-reasoning), via Ollama. Optional higher escalation rung for users with bigger hardware — the R1 ladder accepts any registered local model.",
   },
+  {
+    // Experimental probe (ref_qwythos_9b_plan): Qwen3.5-9B finetune, Claude-distilled,
+    // Apache-2.0. Served via llama-server (OpenAI-compat at :8910/v1), NOT Ollama —
+    // point smallcode at it with SMALLCODE_BASE_URL=http://localhost:8910/v1. id MUST
+    // equal llama-server's --alias (sent verbatim to /v1). Reasoning model (<think>).
+    // ollamaOptions.num_ctx is inert here (that's Ollama's route) — context is fixed at
+    // llama-server serve time (--ctx-size 16384, NOT 1M: over-retrieval hurts, see
+    // project_context_window_ab). DO NOT use MTP spec-decode on Metal (net-loss,
+    // llama.cpp #23752). GATE: run a 10-task edit-format smoke first; abort if <~90%.
+    id: "qwythos-9b",
+    label: "empero-ai/Qwythos-9B-Claude-Mythos-5 (Qwen3.5-9B finetune)",
+    contextWindow: 16_384,
+    samplingDefaults: {
+      temperature: 0.6,
+      top_p: 0.95,
+      top_k: 20,
+      max_tokens: 4_096,
+    },
+    reasoningTags: { open: "<think>", close: "</think>" },
+    supportsGrammar: false,
+    supportsJsonSchema: false,
+    notes:
+      "Qwen3.5-9B finetune, Claude-distilled, Apache-2.0. Served via llama-server (OpenAI-compat :8910/v1), NOT Ollama. Reasoning model (<think>). Serve WITHOUT MTP spec-decode on Metal (net-loss) and ctx 16k not 1M. Experimental A/B probe vs qwen2.5-coder:7b — gate on edit-format ≥90% first. See ref_qwythos_9b_plan.",
+  },
 ];
 
 export class ModelRegistry {

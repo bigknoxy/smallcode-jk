@@ -467,7 +467,7 @@
             <tr><th scope="col">File</th><th scope="col">Purpose</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>registry.ts</code></td><td>Built-in profiles: <code>vibethinker-3b</code> (reasoning, &lt;think&gt; tags, temp 1.0), the non-reasoning executor coders <code>qwen2.5-coder:3b</code> / <code>qwen2.5-coder:7b</code> (profile <code>id</code> = the Ollama model name; temp 0.7 / top_p 0.8 / top_k 20, num_ctx 8192), and the GEPA reflection model <code>qwen2.5-coder:32b</code> (strong build-time prompt optimizer; contextWindow 32768, num_ctx 16384, max_tokens 8192, temp 0.6, Apache-2.0 — NOT an executor arm, used only by <code>LLMReflectiveMutator</code> via <code>SMALLCODE_GEPA_REFLECT_MODEL</code>). Swap the active model per-run with <code>SMALLCODE_MODEL</code> (run-baseline + debug-task). <code>ModelRegistry</code> class + <code>defaultRegistry</code> singleton; <code>register(profile)</code> for custom models.</td></tr>
+            <tr><td><code>registry.ts</code></td><td>Built-in profiles: <code>vibethinker-3b</code> (reasoning, &lt;think&gt; tags, temp 1.0), the non-reasoning executor coders <code>qwen2.5-coder:3b</code> / <code>qwen2.5-coder:7b</code> (profile <code>id</code> = the Ollama model name; temp 0.7 / top_p 0.8 / top_k 20, num_ctx 8192), and the GEPA reflection model <code>qwen2.5-coder:32b</code> (strong build-time prompt optimizer; contextWindow 32768, num_ctx 16384, max_tokens 8192, temp 0.6, Apache-2.0 — NOT an executor arm, used only by <code>LLMReflectiveMutator</code> via <code>SMALLCODE_GEPA_REFLECT_MODEL</code>). Swap the active model per-run with <code>SMALLCODE_MODEL</code> (run-baseline + debug-task). Also carries experimental probe profiles served OUTSIDE Ollama: <code>qwythos-9b</code> (empero-ai/Qwythos-9B-Claude-Mythos-5, a Qwen3.5-9B Claude-distilled finetune, &lt;think&gt; tags, Apache-2.0) is reached by a <code>llama-server</code> on <code>:8910/v1</code> via <code>SMALLCODE_BASE_URL</code> — served with ctx 16k (NOT the 1M the card advertises) and WITHOUT MTP spec-decode (a net loss on Apple-Silicon Metal, llama.cpp #23752). Measured n=10 realrepo A/B (10 tasks): qwythos-9b <strong>0.93 [0.88-0.98]</strong> vs qwen2.5-coder:7b <strong>0.96 [0.92-0.99]</strong> — CIs overlap = statistical tie, at ~2-4× the wall-clock, so it stays an opt-in probe (default NOT active). Interesting shape: qwythos solves the mri-flags short-circuit floor by <em>model comprehension</em> (1.2 turns, no rescue) where qwen 7b only reaches it via harness mutation-repair (6 turns); qwen wins lru-recency (1.00 vs 0.60). <code>ModelRegistry</code> class + <code>defaultRegistry</code> singleton; <code>register(profile)</code> for custom models.</td></tr>
             <tr><td><code>types.ts</code></td><td><code>ModelProfile</code> Zod schema and TypeScript type. Fields: id, label, contextWindow, samplingDefaults, reasoningTags, supportsGrammar, supportsJsonSchema, ollamaOptions, notes.</td></tr>
             <tr><td><code>context-budget.ts</code></td><td>Pure budget math shared by CLI, agent loop, and eval harness. <code>effectiveContextWindow(profile)</code> = <code>ollamaOptions.num_ctx ?? contextWindow</code> (the window Ollama actually uses). <code>promptHardCap(profile)</code> = <code>max(1024, effectiveWindow − max_tokens)</code> — ceiling for system+user prompt. <code>contextBudgetFor(profile)</code> — repo-context token budget (= hard cap). Fixes the HTTP-400 overflow from budgeting off the nominal 64K window.</td></tr>
           </tbody>
@@ -514,7 +514,7 @@
             <tr><th scope="col">File</th><th scope="col">Purpose</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>loader.ts</code></td><td><code>loadConfig(path?)</code> — search <code>smallcode.config.json</code> then <code>.smallcode.json</code>. Parse+validate with Zod. <code>loadConfigFromEnv()</code> — read <code>SMALLCODE_BASE_URL</code> and <code>SMALLCODE_MODEL</code>.</td></tr>
+            <tr><td><code>loader.ts</code></td><td><code>loadConfig(path?)</code> — search <code>smallcode.config.json</code> then <code>.smallcode.json</code>. Parse+validate with Zod, then <code>applyEnvOverrides()</code> overlays <code>SMALLCODE_BASE_URL</code>/<code>SMALLCODE_MODEL</code> (swaps only <code>provider.baseUrl</code> + <code>activeModel</code>, keeps file apiKey/timeout) so a run can point at a non-Ollama endpoint (e.g. llama-server on :8910) without editing the config file.</td></tr>
             <tr><td><code>types.ts</code></td><td>Zod schemas: <code>SmallcodeConfigSchema</code>, <code>ProviderConfigSchema</code>, <code>SandboxConfigSchema</code>, <code>EvalConfigSchema</code>. TypeScript inferred types.</td></tr>
             <tr><td><code>env.ts</code></td><td>Central typed registry of core-runtime env flags: <code>env</code> (live getters, read <code>process.env</code> per-call so tests can set/unset) + <code>ENV_REGISTRY: EnvVarDoc[]</code> (name/parse/default/description metadata) for the <code>smallcode config env</code> discoverability command — replaces scattered raw <code>process.env</code> reads for <code>SMALLCODE_LOCALIZE</code>, <code>VALIDATE_EDIT</code>, <code>STATIC_CONFIDENCE</code>, <code>DIFF_EDIT</code>, <code>DIFF_MIN_FN</code>, <code>TARGET_PIN</code>, <code>GRADER_RETRIES</code>, <code>WATCHDOG</code>, <code>WATCHDOG_MAX_PROMPT</code>, <code>TARGET_LOCK</code>, <code>TARGET_SET</code>, <code>R2_FORCE_LINE</code>, MUTATION_REPAIR, MUTATION_REPAIR_MAX, RAD_HINT, STATEMENT_REPAIR.</td></tr>
           </tbody>
@@ -881,13 +881,13 @@ function add(a: number, b: number): number { return a + b; }
             <tr>
               <td><code>SMALLCODE_BASE_URL</code></td>
               <td>—</td>
-              <td><code>loadConfigFromEnv</code></td>
-              <td>Override provider baseUrl (e.g. point at a different Ollama instance)</td>
+              <td><code>applyEnvOverrides</code> (in <code>loadConfig</code>)</td>
+              <td>Override provider baseUrl for a run — point at another Ollama instance <em>or a non-Ollama OpenAI-compat endpoint</em> such as a <code>llama-server</code> on <code>:8910/v1</code> (used for the experimental qwythos-9b probe)</td>
             </tr>
             <tr>
               <td><code>SMALLCODE_MODEL</code></td>
               <td>—</td>
-              <td><code>loadConfigFromEnv</code> / run-baseline / debug-task</td>
+              <td><code>applyEnvOverrides</code> / run-baseline / debug-task</td>
               <td>Override the active model ID for a run (e.g. <code>qwen2.5-coder:3b</code> vs <code>qwen2.5-coder:7b</code> vs <code>vibethinker-3b</code>) — a cross-model A/B with no config edit</td>
             </tr>
             <tr>

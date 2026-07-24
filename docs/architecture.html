@@ -1507,8 +1507,8 @@ flowchart TD
             <tr>
               <td class="td-name">Config</td>
               <td><code>src/config/</code></td>
-              <td>Load and validate <code>smallcode.config.json</code> via Zod schemas. Env var overrides via <code>loadConfigFromEnv</code>.</td>
-              <td><code>SmallcodeConfig</code>, <code>loadConfig</code>, <code>loadConfigFromEnv</code></td>
+              <td>Load and validate <code>smallcode.config.json</code> via Zod schemas. <code>applyEnvOverrides</code> (inside <code>loadConfig</code>) overlays <code>SMALLCODE_BASE_URL</code>/<code>SMALLCODE_MODEL</code> so a run can target a non-Ollama endpoint (e.g. llama-server) without editing the config file.</td>
+              <td><code>SmallcodeConfig</code>, <code>loadConfig</code>, <code>applyEnvOverrides</code></td>
             </tr>
             <tr>
               <td class="td-name">Models</td>
