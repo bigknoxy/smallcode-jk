@@ -8,6 +8,11 @@ export interface ToolContext {
   requireApproval: boolean;
 }
 
+// Re-exported for back-compat: the shared helper now lives in util/ so the
+// verify oracle can use it too without an agent↔verify import cycle.
+export { repoSubprocessEnv } from "../util/subprocess-env.ts";
+import { repoSubprocessEnv } from "../util/subprocess-env.ts";
+
 export class ApprovalRequiredError extends Error {
   constructor(
     public readonly toolName: string,
@@ -122,6 +127,7 @@ async function runCommand(args: Record<string, unknown>, ctx: ToolContext): Prom
   const proc = Bun.spawnSync([...argv], {
     cwd: ctx.repoRoot,
     timeout: 30_000,
+    env: repoSubprocessEnv(),
   });
 
   const LIMIT = 4000;
@@ -151,6 +157,7 @@ async function runTests(args: Record<string, unknown>, ctx: ToolContext): Promis
   const proc = Bun.spawnSync(argv, {
     cwd: ctx.repoRoot,
     timeout: 60_000,
+    env: repoSubprocessEnv(),
   });
 
   const LIMIT = 4000;

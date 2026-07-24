@@ -5,7 +5,7 @@ import path from "node:path";
 import type { BestOfNOptions } from "../src/agent/bestofn.ts";
 import { selectBestCandidate } from "../src/agent/bestofn.ts";
 import type { ToolContext } from "../src/agent/tools.ts";
-import { ApprovalRequiredError, executeTool } from "../src/agent/tools.ts";
+import { ApprovalRequiredError, executeTool, repoSubprocessEnv } from "../src/agent/tools.ts";
 import type { ModelProfile } from "../src/models/types.ts";
 import type { CompletionRequest, CompletionResponse, Provider } from "../src/provider/types.ts";
 
@@ -294,5 +294,69 @@ describe("selectBestCandidate", () => {
     // Winner should be the candidate with verifierScore = 1 (index 1)
     expect(result.winner.verifierScore).toBe(1);
     expect(result.winner.index).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repoSubprocessEnv — the harness must NOT leak its own SMALLCODE_* control
+// vars into the repo-under-repair's test/command subprocess. Surfaced by
+// dogfooding smallcode ON smallcode: SMALLCODE_BASE_URL/MODEL set to reach the
+// model flipped smallcode's OWN config tests red in the oracle, so a correct fix
+// read as "still failing".
+// ---------------------------------------------------------------------------
+
+describe("repoSubprocessEnv", () => {
+  it("strips SMALLCODE_* keys and keeps everything else", () => {
+    const out = repoSubprocessEnv({
+      PATH: "/usr/bin",
+      HOME: "/home/x",
+      SMALLCODE_BASE_URL: "http://localhost:8910/v1",
+      SMALLCODE_MODEL: "qwythos-9b",
+      SMALLCODE_API_KEY: "sk-x",
+      NODE_ENV: "test",
+    });
+    expect(out["PATH"]).toBe("/usr/bin");
+    expect(out["HOME"]).toBe("/home/x");
+    expect(out["NODE_ENV"]).toBe("test");
+    expect(out["SMALLCODE_BASE_URL"]).toBeUndefined();
+    expect(out["SMALLCODE_MODEL"]).toBeUndefined();
+    expect(out["SMALLCODE_API_KEY"]).toBeUndefined();
+  });
+
+  it("drops undefined values", () => {
+    const out = repoSubprocessEnv({ A: "1", B: undefined });
+    expect(out["A"]).toBe("1");
+    expect("B" in out).toBe(false);
+  });
+
+  it("run_tests spawns with SMALLCODE_* stripped (wiring guard)", async () => {
+    // A test in the target repo that FAILS iff it can see a leaked SMALLCODE_* var.
+    // If run_tests inherited the parent env, this would go red and the assertion
+    // below (success === true) would fail — pinning the fix.
+    const repo = await mkdtemp(path.join(tmpdir(), "smallcode-envleak-"));
+    try {
+      await writeFile(path.join(repo, "package.json"), '{"name":"t","type":"module"}');
+      await writeFile(
+        path.join(repo, "leak.test.ts"),
+        'import { test, expect } from "bun:test";\n' +
+          'test("no harness env leaked", () => {\n' +
+          '  expect(process.env.SMALLCODE_LEAK_CANARY).toBeUndefined();\n' +
+          "});\n",
+      );
+      const prior = process.env["SMALLCODE_LEAK_CANARY"];
+      process.env["SMALLCODE_LEAK_CANARY"] = "leaked";
+      try {
+        const result = await executeTool(
+          { name: "run_tests", args: {} },
+          makeCtx({ repoRoot: repo }),
+        );
+        expect(result.success).toBe(true);
+      } finally {
+        if (prior === undefined) delete process.env["SMALLCODE_LEAK_CANARY"];
+        else process.env["SMALLCODE_LEAK_CANARY"] = prior;
+      }
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+    }
   });
 });
