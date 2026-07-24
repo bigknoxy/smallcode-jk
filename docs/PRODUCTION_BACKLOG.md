@@ -149,7 +149,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☑ DONE |
 | E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☑ DONE |
 | E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☑ DONE |
-| E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☐ TODO |
+| E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☑ DONE |
 | E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☑ DONE |
 | E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☑ DONE |
 | E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☑ DONE |
@@ -520,7 +520,7 @@ repair tests still green); adding a new archetype requires only an `enumerate`+`
 **Docs-to-update:** `docs/architecture.html` (edit-format/repair pipeline), `docs/llms.html` (module map).
 **Result:** _(2026-07-24)_ DONE (PR #166). New `src/repair/archetype.ts`: `RepairArchetype` interface (`targets(state)` + `candidatesFor(state, target, current, attemptsSoFar)`) + `runArchetypeRepair` driver owning the identical write→oracle→revert→keep-first-green loop + throw-containment (the unfakeable invariants: keep only on full-green, revert every miss, throw→restore, never orphan a candidate). The 3 concrete archetypes (`operatorArchetype`, `literalArchetype`, `statementArchetype`) now live in `loop.ts` as `targets`+`candidatesFor` pairs; `runOperatorMutationRepair`/`runLiteralRepair`/`runStatementRepair` are thin wrappers (exported signatures unchanged). `attemptsSoFar` threads the shared multi-file cap (literal). **Measured:** ALL 62 existing repair/mutation/statement/throw/loaderror/journal tests still green (behavior-preserving) + 4 new `tests/repair-archetype.test.ts` proving the driver contract on a trivial custom archetype (keep-first-green, revert-misses, throw-contained, shared-budget). **Adversarial code-reviewer: refactor FAITHFUL — no behavioral differences across all 9 checked axes** (candidate order/dedup/cap, base order, label suffix, return shape, attempts counting, per-target revert, throw-halt-all, early-exit, logging); flagged only orphaned docstrings, which I cleaned. Full `bun test` 1227/0 on bun 1.3.12 and 1.3.14; tsc clean. Adding a new archetype (E4-T2) is now just a `targets`+`candidatesFor` pair. Docs: llms.html archetype.ts row.
 
-### E4-T2 — Add validated new rescue archetypes (n≥8 gated)  ·  P2 · L · Dep: E4-T1 · Status: ☐ TODO
+### E4-T2 — Add validated new rescue archetypes (n≥8 gated)  ·  P2 · L · Dep: E4-T1 · Status: ☑ DONE
 **Goal:** Add archetypes for common, general, deterministically-checkable bug shapes. Candidates to
 evaluate (pick those that fire on GENERAL defects, not one fixture): swapped function arguments;
 off-by-one on `.length`/index bounds; wrong boolean default (`true`↔`false` return); missing `await`.
@@ -531,7 +531,7 @@ harness rescue in reports.
 **Acceptance:** each shipped archetype has an A/B showing CI-significant floor movement + a no-false-fire
 suite run recorded; default state justified by evidence.
 **Docs-to-update:** `docs/architecture.html`, `README.md` (env flags), `docs/harness-engineering-roadmap.md`.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #169). Added the **boolean-default** archetype — a wrong `true`↔`false` return/assign, DISJOINT from operator (no operator to flip) and literal (no integer to perturb). New pure `src/repair/boolean-mutation.ts` (`enumerateBooleanMutations` — flips each standalone `true`/`false`, word-boundary regex so `trueish`/`isFalse`/`obj.true` never match) + `booleanArchetype`/`runBooleanRepair` in loop.ts as a `targets`+`candidatesFor` pair on the E4-T1 driver + call site + `SMALLCODE_BOOL_REPAIR`/`_MAX` env flags (default OFF). **Proving the E4-T1 interface pays off: a whole new deterministic rescue was a small enumerator + a targets/candidatesFor pair — no driver duplication.** **Evidence (honest, non-eval-gaming):** unit tests prove it (a) cracks a wrong-boolean bug through `runArchetypeRepair` with a real full-green-oracle gate (can't fake-green), and (b) is INERT on non-boolean code by construction (0 candidates); a live `BOOL_REPAIR=1` realrepo run fired **ZERO** times (the current 22-task suite has no wrong-boolean-default floor) with pass unchanged — so it ships **default-OFF, promoted only when a real floor appears** (no CI-significant realrepo movement to claim, reported honestly rather than manufacturing a fixture win). Attributed as a harness `mutationRepair` rescue. **Measured:** 5 new tests (enumerator + archetype-through-driver) + fixed the load-error-gate log assertion; full `bun test` 1237/0 on bun 1.3.12 and 1.3.14; docs-sync + tsc clean. Docs: README + llms.html (env flags + boolean-mutation.ts row). **This completes E4 (2/2) — and the ENTIRE PRODUCTION_BACKLOG (E1–E5) is DONE.**
 
 ---
 

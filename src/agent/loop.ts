@@ -12,6 +12,7 @@ import {
   type RepairCandidate,
   runArchetypeRepair,
 } from "@/repair/archetype.ts";
+import { enumerateBooleanMutations } from "@/repair/boolean-mutation.ts";
 import { enumerateLiteralMutations } from "@/repair/literal-mutation.ts";
 import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
@@ -550,6 +551,63 @@ export async function runStatementRepair(
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
   const r = await runArchetypeRepair(statementArchetype, state, testBaseline, readFileFn, writeFileFn, runOracle);
+  return r === null ? null : { label: r.label, line: r.line, attempts: r.attempts };
+}
+
+/**
+ * Boolean-mutation archetype (E4-T2): brute-force each standalone `true`↔`false`
+ * flip in the locked target's function, pristine-base first, for a wrong-boolean-
+ * DEFAULT bug no operator flip or integer perturbation can reach. Same structure
+ * as operator-mutation; DEFAULT OFF (SMALLCODE_BOOL_REPAIR) pending A/B evidence.
+ */
+const booleanArchetype: RepairArchetype = {
+  logName: "bool-repair",
+  targets: (state) => (state.lockedTargetPath !== undefined ? [state.lockedTargetPath] : []),
+  candidatesFor(state, targetRel, current) {
+    const cap = env.boolRepairMax;
+    const pristine = pristineTargetContent(state, targetRel);
+    const bases: Array<{ text: string; base: string }> = [];
+    if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
+    bases.push({ text: current, base: "current" });
+
+    const seen = new Set<string>([current]);
+    const raw: Array<{ candidate: string; label: string; line: number; base: string }> = [];
+    let totalAcross = 0;
+    for (const { text, base } of bases) {
+      const { mutations, totalFound } = enumerateBooleanMutations(text, cap);
+      totalAcross += totalFound;
+      for (const m of mutations) {
+        if (raw.length >= cap) break;
+        if (seen.has(m.candidate)) continue;
+        seen.add(m.candidate);
+        raw.push({ candidate: m.candidate, label: m.label, line: m.line, base });
+      }
+    }
+    const scoped = scopeMutationsToRange(raw, state.lockedTargetRange);
+    if (state.lockedTargetRange !== undefined && scoped.length < raw.length) {
+      console.error(
+        `[bool-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${raw.length - scoped.length} out-of-function flip(s) skipped.`,
+      );
+    }
+    if (scoped.length === 0) return [];
+    if (totalAcross > scoped.length) {
+      console.error(
+        `[bool-repair] ${targetRel}: ${totalAcross} boolean candidate(s) across pristine+current, trying ${scoped.length} (cap ${cap}). Some flips not tried.`,
+      );
+    }
+    return scoped.map((c) => ({ candidate: c.candidate, label: `${c.label} (${c.base})`, line: c.line }));
+  },
+};
+
+/** Harness-side boolean-mutation repair (I/O). Thin wrapper over the shared driver. */
+export async function runBooleanRepair(
+  state: AgentState,
+  testBaseline: TestBaseline,
+  readFileFn: (p: string) => Promise<string | null>,
+  writeFileFn: (p: string, content: string) => Promise<void>,
+  runOracle: typeof runTieredOracle = runTieredOracle,
+): Promise<{ label: string; line: number; attempts: number } | null> {
+  const r = await runArchetypeRepair(booleanArchetype, state, testBaseline, readFileFn, writeFileFn, runOracle);
   return r === null ? null : { label: r.label, line: r.line, attempts: r.attempts };
 }
 
@@ -1503,10 +1561,10 @@ export async function runLoop(
     fixModeBaseline &&
     state.lockedTargetPath !== undefined &&
     testBaseline.loadError &&
-    (env.mutationRepair || env.statementRepair || env.literalRepair)
+    (env.mutationRepair || env.statementRepair || env.literalRepair || env.boolRepair)
   ) {
     console.error(
-      `[repair] skipped operator/statement/literal repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no operator/statement/literal flip can satisfy it.`,
+      `[repair] skipped operator/statement/literal/boolean repair on ${state.lockedTargetPath}: baseline red is a compile/load error (missing symbol, syntax, or unresolved import) — no flip can satisfy it.`,
     );
   }
   // All last-resort repair passes run inside ONE try/catch so a throw in any of them
@@ -1655,6 +1713,42 @@ export async function runLoop(
             line: repaired.line,
             attempts: repaired.attempts,
           },
+        } as TurnRecord);
+        await saveState(state, statePath);
+      }
+    }
+
+    // Boolean-mutation repair (SMALLCODE_BOOL_REPAIR, default OFF; E4-T2). Last
+    // resort for a wrong-boolean-DEFAULT bug — same gate as the other archetypes.
+    if (
+      env.boolRepair &&
+      !state.verified &&
+      fixModeBaseline &&
+      state.lockedTargetPath !== undefined &&
+      !testBaseline.loadError
+    ) {
+      const repaired = await runBooleanRepair(state, testBaseline, readFileFn, journalWrite);
+      if (repaired !== null) {
+        console.error(
+          `[bool-repair] SOLVED ${state.lockedTargetPath} via ${repaired.label} at line ${repaired.line} (after ${repaired.attempts} candidate${repaired.attempts === 1 ? "" : "s"}).`,
+        );
+        for (const g of state.goals) g.status = "done";
+        state.status = "done";
+        state.verified = true;
+        addTurn(state, {
+          turn: state.turns.length + 1,
+          goalId: currentGoal(state)?.id ?? state.goals[0]?.id ?? "bool-repair",
+          prompt: "",
+          rawResponse: "",
+          answer: `[harness] bool-repair: ${state.lockedTargetPath} ${repaired.label} @L${repaired.line}`,
+          toolCalls: [],
+          toolResults: [],
+          editBlocks: [],
+          applyResults: [{ filePath: state.lockedTargetPath, status: "applied", diff: repaired.label }],
+          promptTokens: 0,
+          completionTokens: 0,
+          timestamp: Date.now(),
+          mutationRepair: { label: repaired.label, line: repaired.line, attempts: repaired.attempts },
         } as TurnRecord);
         await saveState(state, statePath);
       }

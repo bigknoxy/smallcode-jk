@@ -25,8 +25,8 @@ snapshot();
 afterEach(restore);
 
 describe("ENV_REGISTRY", () => {
-  it("has 24 entries", () => {
-    expect(ENV_REGISTRY.length).toBe(24);
+  it("has 26 entries", () => {
+    expect(ENV_REGISTRY.length).toBe(26);
   });
 
   it("every env getter name appears in ENV_REGISTRY", () => {
