@@ -61,10 +61,16 @@ export function loadConfigFromEnv(): Partial<SmallcodeConfig> {
  */
 export function applyEnvOverrides(config: SmallcodeConfig): SmallcodeConfig {
   const baseUrl = process.env["SMALLCODE_BASE_URL"];
+  const apiKey = process.env["SMALLCODE_API_KEY"];
   const model = process.env["SMALLCODE_MODEL"];
   let next = config;
   if (baseUrl) {
     next = { ...next, provider: { ...next.provider, baseUrl } };
+  }
+  if (apiKey) {
+    // An authenticated OpenAI-compat endpoint needs a bearer key; let the env set
+    // it without editing the checked-in config (same story as SMALLCODE_BASE_URL).
+    next = { ...next, provider: { ...next.provider, apiKey } };
   }
   if (model) {
     next = { ...next, activeModel: model };

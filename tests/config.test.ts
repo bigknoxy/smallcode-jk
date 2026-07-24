@@ -76,6 +76,24 @@ describe("loadConfig", () => {
       else process.env["SMALLCODE_MODEL"] = priorModel;
     }
   });
+
+  // SPEC (dogfood): an authenticated OpenAI-compat endpoint needs a bearer key.
+  // SMALLCODE_API_KEY must override provider.apiKey the same way SMALLCODE_BASE_URL
+  // overrides baseUrl — without editing the checked-in config. Was only consumed
+  // by the GEPA reflector, never the main provider path.
+  it("SMALLCODE_API_KEY overrides provider.apiKey, keeping other fields", () => {
+    const prior = process.env["SMALLCODE_API_KEY"];
+    process.env["SMALLCODE_API_KEY"] = "sk-test-123";
+    try {
+      const { config } = loadConfig(FIXTURE_PATH);
+      expect(config.provider.apiKey).toBe("sk-test-123");
+      // baseUrl untouched when only the key is set.
+      expect(config.provider.baseUrl).toBe("http://localhost:11434/v1");
+    } finally {
+      if (prior === undefined) delete process.env["SMALLCODE_API_KEY"];
+      else process.env["SMALLCODE_API_KEY"] = prior;
+    }
+  });
 });
 
 describe("applyEnvOverrides", () => {
