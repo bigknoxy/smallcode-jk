@@ -1,4 +1,5 @@
 import { env } from "@/config/env.ts";
+import { repoSubprocessEnv } from "../util/subprocess-env.ts";
 import { computeStaticConfidence, type StaticConfidence } from "./confidence.ts";
 import { extractFirstFailure, type FailureDiagnostic } from "./failure-extract.ts";
 import { runChecker } from "./runner.ts";
@@ -243,7 +244,14 @@ export interface BunTestRun {
 
 function runBunTestImpl(repoRoot: string): BunTestRun {
   const start = Date.now();
-  const proc = Bun.spawnSync(["bun", "test"], { cwd: repoRoot, timeout: 120_000 });
+  // Clean env: never leak the harness's SMALLCODE_* control vars into the
+  // repo-under-repair's oracle (they poison a smallcode-on-smallcode run —
+  // SMALLCODE_BASE_URL/MODEL flip smallcode's own config tests red).
+  const proc = Bun.spawnSync(["bun", "test"], {
+    cwd: repoRoot,
+    timeout: 120_000,
+    env: repoSubprocessEnv(),
+  });
   const out =
     (proc.stdout instanceof Uint8Array ? new TextDecoder().decode(proc.stdout) : "") +
     (proc.stderr instanceof Uint8Array ? new TextDecoder().decode(proc.stderr) : "");

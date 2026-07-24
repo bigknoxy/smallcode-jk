@@ -1,4 +1,5 @@
 import { env } from "@/config/env.ts";
+import { repoSubprocessEnv } from "../../util/subprocess-env.ts";
 import type { DeterministicTestsGrader, GraderResult } from "../types.ts";
 
 // ---------------------------------------------------------------------------
@@ -105,6 +106,9 @@ export async function runDeterministicGrader(
         timeout: 60_000,
         stdout: "pipe",
         stderr: "pipe",
+        // Don't leak the harness's SMALLCODE_* control vars into the graded repo's
+        // own test process (contaminates a smallcode-on-smallcode oracle).
+        env: repoSubprocessEnv(),
       });
       const stdout = proc.stdout ? new TextDecoder().decode(proc.stdout) : "";
       const stderr = proc.stderr ? new TextDecoder().decode(proc.stderr) : "";

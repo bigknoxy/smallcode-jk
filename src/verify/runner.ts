@@ -1,3 +1,4 @@
+import { repoSubprocessEnv } from "../util/subprocess-env.ts";
 import type { CheckerConfig, CheckResult, VerifyConfig, VerifyResult } from "./types.ts";
 
 const MAX_OUTPUT_CHARS = 4000;
@@ -9,6 +10,7 @@ export async function runChecker(checker: CheckerConfig, repoRoot: string): Prom
     const result = Bun.spawnSync(checker.command, {
       cwd: checker.cwd ?? repoRoot,
       timeout: checker.timeoutMs ?? 30_000,
+      env: repoSubprocessEnv(),
     });
 
     const stdout =
