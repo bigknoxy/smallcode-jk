@@ -11,7 +11,8 @@
     "test": "bun test",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run lint && bun test"
+    "docs-sync": "bun scripts/check-docs-sync.ts",
+    "check": "bun run typecheck && bun run lint && bun run docs-sync && bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

@@ -152,7 +152,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☐ TODO |
 | E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☑ DONE |
 | E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☑ DONE |
-| E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☐ TODO |
+| E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☑ DONE |
 
 ---
 
@@ -554,7 +554,7 @@ Add an honest "what it can't do" (multi-file, large refactors, hard localization
 **Docs-to-update:** `README.md`, `index.html`, `docs/architecture.html` footer.
 **Result:** _(2026-07-24)_ DONE (PR #167). README top gains a "Who it's for" section: NOT a Cursor/Claude Code competitor — for offline/air-gapped/regulated (finance/healthcare/defense/on-prem) environments where cloud tools aren't permitted ("the only allowed option"), plus budget-averse local-only devs, and for mechanical well-scoped single-file test-covered bug fixes (not multi-file/refactor/build-from-scratch). index.html hero gains the same positioning + a `#limitations` anchor to the E3-T1 "what it can and can't do" section. No parity claim with cloud tools. (The honest "what it can't do" limits themselves were added in E3-T1.)
 
-### E5-T3 — Docs-drift CI check script  ·  P2 · M · Status: ☐ TODO
+### E5-T3 — Docs-drift CI check script  ·  P2 · M · Status: ☑ DONE
 **Goal:** Enforce the HARD no-drift rule mechanically. A script that fails CI when code changes a
 flag/command/number without a matching doc update.
 **Files:** new `scripts/check-docs-sync.ts`; wire into `bun run check` / CI.
@@ -563,7 +563,7 @@ in `README.md`/`docs/llms.html`; assert `docs/architecture.html` footer date is 
 diffs. Start advisory (warn), then enforce.
 **Acceptance:** removing an env var from docs but not code (or vice-versa) fails the check.
 **Docs-to-update:** `README.md` (contributor section), the check is itself the enforcement.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #168), shipped ENFORCING (not just advisory). New pure `src/eval/docs-sync.ts` (`missingFromDocs`, `extractCommands` — pulls `case "<cmd>":` from the dispatch, `checkDocsSync`, `renderDocsSync`) + `scripts/check-docs-sync.ts`: extracts the 24 `SMALLCODE_*` flags from `ENV_REGISTRY` (source of truth) + 12 CLI commands from `bin/smallcode.ts`, asserts each appears verbatim in `README.md` AND `docs/llms.html`, exits 1 on drift (`--warn` to soften). Wired into `package.json` `check` script + a CI step (`.github/workflows/ci.yml`). **It caught 2 REAL drifts on first run** — `SMALLCODE_PHASE_GATE` missing from README + the `uninstall` command missing from llms.html — both fixed (README PHASE_GATE entry; llms.html `selfmanage.ts` row). **Measured:** 5 unit tests + a mutation-test (add a fake undocumented env var → exit 1; remove it → exit 0). Full `bun test` 1232/0 on bun 1.3.12 and 1.3.14 (one unrelated 1.3.12-only `InvalidLockfileVersion` nested-bun-test flake in the stall test, green on re-run); tsc clean. **This completes E5 (3/3) and the E4/E5 epics — the whole PRODUCTION_BACKLOG is DONE.**
 
 ---
 
