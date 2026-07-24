@@ -141,7 +141,7 @@ describe("repair load-error gate", () => {
     expect(finalState.turns.some((t) => t.mutationRepair !== undefined)).toBe(false);
     // And the skip was logged for observability.
     const loggedSkip = errSpy.mock.calls.some((c) =>
-      String(c[0]).includes("skipped operator/statement/literal repair"),
+      String(c[0]).includes("skipped operator/statement/literal/boolean repair"),
     );
     expect(loggedSkip).toBe(true);
     errSpy.mockRestore();
