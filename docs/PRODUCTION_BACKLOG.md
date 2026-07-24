@@ -150,8 +150,8 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☑ DONE |
 | E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☑ DONE |
 | E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☐ TODO |
-| E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☐ TODO |
-| E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☐ TODO |
+| E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☑ DONE |
+| E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☑ DONE |
 | E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☐ TODO |
 
 ---
@@ -537,14 +537,14 @@ suite run recorded; default state justified by evidence.
 
 ## 10. EPIC E5 — Discipline & positioning (P1, cheap, cross-cutting)
 
-### E5-T1 — Mechanism attribution in every run/eval report  ·  P1 · S · Status: ☐ TODO
+### E5-T1 — Mechanism attribution in every run/eval report  ·  P1 · S · Status: ☑ DONE
 **Goal:** No output ever implies "the small model solved it" when a rescue or escalation did.
 **Files:** `src/cli/commands/run.ts` output, `scripts/run-baseline.ts` table, `scripts/classify-pass-quality.ts`.
 **Acceptance:** every solved-run/eval line states the mechanism (model / <rescue> / escalated-to-<model>).
 **Docs-to-update:** `README.md`, `docs/architecture.html`.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE — delivered by E1-T5 (#154) + E3-T1 (#163), verified. All three surfaces attribute: `run.ts` `renderSolvedAttribution` prints "Solved by the model." / "…by a harness rescue (operator/statement repair: <label>) — not the model." / "…after escalating to <model>." on every solved run (+ `--json` `mechanism`/`mechanismDetail`); `run-baseline.ts` emits "How solved (N passing): X% model-solved, Y% harness-rescued" when transcripts are saved; `classify-pass-quality.ts` reports per-task `model-solve%` + `rescued`. No new code needed for E5-T1 — the prior work satisfies the acceptance; the mri-flags demo (0% model / 100% rescued) proves no line implies a model-solve when a rescue did.
 
-### E5-T2 — Position the target user + honest limits in docs  ·  P1 · S · Status: ☐ TODO
+### E5-T2 — Position the target user + honest limits in docs  ·  P1 · S · Status: ☑ DONE
 **Goal:** Stop implying smallcode competes with Cursor. State the real winning use case:
 **mechanical, well-scoped, single-file bug fixes in offline / air-gapped / regulated environments where
 cloud coding tools are not permitted** — "the only allowed option," plus budget-averse local-only users.
@@ -552,7 +552,7 @@ Add an honest "what it can't do" (multi-file, large refactors, hard localization
 **Files:** `README.md` (top), `index.html` (hero + a "who it's for / what it can't do" section).
 **Acceptance:** docs name the target user and the honest limits; no claim of general parity with cloud tools.
 **Docs-to-update:** `README.md`, `index.html`, `docs/architecture.html` footer.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #167). README top gains a "Who it's for" section: NOT a Cursor/Claude Code competitor — for offline/air-gapped/regulated (finance/healthcare/defense/on-prem) environments where cloud tools aren't permitted ("the only allowed option"), plus budget-averse local-only devs, and for mechanical well-scoped single-file test-covered bug fixes (not multi-file/refactor/build-from-scratch). index.html hero gains the same positioning + a `#limitations` anchor to the E3-T1 "what it can and can't do" section. No parity claim with cloud tools. (The honest "what it can't do" limits themselves were added in E3-T1.)
 
 ### E5-T3 — Docs-drift CI check script  ·  P2 · M · Status: ☐ TODO
 **Goal:** Enforce the HARD no-drift rule mechanically. A script that fails CI when code changes a

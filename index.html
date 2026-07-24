@@ -670,6 +670,15 @@
         undo exactly what the agent changed (never your own uncommitted work), and escalate to a bigger
         <em>local</em> model only when the small one stalls. Fully offline. No cloud APIs, no API keys.
       </p>
+      <p class="hero__sub" style="margin-top: var(--space-3);">
+        <strong style="color: var(--text-primary);">Who it's for.</strong> Not a Cursor / Claude Code
+        competitor — a frontier cloud model wins general coding. smallcode is for where cloud tools
+        <em>aren't allowed</em>: <strong>offline / air-gapped / regulated</strong> environments (finance,
+        healthcare, defense, on-prem-only) where a fully-local agent is the only permitted option, plus
+        budget-averse local-only devs. And for <strong>mechanical, well-scoped, single-file bug fixes with a
+        covering test</strong> — deliberately not multi-file refactors or build-from-scratch
+        (<a href="#limitations" style="color:var(--text-accent)">what it can't do ↓</a>).
+      </p>
 
       <!-- Headline stat callout -->
       <div class="hero__stat-callout" aria-label="Headline benchmark: 0.828 HumanEval-TS pass@1">
@@ -1044,7 +1053,7 @@
 
     <!-- ── Honesty: what it can and can't do ── -->
     <div style="margin-top: var(--space-8); padding: var(--space-6); border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);">
-      <h3 style="margin-top:0;">What smallcode can — and can't — do</h3>
+      <h3 id="limitations" style="margin-top:0; scroll-margin-top: 80px;">What smallcode can — and can't — do</h3>
       <p style="color: var(--text-secondary);">
         The credibility play is the opposite of hype: publish the ceilings, and never let an aggregate overstate the
         <em>model</em>. Every number above is from a real run, reproducible by a documented command, and labeled by the
