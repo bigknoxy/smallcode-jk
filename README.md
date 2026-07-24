@@ -400,6 +400,8 @@ bun scripts/classify-pass-quality.ts                            # per task: mode
 ```
 `classify-pass-quality` reports, per task, how each pass was earned (`ideal`/`solid`/`lucky` = model-solved, or `rescued` = the deterministic repair solved it) plus a `modelSolveRate` — e.g. `mri-flags`'s pass@1 1.00 is **0% model-solved, 100% rescued**.
 
+**SWE-bench-Lite** (`scripts/run-swebench.ts`) runs the honest way: it clones each instance, applies the test patch, and *probes* with `pytest --collect-only`; an instance whose pinned Python deps aren't importable is **skipped (env-unavailable), never a fake 0** (SWE-bench-Lite ships a Docker image per instance for this reason). pass@1 is reported *only over the runnable subset* (denominator = runnable, never total), with a skip breakdown and a model-vs-rescue split. On a stock box the honest result is typically `0 runnable / N env-unavailable`; install each instance's deps (or use the official Docker harness) to make a subset runnable: `SWEBENCH_LIMIT=5 bun scripts/run-swebench.ts`.
+
 ---
 
 ## License

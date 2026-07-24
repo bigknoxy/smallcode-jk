@@ -146,7 +146,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E2-T5 | Dist | One-command bootstrap install (bun+ollama+model) | P1 | M | E2-T1 | ☑ DONE |
 | E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☑ DONE |
 | E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☑ DONE |
-| E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☐ TODO |
+| E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☑ DONE |
 | E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☐ TODO |
 | E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☐ TODO |
 | E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☐ TODO |
@@ -476,7 +476,7 @@ no aggregate hides a rescue-driven win.
 **Docs-to-update:** `index.html`, `docs/architecture.html` (+footer), `README.md`.
 **Result:** _(2026-07-24)_ DONE (PR #163). The pass@k+CI + attribution instrument already existed (`src/eval/stats.ts` bootstrap CIs; `scripts/classify-pass-quality.ts` model-solved vs `rescued` split from transcripts) and the published realrepo numbers were already real + labeled (7b 0.90 model-only / 0.94 default-harness). Added: (1) `run-baseline.ts` now EMITS the mechanism split in-line when `SMALLCODE_SAVE_TRANSCRIPTS=1` — "How solved (N passing): X% model-solved, Y% harness-rescued" (reuses the tested `classifyTranscripts`); (2) a formal **"What smallcode can and can't do"** section in index.html + architecture.html + README (fault-localization ceiling, cross-file forward-import-only, large refactors out of scope, no-oracle→no-proof); (3) explicit **reproduction commands** for every number (default vs `MUTATION_REPAIR=0` model-only + `classify-pass-quality`); (4) a WORKED example table (real 3-task run). **Measured/demonstrated:** ran a real 3×n=3 realrepo eval (7b) with transcripts → `classify-pass-quality` output `realrepo-mri-flags_1` = **model-solve% 0.0%, rescued 3/3** (its pass@1 1.00 is 100% deterministic-rescue, 0% model — a bare table would call it a model win), modwrap-arith/template-trim 100% model-solved, OVERALL model-solve% 66.7%; run-baseline's inline split printed 50/50 on a 2-task re-run. This proves "no aggregate hides a rescue-driven win." Full `bun test` 1215/0 on bun 1.3.12 and 1.3.14; tsc clean. architecture.html footer → 2026-07-24.
 
-### E3-T2 — `run-swebench` polish + runnable-subset report  ·  P1 · L · Status: ☐ TODO
+### E3-T2 — `run-swebench` polish + runnable-subset report  ·  P1 · L · Status: ☑ DONE
 **Goal:** Turn the existing honest SWE-bench-Lite runner into a repeatable, documented real-repo number
 (runnable subset only; env-unavailable instances reported as skipped, never fake-0).
 **Files:** `scripts/run-swebench.ts`, `scripts/vendor-swebench.ts`, `evals/suites/swebench-lite/`, docs.
@@ -485,7 +485,7 @@ count; wire attribution (E5-T1). Keep the honest-scope markers.
 **Acceptance:** a documented command reproduces the reported subset number + skip count; no fabricated
 totals.
 **Docs-to-update:** `docs/architecture.html` benchmark section, `README.md`, `index.html`.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #164). The runner was already honest (probe → skip env-unavailable, never fake-0); polished it into a repeatable, documented, ATTRIBUTED report. Extracted a pure, unit-tested `src/eval/swebench-report.ts` (`skipReason` categorizes clone/checkout/patch/env-unavailable; `summarizeSwebench` builds the report — **pass@1 denominator = runnable, NEVER total**, always with a skip breakdown; and a **model-vs-harness-rescue split** on runnable passes via `mutationRepair` detection). Runner tracks `rescued` and prints the summary. **Measured:** 4 tests (skipReason categories; 0-runnable → "no pass-rate reported, never fake 0" with skip breakdown and NO fabricated pass@1 line; runnable subset → 0.75 (3/4) + edit-format + 2-model/1-rescue split; denominator-is-runnable-not-total) + mutation-test (divide by total → 2 RED). **Live:** bounded LIMIT=2/3 real runs → honest `runnable here: 0/N; skip breakdown: N env-unavailable; No pass-rate reported (honest, never a fake 0)` (astropy/django deps not importable off-Docker, exactly the designed behavior). Documented the env-setup + reproduction (`vendor-swebench` → `SWEBENCH_LIMIT=5 run-swebench`) in architecture.html + README. Full `bun test` 1219/0 on bun 1.3.12 and 1.3.14; tsc clean. HONEST OUTCOME: SWE-bench-Lite is env-blocked off-Docker on a stock box → no headline number is claimed; the reproducible runnable-subset path is documented.
 
 ### E3-T3 — Real-repo dogfood harness on smallcode's own history  ·  P2 · M · Status: ☐ TODO
 **Goal:** Highest-fidelity real test: revert a real past multi-file fix commit, have smallcode re-fix it,

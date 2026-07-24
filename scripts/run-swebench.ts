@@ -28,6 +28,7 @@ import { contextBudgetFor } from "../src/models/context-budget.ts";
 import { createState, getStatePath } from "../src/agent/state.ts";
 import { runLoop } from "../src/agent/loop.ts";
 import { walkRepo, buildContext } from "../src/context/index.ts";
+import { summarizeSwebench } from "../src/eval/swebench-report.ts";
 import type { AgentConfig } from "../src/agent/types.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -61,6 +62,7 @@ const files = readdirSync(SUITE).filter((f) => f.endsWith(".json") && f !== "sui
 let runnable = 0;
 let passed = 0;
 let editFmt = 0;
+let rescued = 0;
 const skipped: string[] = [];
 
 for (const file of files) {
@@ -101,16 +103,18 @@ for (const file of files) {
   const f2p = sh(["python3", "-m", "pytest", "-q", ...inst.fail_to_pass], repoDir, 300_000).ok;
   const p2p = inst.pass_to_pass.length === 0 || sh(["python3", "-m", "pytest", "-q", ...inst.pass_to_pass.slice(0, 20)], repoDir, 300_000).ok;
   const ok = f2p && p2p;
-  if (ok) passed++;
+  if (ok) {
+    passed++;
+    // Attribution (E3-T2 / E5-T1): a pass a harness rescue produced, not the model.
+    if (final.turns.some((t) => t.mutationRepair !== undefined)) rescued++;
+  }
   const ef = final.turns.some((t) => t.applyResults.some((a) => a.status === "applied"));
   if (ef) editFmt++;
   console.log(`  ${ok ? "PASS" : "fail"} ${inst.id}  (status=${final.status})`);
 }
 
-console.log(`\n[swebench] runnable here: ${runnable}/${files.length}  (skipped ${skipped.length} — env unavailable)`);
-if (runnable > 0) {
-  console.log(`[swebench] pass@1 (runnable subset): ${(passed / runnable).toFixed(2)}  edit-format: ${((editFmt / runnable) * 100).toFixed(0)}%`);
-} else {
-  console.log("[swebench] 0 instances runnable on this machine — SWE-bench-Lite needs the official per-instance Docker env. No pass-rate reported (honest).");
+console.log("");
+for (const line of summarizeSwebench({ total: files.length, runnable, passed, editFmt, rescued, skipped }).lines) {
+  console.log(line);
 }
 if (skipped.length) console.log(`[swebench] skipped: ${skipped.slice(0, 8).join("; ")}${skipped.length > 8 ? " …" : ""}`);

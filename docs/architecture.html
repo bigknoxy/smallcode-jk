@@ -1758,6 +1758,21 @@ bun scripts/classify-pass-quality.ts                          # model-solved vs 
         target set can). <em>Large refactors / new-feature-from-scratch</em> — out of scope (localized single-function
         fixes only). <em>No test oracle</em> — reports a static-confidence grade, never "verified passing."
       </p>
+      <p>
+        <strong style="color: var(--text-primary);">SWE-bench-Lite (honest scope).</strong>
+        <code>scripts/run-swebench.ts</code> runs the vendored instances the honest way: clone at
+        <code>base_commit</code>, apply the test patch, then <strong>probe</strong> with
+        <code>pytest --collect-only</code>. An instance whose pinned Python deps aren't importable here is
+        <strong>SKIPPED (env-unavailable)</strong>, never scored as a fake 0 — SWE-bench-Lite ships a Docker image per
+        instance for exactly this reason. pass@1 is reported <em>only over the runnable subset</em> (denominator =
+        runnable, never the total), always with a skip breakdown and a model-vs-rescue split
+        (<code>src/eval/swebench-report.ts</code>, unit-tested). On a stock dev box the honest result is typically
+        <em>0 runnable / N env-unavailable</em>; to make a subset runnable, install each instance's deps (or use the
+        official Docker harness) and re-run:
+      </p>
+      <pre style="overflow-x:auto;"><code>bun scripts/vendor-swebench.ts            # ingest SWE-bench-Lite → evals/suites/swebench-lite/
+SWEBENCH_LIMIT=5 SMALLCODE_MODEL=qwen2.5-coder:7b bun scripts/run-swebench.ts
+# reports: runnable/total, skip breakdown, pass@1 over the runnable subset, edit-format %, model-vs-rescue split</code></pre>
     </section>
 
   </div><!-- /container -->
