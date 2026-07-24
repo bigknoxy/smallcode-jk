@@ -145,7 +145,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E2-T4 | Dist | Model-id validation (registry + local ollama) | P1 | S | — | ☑ DONE |
 | E2-T5 | Dist | One-command bootstrap install (bun+ollama+model) | P1 | M | E2-T1 | ☑ DONE |
 | E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☑ DONE |
-| E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☐ TODO |
+| E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☑ DONE |
 | E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☐ TODO |
 | E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☐ TODO |
 | E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☐ TODO |
@@ -461,7 +461,7 @@ behind a confirmation unless `--yes`/non-interactive.
 **Why:** Devs are numb to benchmark claims. smallcode's credibility play is the OPPOSITE of hype: publish
 what it can and cannot do, with mechanism attribution, real oracles, no fabricated numbers.
 
-### E3-T1 — Honest published numbers with mechanism attribution  ·  P1 · M · Status: ☐ TODO
+### E3-T1 — Honest published numbers with mechanism attribution  ·  P1 · M · Status: ☑ DONE
 **Goal:** The public pages show real pass@k + CIs AND the model-vs-rescue-vs-escalation split, so no
 number overstates the *model*.
 **Files:** `scripts/classify-pass-quality.ts` (attribution), `scripts/run-baseline.ts` (emit the split),
@@ -474,7 +474,7 @@ no aggregate hides a rescue-driven win.
 **Verification:** `SMALLCODE_SUITE=realrepo SMALLCODE_EVAL_N=8 bun scripts/run-baseline.ts` then
 `bun scripts/classify-pass-quality.ts`.
 **Docs-to-update:** `index.html`, `docs/architecture.html` (+footer), `README.md`.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #163). The pass@k+CI + attribution instrument already existed (`src/eval/stats.ts` bootstrap CIs; `scripts/classify-pass-quality.ts` model-solved vs `rescued` split from transcripts) and the published realrepo numbers were already real + labeled (7b 0.90 model-only / 0.94 default-harness). Added: (1) `run-baseline.ts` now EMITS the mechanism split in-line when `SMALLCODE_SAVE_TRANSCRIPTS=1` — "How solved (N passing): X% model-solved, Y% harness-rescued" (reuses the tested `classifyTranscripts`); (2) a formal **"What smallcode can and can't do"** section in index.html + architecture.html + README (fault-localization ceiling, cross-file forward-import-only, large refactors out of scope, no-oracle→no-proof); (3) explicit **reproduction commands** for every number (default vs `MUTATION_REPAIR=0` model-only + `classify-pass-quality`); (4) a WORKED example table (real 3-task run). **Measured/demonstrated:** ran a real 3×n=3 realrepo eval (7b) with transcripts → `classify-pass-quality` output `realrepo-mri-flags_1` = **model-solve% 0.0%, rescued 3/3** (its pass@1 1.00 is 100% deterministic-rescue, 0% model — a bare table would call it a model win), modwrap-arith/template-trim 100% model-solved, OVERALL model-solve% 66.7%; run-baseline's inline split printed 50/50 on a 2-task re-run. This proves "no aggregate hides a rescue-driven win." Full `bun test` 1215/0 on bun 1.3.12 and 1.3.14; tsc clean. architecture.html footer → 2026-07-24.
 
 ### E3-T2 — `run-swebench` polish + runnable-subset report  ·  P1 · L · Status: ☐ TODO
 **Goal:** Turn the existing honest SWE-bench-Lite runner into a repeatable, documented real-repo number

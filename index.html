@@ -1041,6 +1041,48 @@
       deterministic operator-mutation repair (default on) cracks the wrong-operator class, taking the default 7b
       harness to 0.94 overall with every task nonzero.
     </p>
+
+    <!-- ── Honesty: what it can and can't do ── -->
+    <div style="margin-top: var(--space-8); padding: var(--space-6); border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);">
+      <h3 style="margin-top:0;">What smallcode can — and can't — do</h3>
+      <p style="color: var(--text-secondary);">
+        The credibility play is the opposite of hype: publish the ceilings, and never let an aggregate overstate the
+        <em>model</em>. Every number above is from a real run, reproducible by a documented command, and labeled by the
+        mechanism that produced it.
+      </p>
+      <p><strong style="color: var(--text-primary);">Good at — localized, test-covered bugs.</strong>
+        Single-file fixes with a covering test: wrong-operator, off-by-one, wrong-return, and the read-after-delete
+        ordering bug. The <code>bun test</code> oracle verifies every "solved", so success is proven green, never a
+        model's claim. When the 3B can't, the harness escalates 3B → 7B automatically.</p>
+      <p><strong style="color: var(--text-primary);">Can't — the honest ceilings.</strong></p>
+      <ul style="color: var(--text-secondary);">
+        <li><strong>Fault-localization ceiling.</strong> Sub-7B models often can't identify WHICH line is wrong even
+          when they could fix it — external literature confirms sub-7B fault-localization is a capability ceiling.
+          Some wrong-operator / short-circuit-idiom bugs (<code>mri-flags</code>) are unsolvable by any model-side
+          lever: only the deterministic operator-mutation <em>rescue</em> cracks them (0.00 model-only → 1.00). That
+          lift is a HARNESS win, not a model win, and is published as such (the "model-only" column is the honest
+          model floor).</li>
+        <li><strong>Cross-file / multi-file coupling.</strong> The editable set is forward-import-only, so a bug whose
+          fix spans a producer and its importer is largely unsolved by 7B (0/8 on the hardest real-dogfood tier). A
+          32B model + the multi-file target set can land a clean 2-file fix; 7B cannot.</li>
+        <li><strong>Large refactors / architectural changes.</strong> Out of scope — the harness targets localized
+          single-function fixes, not multi-hunk structural rewrites or build-a-feature-from-scratch.</li>
+        <li><strong>No test oracle → no proof.</strong> For untested code the harness reports a deterministic
+          static-confidence grade ("what was checked"), never "verified passing."</li>
+      </ul>
+      <p><strong style="color: var(--text-primary);">Reproduce the numbers.</strong> Real-repo pass@k + 95% bootstrap
+        CIs:</p>
+      <pre style="overflow-x:auto;"><code>SMALLCODE_SUITE=realrepo SMALLCODE_MODEL=qwen2.5-coder:7b SMALLCODE_EVAL_N=10 \
+  SMALLCODE_SAVE_TRANSCRIPTS=1 bun scripts/run-baseline.ts        # default harness (rescues on)
+SMALLCODE_MUTATION_REPAIR=0 SMALLCODE_SUITE=realrepo SMALLCODE_MODEL=qwen2.5-coder:7b \
+  SMALLCODE_EVAL_N=10 bun scripts/run-baseline.ts                 # model-only (honest floor)
+bun scripts/classify-pass-quality.ts                             # split each PASS: model-solved vs harness-rescued</code></pre>
+      <p style="color: var(--text-tertiary); font-size: var(--text-sm);">
+        <code>classify-pass-quality</code> reads the saved transcripts and reports, per task, how each pass was earned
+        (ideal / solid / lucky / <strong>rescued</strong>) plus a <code>modelSolveRate</code> — so no aggregate hides a
+        rescue-driven win.
+      </p>
+    </div>
   </div>
 </section>
 
