@@ -1,5 +1,56 @@
 # Changelog
 
+## [1.13.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.12.0...v1.13.0) (2026-07-24)
+
+
+### Features
+
+* **agent:** write-ahead apply journal — crash recovery for edit-apply (E1-T2) ([1d4bb9e](https://github.com/bigknoxy/smallcode-jk/commit/1d4bb9e3245b078e6963110f6c1ee2569f3dd4d3))
+* **agent:** write-ahead apply journal — crash recovery for edit-apply (E1-T2) ([524f041](https://github.com/bigknoxy/smallcode-jk/commit/524f04114e5b9f745af5c934fac07f6b5b84b9ec))
+* **ci:** enforce docs-sync — env flags + commands must be documented (E5-T3) ([7d6c419](https://github.com/bigknoxy/smallcode-jk/commit/7d6c4191c0d5f6c4a29d69bf8eea69d8400a9690))
+* **ci:** enforce docs-sync — env flags + commands must be documented (E5-T3) ([d3da93d](https://github.com/bigknoxy/smallcode-jk/commit/d3da93d7dd3b7835eea0e918da3d3ea487c97e32))
+* **cli:** auto model-pull when the active model is missing (E2-T3) ([1b52e23](https://github.com/bigknoxy/smallcode-jk/commit/1b52e231c519708694dcf4b30a3d62890c15dbd9))
+* **cli:** auto model-pull when the active model is missing (E2-T3) ([d06aeb5](https://github.com/bigknoxy/smallcode-jk/commit/d06aeb5748c72cce7e3cc2b544f020a8b791843a))
+* **cli:** default config init to qwen2.5-coder:3b (E2-T6) ([59ace98](https://github.com/bigknoxy/smallcode-jk/commit/59ace98abf45ef4eadfd3a8e94086e1d31adda95))
+* **cli:** default config init to qwen2.5-coder:3b (E2-T6) ([90c2dfe](https://github.com/bigknoxy/smallcode-jk/commit/90c2dfe313a0ec970fa0a0264130b37d5d5ed23b))
+* **cli:** honest run outcome (E1-T5) + interleaved undo-scope test (E1-T6) ([5606b86](https://github.com/bigknoxy/smallcode-jk/commit/5606b862d2dbdecc64c1fc393f03b0b7346c67ce))
+* **cli:** honest run outcome (E1-T5) + interleaved undo-scope test (E1-T6) ([37126ff](https://github.com/bigknoxy/smallcode-jk/commit/37126ff7561a3fc1b18e3c0e4b0e68609e86ce4a))
+* **cli:** Ollama native-API layer + fail-fast health check (E2-T2) ([6aa7ba2](https://github.com/bigknoxy/smallcode-jk/commit/6aa7ba2ba923341d6bdea110b0e0ac4c32227b67))
+* **cli:** Ollama native-API layer + fail-fast health check (E2-T2) ([0b26f2f](https://github.com/bigknoxy/smallcode-jk/commit/0b26f2f2efc284ea733ce5e39067fbc8bffcc478))
+* **cli:** smallcode doctor — one-command setup diagnosis (E2-T1) ([8bb6b67](https://github.com/bigknoxy/smallcode-jk/commit/8bb6b678700041334a37ae0e0a8d57cbfcfed1d9))
+* **cli:** smallcode doctor — one-command setup diagnosis (E2-T1) ([2688833](https://github.com/bigknoxy/smallcode-jk/commit/26888336430f3ce709562813a2f6c046620bfe84))
+* **cli:** validate model id at config time (E2-T4) ([23fd9c4](https://github.com/bigknoxy/smallcode-jk/commit/23fd9c4d8f97e8c6e428a79dda08462c73ceec30))
+* **cli:** validate model id at config time (E2-T4) ([e31b30f](https://github.com/bigknoxy/smallcode-jk/commit/e31b30fe92a10ddccbc3d98e698aca9ebb28c72e))
+* **config:** wire SMALLCODE_BASE_URL into loadConfig + experimental qwythos-9b probe ([41ae4fd](https://github.com/bigknoxy/smallcode-jk/commit/41ae4fd1b6e832efd94b6277e12b1686b0559ff3))
+* **config:** wire SMALLCODE_BASE_URL/SMALLCODE_MODEL into loadConfig + experimental qwythos-9b probe ([98252a9](https://github.com/bigknoxy/smallcode-jk/commit/98252a9875dc522047ca81f9fc32bb7281950ee4))
+* **eval:** dogfood harness over smallcode's own git history (E3-T3) ([de5a55d](https://github.com/bigknoxy/smallcode-jk/commit/de5a55d254638b1c7f48bc2cdbf2758ef5b5796d))
+* **eval:** dogfood harness over smallcode's own git history (E3-T3) ([7b9e42d](https://github.com/bigknoxy/smallcode-jk/commit/7b9e42de4f7f92bd448a75754e364235fe5c0c70))
+* **eval:** honest published numbers + in-line mechanism attribution (E3-T1) ([cfb0491](https://github.com/bigknoxy/smallcode-jk/commit/cfb0491680b72f39535200815e77371d406d8528))
+* **eval:** honest published numbers + in-line mechanism attribution (E3-T1) ([69df910](https://github.com/bigknoxy/smallcode-jk/commit/69df910b3608cd825c76f632b9fbbc2d6bc4e82b))
+* **eval:** honest SWE-bench-Lite report — runnable subset + attribution (E3-T2) ([edf9691](https://github.com/bigknoxy/smallcode-jk/commit/edf9691f832e8bdfc3862d006eba55cd3cabc798))
+* **eval:** honest SWE-bench-Lite report — runnable subset + attribution (E3-T2) ([9467529](https://github.com/bigknoxy/smallcode-jk/commit/9467529670c8a946b131731d0d57ef6265f61ac3))
+* **install:** one-command bootstrap — Bun + Ollama + model + doctor (E2-T5) ([d982232](https://github.com/bigknoxy/smallcode-jk/commit/d98223204cd1f8823e0328344681be4c2fcaffab))
+* **install:** one-command bootstrap — Bun + Ollama + model + doctor (E2-T5) ([14d4153](https://github.com/bigknoxy/smallcode-jk/commit/14d41530f0ee5e60ea328feb4c19b7513956d6a0))
+* **loop:** verified revert — prove the bytes are back, fail-closed (E1-T3) ([e7fddf8](https://github.com/bigknoxy/smallcode-jk/commit/e7fddf86566db073b7ac8b8e61814bbda50aeb95))
+* **loop:** verified revert — prove the bytes are back, fail-closed (E1-T3) ([9b02c5d](https://github.com/bigknoxy/smallcode-jk/commit/9b02c5d4ec920bc943e39fa9a71dab71a04d4d0d))
+* **repair:** boolean-default archetype on the pluggable interface (E4-T2) ([f87c77a](https://github.com/bigknoxy/smallcode-jk/commit/f87c77a4fe6016adee03bbf381d7e5ab7fddc92a))
+* **repair:** boolean-default archetype on the pluggable interface (E4-T2) ([891af06](https://github.com/bigknoxy/smallcode-jk/commit/891af06fa51837907bbaf1ee842d9eeb4252d7e5))
+
+
+### Bug Fixes
+
+* **agent:** E1 code-review hardening — journal repair writes + honesty + docs ([52a218f](https://github.com/bigknoxy/smallcode-jk/commit/52a218f85605f9625347800120eb6ef7b90f6493))
+* **cli:** accept non-Ollama OpenAI-compat endpoints + SMALLCODE_API_KEY override ([744d2b0](https://github.com/bigknoxy/smallcode-jk/commit/744d2b08e1a2340fdaf50bf723c1aa8aed654e0f))
+* **cli:** accept non-Ollama OpenAI-compat endpoints + SMALLCODE_API_KEY override ([b20542e](https://github.com/bigknoxy/smallcode-jk/commit/b20542e4008bbe646f5bed2099c5fb737537e167))
+* **loop:** fail-closed terminal guard — a throwing guard rolls the run back (E1-T4) ([3a4442d](https://github.com/bigknoxy/smallcode-jk/commit/3a4442d7947e272b479474eb91ef2994fb8a3a92))
+* **loop:** fail-closed terminal guard — a throwing guard rolls the run back (E1-T4) ([ac98748](https://github.com/bigknoxy/smallcode-jk/commit/ac98748db54706a6da25c88bc11b961eaef6c570))
+* **oracle:** run repo-under-repair tests in a clean env (strip SMALLCODE_*) ([0c7be6d](https://github.com/bigknoxy/smallcode-jk/commit/0c7be6dadfb0a739404646d660bf35dd173b7ed1))
+* **oracle:** run the repo-under-repair's tests in a clean env (strip SMALLCODE_*) ([d2357f2](https://github.com/bigknoxy/smallcode-jk/commit/d2357f2d0bf4921d9b3442220ef91769b8ebbc59))
+* **prompt:** tests are the spec — steer planner + executor to fix source, not tests ([7959f91](https://github.com/bigknoxy/smallcode-jk/commit/7959f910f7608b76c8ab6aa33299b06c95349ef6))
+* **prompt:** tests are the spec — steer planner + executor to fix source, not tests ([d0b66af](https://github.com/bigknoxy/smallcode-jk/commit/d0b66af9735d4693585ef1b7c07d25a03c3380fa))
+* **test:** stop bestofn-loop mock.module from poisoning the suite on CI ([f8682f7](https://github.com/bigknoxy/smallcode-jk/commit/f8682f7245ddec65fda7b5ad0fd482c030201736))
+* **test:** stop bestofn-loop's mock.module from poisoning the whole suite on CI ([3614a8b](https://github.com/bigknoxy/smallcode-jk/commit/3614a8bb0185579624b2df828b1c1eecc429e126))
+
 ## [1.12.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.11.0...v1.12.0) (2026-07-15)
 
 
