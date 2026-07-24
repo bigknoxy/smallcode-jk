@@ -1704,6 +1704,62 @@ flowchart TD
       </div>
     </section>
 
+    <section>
+      <h2>Honest benchmark &amp; mechanism attribution (E3)</h2>
+      <p>
+        The credibility play is the opposite of hype: publish real pass@k + 95% bootstrap CIs, split every passing run
+        into <strong>model-solved vs harness-rescued vs escalation</strong>, and state the ceilings plainly. No
+        aggregate is allowed to overstate the <em>model</em>.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">The instrument.</strong> <code>src/eval/stats.ts</code> —
+        <code>computePassAtK</code> (unbiased) + <code>bootstrapCI</code> (seed-deterministic, 2000 resamples) +
+        <code>aggregateSuite</code> (pooled). <code>scripts/run-baseline.ts</code> emits the per-task table + writes a
+        self-describing <code>MetricsSnapshot</code> to <code>evals/metrics-history.jsonl</code> (per-task pass@k, CIs,
+        n, sampling knobs). Two variants read significance by <strong>CI overlap</strong>, never point estimates.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">The attribution.</strong>
+        <code>scripts/classify-pass-quality.ts</code> reads the saved transcripts
+        (<code>SMALLCODE_SAVE_TRANSCRIPTS=1</code>) and classifies every PASS as <em>ideal / solid / lucky</em>
+        (model-solved) or <strong>rescued</strong> (a turn carries <code>mutationRepair</code> — the deterministic
+        operator-mutation repair solved it, not the model), reporting a per-task <code>modelSolveRate</code>. This is
+        what stops a rescue-driven number from masquerading as a model win.
+      </p>
+      <p>
+        <strong style="color: var(--text-primary);">Worked example</strong> (real run, 3 tasks × n=3, qwen2.5-coder:7b,
+        default harness — all three report pass@1 1.00, but attribution tells the honest story):
+      </p>
+      <div class="sc-table-wrap">
+        <table class="sc-table" aria-label="Mechanism attribution example">
+          <thead><tr><th scope="col">Task</th><th scope="col">pass@1</th><th scope="col">model-solve%</th><th scope="col">how it was earned</th></tr></thead>
+          <tbody>
+            <tr><td class="td-name">realrepo-modwrap-arith_1</td><td class="td-pass">1.00</td><td>100%</td><td>model-solved (ideal: clean 1-turn fix)</td></tr>
+            <tr><td class="td-name">realrepo-template-trim_1</td><td class="td-pass">1.00</td><td>100%</td><td>model-solved (ideal)</td></tr>
+            <tr><td class="td-name">realrepo-mri-flags_1</td><td class="td-pass">1.00</td><td><strong>0%</strong></td><td><strong>100% harness-rescued</strong> — operator-mutation repair flipped <code>!==→===</code> at line 90; the wrong-operator wall no model-side lever cracks</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color: var(--text-secondary);">
+        A bare pass@1 table would call <code>mri-flags</code> a win; the attribution shows it is 0% model, 100% the
+        deterministic rescue. Reproduce:
+      </p>
+      <pre style="overflow-x:auto;"><code>SMALLCODE_SUITE=realrepo SMALLCODE_MODEL=qwen2.5-coder:7b SMALLCODE_EVAL_N=10 \
+  SMALLCODE_SAVE_TRANSCRIPTS=1 bun scripts/run-baseline.ts     # default (rescues on)
+SMALLCODE_MUTATION_REPAIR=0 SMALLCODE_SUITE=realrepo SMALLCODE_MODEL=qwen2.5-coder:7b \
+  SMALLCODE_EVAL_N=10 bun scripts/run-baseline.ts             # model-only (honest floor)
+bun scripts/classify-pass-quality.ts                          # model-solved vs rescued split</code></pre>
+      <p>
+        <strong style="color: var(--text-primary);">What it can't do (published ceilings).</strong>
+        <em>Fault-localization ceiling</em> — sub-7B models often can't find WHICH line is wrong (external lit confirms
+        this is a capability ceiling); some short-circuit-idiom bugs are unsolvable by any model-side lever and only the
+        rescue cracks them. <em>Cross-file coupling</em> — the editable set is forward-import-only, so a fix spanning a
+        producer + its importer is largely unsolved by 7B (0/8 on the hard real-dogfood tier; 32B + the multi-file
+        target set can). <em>Large refactors / new-feature-from-scratch</em> — out of scope (localized single-function
+        fixes only). <em>No test oracle</em> — reports a static-confidence grade, never "verified passing."
+      </p>
+    </section>
+
   </div><!-- /container -->
 </main>
 
@@ -1721,7 +1777,7 @@ flowchart TD
         <li><a href="https://github.com/bigknoxy/smallcode-jk" target="_blank" rel="noopener noreferrer">GitHub ↗</a></li>
       </ul>
     </nav>
-    <span class="sc-footer__meta">Last updated: 2026-07-22</span>
+    <span class="sc-footer__meta">Last updated: 2026-07-24</span>
   </div>
 </footer>
 

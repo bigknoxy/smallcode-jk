@@ -21,6 +21,7 @@ import { join, resolve } from "node:path";
 import { env } from "../src/config/env.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { defaultTemperatures } from "../src/agent/bestofn-loop.ts";
+import { classifyTranscripts } from "./classify-pass-quality.ts";
 import { saveTrialTranscripts } from "../src/eval/save-transcripts.ts";
 import { summarizeRepairs } from "../src/eval/repair-metrics.ts";
 import { runTask } from "../src/eval/task-runner.ts";
@@ -727,10 +728,24 @@ async function main(): Promise<void> {
 
     console.log(`\n[run-baseline] Results: ${passCount}/${suite.tasks.length} tasks with pass@1 > 0`);
     console.log(`[run-baseline] Metrics appended to ${METRICS_HISTORY_PATH}`);
-    if (SAVE_TRANSCRIPTS) {
+    if (SAVE_TRANSCRIPTS && transcriptStore) {
       process.stderr.write(
         `[run-baseline] Saved ${transcriptsSavedTotal} trial transcript(s) to ${TRANSCRIPTS_DIR}\n`,
       );
+      // E3-T1: emit the model-vs-harness-rescue split so a headline pass number
+      // never silently hides a deterministic-rescue win. Same classifier as
+      // scripts/classify-pass-quality.ts (which prints the full per-task table).
+      const classified = classifyTranscripts(await transcriptStore.loadAll());
+      const passing = classified.length;
+      if (passing > 0) {
+        const rescued = classified.filter((c) => c.quality === "rescued").length;
+        const modelSolved = passing - rescued;
+        const pct = (x: number): string => `${Math.round((x / passing) * 100)}%`;
+        process.stderr.write(
+          `[run-baseline] How solved (${passing} passing trials): ${pct(modelSolved)} model-solved, ` +
+            `${pct(rescued)} harness-rescued. Per-task split: bun scripts/classify-pass-quality.ts\n`,
+        );
+      }
     }
   }
 }

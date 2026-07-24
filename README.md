@@ -378,6 +378,28 @@ session fails → session logger writes SessionLogEntry
 
 The metrics store tracks `MetricsSnapshot` history per suite, enabling trend analysis and catching regressions introduced by prompt changes.
 
+### Honest numbers — what it can and can't do
+
+The credibility play is the opposite of hype: every published number is from a real run, reproducible by a documented command, and **split by mechanism** so no aggregate overstates the *model*.
+
+**Good at** — localized, test-covered bugs: wrong-operator, off-by-one, wrong-return, read-after-delete ordering. The `bun test` oracle verifies every "solved", so success is proven green, never a model's claim; the 3B escalates to 7B automatically when it can't.
+
+**Can't** (the honest ceilings):
+- **Fault-localization ceiling** — sub-7B models often can't find *which* line is wrong (external literature confirms this is a capability ceiling). Some short-circuit-idiom bugs (`mri-flags`) are unsolvable by any model-side lever — only the deterministic operator-mutation **rescue** cracks them (0.00 model-only → 1.00), and that lift is published as a *harness* win, not a model win.
+- **Cross-file coupling** — the editable set is forward-import-only, so a fix spanning a producer + its importer is largely unsolved by 7B (0/8 on the hard real-dogfood tier; 32B + the multi-file target set can land it).
+- **Large refactors / build-from-scratch** — out of scope (localized single-function fixes only).
+- **No test oracle → no proof** — for untested code the harness reports a static-confidence grade ("what was checked"), never "verified passing."
+
+**Reproduce the real-repo numbers + the mechanism split:**
+```bash
+SMALLCODE_SUITE=realrepo SMALLCODE_MODEL=qwen2.5-coder:7b SMALLCODE_EVAL_N=10 \
+  SMALLCODE_SAVE_TRANSCRIPTS=1 bun scripts/run-baseline.ts      # default harness (rescues on) → 0.94 [.91–.97]
+SMALLCODE_MUTATION_REPAIR=0 SMALLCODE_SUITE=realrepo SMALLCODE_MODEL=qwen2.5-coder:7b \
+  SMALLCODE_EVAL_N=10 bun scripts/run-baseline.ts               # model-only (honest floor) → 0.90 [.85–.93]
+bun scripts/classify-pass-quality.ts                            # per task: model-solved vs harness-rescued
+```
+`classify-pass-quality` reports, per task, how each pass was earned (`ideal`/`solid`/`lucky` = model-solved, or `rescued` = the deterministic repair solved it) plus a `modelSolveRate` — e.g. `mri-flags`'s pass@1 1.00 is **0% model-solved, 100% rescued**.
+
 ---
 
 ## License
