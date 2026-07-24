@@ -2,8 +2,8 @@ import { resolve } from "node:path";
 import { git } from "@/util/git.ts";
 import { recoverRepo } from "../../agent/journal.ts";
 import { runLoop } from "../../agent/loop.ts";
-import { ollamaUnreachableMessage } from "./run.ts";
-import { pingOllama } from "../../models/ollama.ts";
+import { serverUnreachableMessage } from "./run.ts";
+import { checkServerReachable } from "../../models/ollama.ts";
 import { planTask } from "../../agent/planner.ts";
 import { createState, getStatePath } from "../../agent/state.ts";
 import type { AgentConfig } from "../../agent/types.ts";
@@ -60,10 +60,11 @@ export async function chatCommand(args: ParsedArgs): Promise<void> {
   const { config, extraModels } = loaded;
   const registry = new ModelRegistry(extraModels);
   let modelId = flagString(args.flags, "model") ?? config.activeModel;
-  // E2-T2: fail fast if Ollama is unreachable, before opening the REPL.
-  const health = await pingOllama(config.provider.baseUrl);
-  if (!health.ok) {
-    process.stderr.write(`[smallcode] ✗ ${ollamaUnreachableMessage(config.provider.baseUrl, health.error)}\n`);
+  // E2-T2: fail fast if the model server is unreachable, before opening the REPL.
+  // Accepts a non-Ollama OpenAI-compat endpoint (SMALLCODE_BASE_URL → llama-server).
+  const health = await checkServerReachable(config.provider.baseUrl);
+  if (!health.reachable) {
+    process.stderr.write(`[smallcode] ✗ ${serverUnreachableMessage(config.provider.baseUrl, health.error)}\n`);
     process.exit(1);
   }
   const provider = createProvider(config.provider, registry);

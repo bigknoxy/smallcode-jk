@@ -18,7 +18,7 @@ import {
 import type { ContextBundle } from "../../context/types.ts";
 import { contextBudgetFor } from "../../models/context-budget.ts";
 import { ensureModelAvailable } from "../../models/ensure-model.ts";
-import { ollamaNativeBase, pingOllama } from "../../models/ollama.ts";
+import { checkServerReachable, ollamaNativeBase } from "../../models/ollama.ts";
 import { ModelRegistry } from "../../models/registry.ts";
 import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
@@ -50,6 +50,21 @@ export function ollamaUnreachableMessage(baseUrl: string, error?: string): strin
     `Ollama not reachable at ${url}${error ? ` (${error})` : ""}. ` +
     `Is the server running? Start it with 'ollama serve' (or open the Ollama app), then re-run. ` +
     `Run 'smallcode doctor' for a full setup check.`
+  );
+}
+
+/**
+ * The human-facing message when NEITHER the native Ollama route NOR the
+ * OpenAI-compat `/v1/models` route answered — so the endpoint is genuinely down
+ * (not merely "not Ollama"). Kept endpoint-agnostic because SMALLCODE_BASE_URL
+ * may point at a non-Ollama server (e.g. a llama-server), where telling the user
+ * to run `ollama serve` would be wrong.
+ */
+export function serverUnreachableMessage(baseUrl: string, error?: string): string {
+  return (
+    `Model server not reachable at ${baseUrl}${error ? ` (${error})` : ""}. ` +
+    `Is it running? For Ollama, start 'ollama serve'; for a custom SMALLCODE_BASE_URL ` +
+    `(e.g. a llama-server), start that server. Run 'smallcode doctor' for a full setup check.`
   );
 }
 
@@ -372,21 +387,24 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   // 4. Create provider + reasoning handler
   // E2-T2: fail fast with a human message if Ollama is unreachable, instead of a
   // cryptic inference timeout on the first model call several seconds in.
-  const health = await pingOllama(config.provider.baseUrl);
-  if (!health.ok) {
-    progress.showError(ollamaUnreachableMessage(config.provider.baseUrl, health.error));
+  const health = await checkServerReachable(config.provider.baseUrl);
+  if (!health.reachable) {
+    progress.showError(serverUnreachableMessage(config.provider.baseUrl, health.error));
     process.exit(1);
   }
   // E2-T3: ensure the active model is actually pulled — offer to pull it if not
-  // (auto with --yes; never silently in a headless run). The server is confirmed
-  // reachable above, so the model list is authoritative.
-  const ensured = await ensureModelAvailable(config.provider.baseUrl, modelId, {
-    yes: flagBool(args.flags, "yes"),
-    interactive: process.stdin.isTTY === true,
-  });
-  if (!ensured.ok) {
-    progress.showError(ensured.message);
-    process.exit(1);
+  // (auto with --yes; never silently in a headless run). Only meaningful on Ollama:
+  // `ollama pull` + `/api/tags` don't exist on a non-Ollama OpenAI-compat server
+  // (e.g. a llama-server), which serves a single fixed model, so we skip the check.
+  if (health.isOllama) {
+    const ensured = await ensureModelAvailable(config.provider.baseUrl, modelId, {
+      yes: flagBool(args.flags, "yes"),
+      interactive: process.stdin.isTTY === true,
+    });
+    if (!ensured.ok) {
+      progress.showError(ensured.message);
+      process.exit(1);
+    }
   }
   const provider = createProvider(config.provider, registry);
   const reasoningHandler = profile.reasoningTags

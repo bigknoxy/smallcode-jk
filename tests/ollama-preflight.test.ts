@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { ollamaUnreachableMessage } from "../src/cli/commands/run.ts";
+import { ollamaUnreachableMessage, serverUnreachableMessage } from "../src/cli/commands/run.ts";
 
 /**
  * E2-T2 — the human message when Ollama is unreachable before a run. It must
@@ -26,5 +26,28 @@ describe("ollamaUnreachableMessage", () => {
     const msg = ollamaUnreachableMessage("http://192.168.1.9:11434/v1", "no response within 2000ms");
     expect(msg).toContain("http://192.168.1.9:11434");
     expect(msg).toContain("2000ms");
+  });
+});
+
+/**
+ * The endpoint-agnostic message when BOTH the native and OpenAI-compat routes are
+ * down. Must keep the FULL baseUrl (a non-Ollama SMALLCODE_BASE_URL, e.g. a
+ * llama-server on :8910/v1) and not tell the user to "start ollama serve" as if
+ * Ollama were the only option.
+ */
+describe("serverUnreachableMessage", () => {
+  it("keeps the full base URL, names both server options, and points at doctor", () => {
+    const msg = serverUnreachableMessage("http://localhost:8910/v1", "HTTP 404");
+    expect(msg).toContain("http://localhost:8910/v1"); // full URL, /v1 preserved
+    expect(msg).toContain("HTTP 404");
+    expect(msg).toContain("ollama serve");
+    expect(msg).toContain("llama-server");
+    expect(msg).toContain("smallcode doctor");
+  });
+
+  it("omits the parenthetical when no error is supplied", () => {
+    const msg = serverUnreachableMessage("http://localhost:8910/v1");
+    expect(msg).toContain("not reachable");
+    expect(msg).not.toContain("()");
   });
 });

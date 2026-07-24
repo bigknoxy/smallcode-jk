@@ -1,10 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import {
+  checkServerReachable,
   type FetchFn,
   listOllamaModels,
   modelIsPulled,
   ollamaNativeBase,
   pingOllama,
+  pingOpenAICompat,
   pullOllamaModel,
 } from "../src/models/ollama.ts";
 
@@ -20,6 +22,57 @@ describe("ollamaNativeBase", () => {
     expect(ollamaNativeBase("http://localhost:11434/v1")).toBe("http://localhost:11434");
     expect(ollamaNativeBase("http://localhost:11434/v1/")).toBe("http://localhost:11434");
     expect(ollamaNativeBase("http://host:1234")).toBe("http://host:1234"); // no /v1 → unchanged
+  });
+});
+
+describe("pingOpenAICompat", () => {
+  it("ok when /models returns 200 (hits {baseUrl}/models, NOT the native root)", async () => {
+    let hit = "";
+    const fetchFn = fakeFetch((url) => {
+      hit = url;
+      return { ok: true, status: 200, body: { data: [] } };
+    });
+    const res = await pingOpenAICompat("http://localhost:8910/v1", { fetchFn });
+    expect(res.ok).toBe(true);
+    expect(hit).toBe("http://localhost:8910/v1/models");
+  });
+
+  it("not ok with the HTTP status on a non-200", async () => {
+    const fetchFn = fakeFetch(() => ({ ok: false, status: 404 }));
+    const res = await pingOpenAICompat("http://localhost:8910/v1", { fetchFn });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("HTTP 404");
+  });
+});
+
+describe("checkServerReachable", () => {
+  // Native /api/tags answers → it's Ollama; auto-pull is safe. Compat route not needed.
+  it("reachable + isOllama when the native Ollama route answers", async () => {
+    const fetchFn = fakeFetch((url) =>
+      url.endsWith("/api/tags") ? { ok: true, status: 200, body: { models: [] } } : { ok: false, status: 404 },
+    );
+    const res = await checkServerReachable("http://localhost:11434/v1", { fetchFn });
+    expect(res).toEqual({ reachable: true, isOllama: true });
+  });
+
+  // The dogfood bug: a llama-server 404s on /api/tags but serves /v1/models. Must
+  // be seen as reachable-but-not-Ollama (so the Ollama-only auto-pull is skipped),
+  // NOT rejected with "start ollama serve".
+  it("reachable + NOT isOllama when only the OpenAI-compat route answers (llama-server)", async () => {
+    const fetchFn = fakeFetch((url) =>
+      url.endsWith("/v1/models") ? { ok: true, status: 200, body: { data: [{ id: "qwythos-9b" }] } } : { ok: false, status: 404 },
+    );
+    const res = await checkServerReachable("http://localhost:8910/v1", { fetchFn });
+    expect(res.reachable).toBe(true);
+    expect(res.isOllama).toBe(false);
+  });
+
+  it("NOT reachable (with the compat error) when neither route answers", async () => {
+    const fetchFn = fakeFetch(() => ({ ok: false, status: 500 }));
+    const res = await checkServerReachable("http://localhost:9999/v1", { fetchFn });
+    expect(res.reachable).toBe(false);
+    expect(res.isOllama).toBe(false);
+    expect(res.error).toBe("HTTP 500");
   });
 });
 

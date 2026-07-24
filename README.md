@@ -283,7 +283,8 @@ All three expose an OpenAI-compatible `/v1/chat/completions` endpoint. Point `pr
 
 | Variable | Overrides |
 |---|---|
-| `SMALLCODE_BASE_URL` | `config.provider.baseUrl` |
+| `SMALLCODE_BASE_URL` | `config.provider.baseUrl` (Ollama or any OpenAI-compat endpoint, e.g. a llama-server) |
+| `SMALLCODE_API_KEY` | `config.provider.apiKey` (bearer token for an authenticated endpoint) |
 | `SMALLCODE_MODEL` | `config.activeModel` |
 
 ---
