@@ -10,6 +10,15 @@
 
 smallcode wraps 3B–14B class models in scaffolding that compensates for their weaknesses — format fragility, weak long context, high output variance — and amplifies their strengths: verifiable reasoning on self-contained tasks. Unlike Aider, Claude Code, and Goose, which assume a frontier model that can hold arbitrary context and reason reliably, smallcode inverts the approach: minimize context, externalize state, constrain output format, decompose tasks, verify deterministically, and sample best-of-N.
 
+### Who it's for
+
+smallcode is **not** trying to match Cursor or Claude Code at general coding — a frontier cloud model wins that. Its winning use case is where cloud coding tools **aren't an option**:
+
+- **Offline / air-gapped / regulated environments** (finance, healthcare, defense, on-prem-only) where sending code to a cloud API is prohibited — here a fully-local agent is often *the only allowed option*, and smallcode makes a small local model actually produce verified fixes.
+- **Budget-averse / local-only developers** who want an autonomous fix loop with zero per-token cost and zero data leaving the machine.
+
+And it's for **mechanical, well-scoped, single-file bug fixes with a covering test** — wrong-operator, off-by-one, wrong-return, read-after-delete. It is deliberately **not** a multi-file refactoring or build-a-feature-from-scratch agent (see [what it can and can't do](#honest-numbers--what-it-can-and-cant-do)). Every "solved" is proven green by a real test oracle, never a model's claim.
+
 [Full architecture diagram →](docs/architecture.html)
 
 ---
