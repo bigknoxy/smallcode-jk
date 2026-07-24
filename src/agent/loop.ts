@@ -7,6 +7,11 @@ import { promptHardCap } from "@/models/context-budget.ts";
 import type { ModelProfile } from "@/models/types.ts";
 import type { Provider } from "@/provider/types.ts";
 import type { ReasoningHandler } from "@/reasoning/index.ts";
+import {
+  type RepairArchetype,
+  type RepairCandidate,
+  runArchetypeRepair,
+} from "@/repair/archetype.ts";
 import { enumerateLiteralMutations } from "@/repair/literal-mutation.ts";
 import { enumerateComparisonMutations, scopeMutationsToRange } from "@/repair/operator-mutation.ts";
 import { detectReadAfterDelete, repairReadAfterDelete } from "@/repair/read-after-delete.ts";
@@ -370,137 +375,136 @@ export function latestAttemptContent(state: AgentState, targetPath: string): str
 }
 
 /**
- * Harness-side operator-mutation repair (I/O half; the pure enumerator is in
- * repair/operator-mutation.ts). Last-resort pass when the model loop ended UNSOLVED
- * in fix-mode with a locked fix-target: brute-force every single operator flip in
- * that file, run the real oracle on each, keep the FIRST that goes fully green.
- *
- * Mutates the PRISTINE (pre-model) file FIRST, then the current on-disk version. The
- * model often mangles the target on the way to failing — e.g. rewriting a `||`
- * short-circuit idiom into `&&`/ternary — so no single-operator flip on its wreck
- * reaches green, but the same flip on the ORIGINAL does. Trying pristine-first
- * recovers exactly that case (the mri ~0.3 miss tail); the current version is still
- * tried in case the model left a near-miss the pristine base wouldn't reach.
- *
- * Deterministic, can't fake-green (requires a full-green verdict); every non-winning
- * candidate is reverted so the file is left either fixed or byte-identical to how the
- * model left it. Returns the winning mutation label (with its base), or null.
+ * Operator-mutation archetype: brute-force every single comparison/logical/
+ * arithmetic operator flip in the locked target's function, PRISTINE base first
+ * (the model often mangles the target on the way down — e.g. a `||` idiom into
+ * `&&`/ternary — so a flip only reaches green against the original), then current.
+ * Deterministic, can't fake-green (full-green oracle required). Single-file scope
+ * even under SMALLCODE_TARGET_SET (repair stays on the primary — see
+ * project_multifile_target_set).
+ */
+const operatorArchetype: RepairArchetype = {
+  logName: "mutation-repair",
+  targets: (state) => (state.lockedTargetPath !== undefined ? [state.lockedTargetPath] : []),
+  candidatesFor(state, targetRel, current) {
+    const cap = env.mutationRepairMax;
+    const pristine = pristineTargetContent(state, targetRel);
+    const bases: Array<{ text: string; base: string }> = [];
+    if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
+    bases.push({ text: current, base: "current" });
+
+    // Priority-ordered, deduped across both bases, capped in TOTAL.
+    const seen = new Set<string>([current]);
+    const raw: Array<{ candidate: string; label: string; line: number; base: string }> = [];
+    let totalAcross = 0;
+    for (const { text, base } of bases) {
+      const { mutations, totalFound } = enumerateComparisonMutations(text, cap);
+      totalAcross += totalFound;
+      for (const m of mutations) {
+        if (raw.length >= cap) break;
+        if (seen.has(m.candidate)) continue;
+        seen.add(m.candidate);
+        raw.push({ candidate: m.candidate, label: m.label, line: m.line, base });
+      }
+    }
+    // Scope to the locked function: an out-of-function flip that greens a weakly-
+    // covered test is not a real fix. Unknown range → whole-file fallback.
+    const scoped = scopeMutationsToRange(raw, state.lockedTargetRange);
+    if (state.lockedTargetRange !== undefined && scoped.length < raw.length) {
+      console.error(
+        `[mutation-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${raw.length - scoped.length} out-of-function flip(s) skipped.`,
+      );
+    }
+    if (scoped.length === 0) return [];
+    if (totalAcross > scoped.length) {
+      console.error(
+        `[mutation-repair] ${targetRel}: ${totalAcross} operator candidate(s) across pristine+current, trying ${scoped.length} (cap ${cap}). Some flips not tried.`,
+      );
+    }
+    return scoped.map((c) => ({ candidate: c.candidate, label: `${c.label} (${c.base})`, line: c.line }));
+  },
+};
+
+/**
+ * Harness-side operator-mutation repair (I/O). Thin wrapper over the shared
+ * archetype driver; signature preserved for callers/tests. Returns the winning
+ * flip's attribution or null.
  */
 export async function runOperatorMutationRepair(
   state: AgentState,
   testBaseline: TestBaseline,
   readFileFn: (p: string) => Promise<string | null>,
   writeFileFn: (p: string, content: string) => Promise<void>,
-  // Injectable oracle (defaults to the real tiered oracle). Exposed only so tests
-  // can simulate a `bun test` timeout mid-repair without a global module mock.
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
-  // NOTE: the deterministic repair passes still operate ONLY on the single
-  // `lockedTargetPath`, even when SMALLCODE_TARGET_SET widened the model's
-  // editable set to the import neighborhood. Repair is a best-effort last resort
-  // (deterministic-or-noop), so this narrows the backstop back to single-file
-  // scope on multi-file tasks; widening the brute-force pass across the set is a
-  // future step (bounded by oracle-run cost). See project_multifile_target_set.
-  const targetRel = state.lockedTargetPath;
-  if (targetRel === undefined) return null;
-  const current = await readFileFn(targetRel);
-  if (current === null) return null;
-
-  // Bases to mutate, in priority order: pristine (if the model changed the file)
-  // first, then the current on-disk version.
-  const pristine = pristineTargetContent(state, targetRel);
-  const bases: Array<{ text: string; base: string }> = [];
-  if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
-  bases.push({ text: current, base: "current" });
-
-  // Priority-ordered, deduped candidate list across both bases, capped in TOTAL.
-  // Skip any candidate equal to the current file (already known to fail) or already
-  // queued from an earlier base.
-  const cap = env.mutationRepairMax;
-  const seen = new Set<string>([current]);
-  const candidates: Array<{ candidate: string; label: string; line: number; base: string }> = [];
-  let totalAcross = 0;
-  for (const { text, base } of bases) {
-    const { mutations, totalFound } = enumerateComparisonMutations(text, cap);
-    totalAcross += totalFound;
-    for (const m of mutations) {
-      if (candidates.length >= cap) break;
-      if (seen.has(m.candidate)) continue;
-      seen.add(m.candidate);
-      candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
-    }
-  }
-  // Scope to the locked target function: an operator flip OUTSIDE the bug function
-  // that coincidentally greens a weakly-covered test is not a real fix. When the
-  // function range is unknown, keep every candidate (whole-file fallback).
-  const scoped = scopeMutationsToRange(candidates, state.lockedTargetRange);
-  if (state.lockedTargetRange !== undefined && scoped.length < candidates.length) {
-    console.error(
-      `[mutation-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${candidates.length - scoped.length} out-of-function flip(s) skipped.`,
-    );
-  }
-  candidates.length = 0;
-  candidates.push(...scoped);
-  if (candidates.length === 0) return null;
-  if (totalAcross > candidates.length) {
-    console.error(
-      `[mutation-repair] ${targetRel}: ${totalAcross} operator candidate(s) across pristine+current, trying ${candidates.length} (cap ${cap}). Some flips not tried.`,
-    );
-  }
-
-  let attempts = 0;
-  try {
-    for (const c of candidates) {
-      attempts++;
-      await writeFileFn(targetRel, c.candidate);
-      const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
-      if (verdict.outcome === "solved") {
-        // Leave the winning mutation on disk — it IS the fix.
-        return { label: `${c.label} (${c.base})`, line: c.line, attempts };
-      }
-      // Miss: restore the file to exactly how the model left it before trying next.
-      await writeFileFn(targetRel, current);
-    }
-  } catch (err) {
-    // A candidate write or oracle run threw mid-loop (e.g. a `bun test` timeout on
-    // a large repo). Restore the file to how the model left it so we never orphan a
-    // half-tried candidate on disk, then hand off UNSOLVED — the final-state guard
-    // is the backstop. (Dogfood 2026-07-08: an unguarded throw here left a broken
-    // candidate on disk AND skipped the guard, leaving the repo worse than found.)
-    try {
-      await writeFileFn(targetRel, current);
-    } catch {
-      // best-effort restore
-    }
-    console.error(
-      `[mutation-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
-    );
-  }
-  return null;
+  const r = await runArchetypeRepair(operatorArchetype, state, testBaseline, readFileFn, writeFileFn, runOracle);
+  return r === null ? null : { label: r.label, line: r.line, attempts: r.attempts };
 }
 
 /**
- * Harness-side literal-mutation repair (SMALLCODE_LITERAL_REPAIR, default off;
- * I/O half — the pure enumerator is in repair/literal-mutation.ts). Mirrors
- * runOperatorMutationRepair for a DISJOINT bug shape: a wrong integer CONSTANT
- * rather than a wrong operator (e.g. `toFixed(1)` should be `toFixed(2)`) —
- * there is no operator for operator-mutation to flip, so this class of bug is
- * otherwise unreachable by any deterministic repair pass.
- *
- * KEY DEVIATION from operator-mutation/statement-repair: this pass iterates
- * the multi-file EDITABLE SET (`state.editablePaths`, when SMALLCODE_TARGET_SET
- * widened the model's editable neighborhood), not just the single locked
- * target. The primary target's candidates are scoped to the locked function
- * range (same discipline as operator-mutation); neighbor files are small
- * enough that whole-file scanning is fine, and the TOTAL candidate cap across
- * every file in the set bounds oracle-run cost regardless of set size. This
- * lets literal-repair fix a constant in an imported helper the set-carousel
- * narrowed the model's attention onto but that the model itself never landed.
- *
- * Deterministic, can't fake-green (requires a full-green verdict); every
- * non-winning candidate is reverted so each file is left either fixed or
- * byte-identical to how the model left it.
+/**
+ * Literal-mutation archetype: brute-force small integer-literal perturbations
+ * (±1/±2) for a wrong-CONSTANT bug no operator flip can reach (e.g. `toFixed(1)`
+ * should be `toFixed(2)`). Unlike operator repair it iterates the MULTI-FILE
+ * editable set (SMALLCODE_TARGET_SET) sharing ONE total cap across files (bounding
+ * oracle cost regardless of set size), scoping to the function range only on the
+ * primary target. Deterministic, can't fake-green (full-green oracle required).
  */
+const literalArchetype: RepairArchetype = {
+  logName: "literal-repair",
+  targets: (state) =>
+    state.editablePaths && state.editablePaths.length > 0
+      ? state.editablePaths
+      : state.lockedTargetPath !== undefined
+        ? [state.lockedTargetPath]
+        : [],
+  candidatesFor(state, targetRel, current, attemptsSoFar) {
+    const remaining = env.literalRepairMax - attemptsSoFar;
+    if (remaining <= 0) return [];
+
+    const pristine = pristineTargetContent(state, targetRel);
+    const bases: Array<{ text: string; base: string }> = [];
+    if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
+    bases.push({ text: current, base: "current" });
+
+    const seen = new Set<string>([current]);
+    const raw: Array<{ candidate: string; label: string; line: number; base: string }> = [];
+    let totalAcross = 0;
+    for (const { text, base } of bases) {
+      const { mutations, totalFound } = enumerateLiteralMutations(text, remaining);
+      totalAcross += totalFound;
+      for (const m of mutations) {
+        if (raw.length >= remaining) break;
+        if (seen.has(m.candidate)) continue;
+        seen.add(m.candidate);
+        raw.push({ candidate: m.candidate, label: m.label, line: m.line, base });
+      }
+    }
+
+    // Scope to the locked function ONLY on the primary target; neighbor files in
+    // the set have no range annotation (whole-file, bounded by the shared cap).
+    const scoped =
+      targetRel === state.lockedTargetPath ? scopeMutationsToRange(raw, state.lockedTargetRange) : raw;
+    if (
+      targetRel === state.lockedTargetPath &&
+      state.lockedTargetRange !== undefined &&
+      scoped.length < raw.length
+    ) {
+      console.error(
+        `[literal-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${raw.length - scoped.length} out-of-function literal(s) skipped.`,
+      );
+    }
+    if (scoped.length === 0) return [];
+    if (totalAcross > scoped.length) {
+      console.error(
+        `[literal-repair] ${targetRel}: ${totalAcross} literal candidate(s) across pristine+current, trying ${scoped.length} (remaining cap ${remaining}). Some flips not tried.`,
+      );
+    }
+    return scoped.map((c) => ({ candidate: c.candidate, label: `${c.label} (${c.base})`, line: c.line }));
+  },
+};
+
+/** Harness-side literal-mutation repair (I/O). Thin wrapper over the shared driver. */
 export async function runLiteralRepair(
   state: AgentState,
   testBaseline: TestBaseline,
@@ -508,109 +512,36 @@ export async function runLiteralRepair(
   writeFileFn: (p: string, content: string) => Promise<void>,
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ file: string; label: string; line: number; attempts: number } | null> {
-  const targets: string[] =
-    state.editablePaths && state.editablePaths.length > 0
-      ? state.editablePaths
-      : state.lockedTargetPath !== undefined
-        ? [state.lockedTargetPath]
-        : [];
-  if (targets.length === 0) return null;
-
-  const cap = env.literalRepairMax;
-  let attempts = 0;
-
-  for (const targetRel of targets) {
-    if (attempts >= cap) break;
-    const current = await readFileFn(targetRel);
-    if (current === null) continue;
-
-    // Bases to mutate, in priority order: pristine (if the model changed the
-    // file) first, then the current on-disk version — mirrors operator-mutation.
-    const pristine = pristineTargetContent(state, targetRel);
-    const bases: Array<{ text: string; base: string }> = [];
-    if (pristine !== null && pristine !== current) bases.push({ text: pristine, base: "original" });
-    bases.push({ text: current, base: "current" });
-
-    const remaining = cap - attempts;
-    const seen = new Set<string>([current]);
-    const candidates: Array<{ candidate: string; label: string; line: number; base: string }> = [];
-    let totalAcross = 0;
-    for (const { text, base } of bases) {
-      const { mutations, totalFound } = enumerateLiteralMutations(text, remaining);
-      totalAcross += totalFound;
-      for (const m of mutations) {
-        if (candidates.length >= remaining) break;
-        if (seen.has(m.candidate)) continue;
-        seen.add(m.candidate);
-        candidates.push({ candidate: m.candidate, label: m.label, line: m.line, base });
-      }
-    }
-
-    // Scope to the locked target function ONLY on the primary target — neighbor
-    // files in the editable set have no function-range annotation and are small
-    // enough that whole-file scanning is fine (the total cap bounds cost).
-    const scoped =
-      targetRel === state.lockedTargetPath
-        ? scopeMutationsToRange(candidates, state.lockedTargetRange)
-        : candidates;
-    if (
-      targetRel === state.lockedTargetPath &&
-      state.lockedTargetRange !== undefined &&
-      scoped.length < candidates.length
-    ) {
-      console.error(
-        `[literal-repair] ${targetRel}: scoped to target fn L${state.lockedTargetRange.startLine}-${state.lockedTargetRange.endLine}, ${candidates.length - scoped.length} out-of-function literal(s) skipped.`,
-      );
-    }
-    if (scoped.length === 0) continue;
-    if (totalAcross > scoped.length) {
-      console.error(
-        `[literal-repair] ${targetRel}: ${totalAcross} literal candidate(s) across pristine+current, trying ${scoped.length} (remaining cap ${remaining}). Some flips not tried.`,
-      );
-    }
-
-    try {
-      for (const c of scoped) {
-        if (attempts >= cap) break;
-        attempts++;
-        await writeFileFn(targetRel, c.candidate);
-        const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
-        if (verdict.outcome === "solved") {
-          // Leave the winning mutation on disk — it IS the fix.
-          return { file: targetRel, label: `${c.label} (${c.base})`, line: c.line, attempts };
-        }
-        // Miss: restore the file to exactly how the model left it before trying next.
-        await writeFileFn(targetRel, current);
-      }
-    } catch (err) {
-      // A candidate write or oracle run threw mid-loop. Restore this file to how
-      // the model left it so we never orphan a half-tried candidate on disk, then
-      // hand off UNSOLVED — the final-state guard is the backstop.
-      try {
-        await writeFileFn(targetRel, current);
-      } catch {
-        // best-effort restore
-      }
-      console.error(
-        `[literal-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
-      );
-      return null;
-    }
-  }
-  return null;
+  return runArchetypeRepair(literalArchetype, state, testBaseline, readFileFn, writeFileFn, runOracle);
 }
 
 /**
- * Harness-side statement-repair (SMALLCODE_STATEMENT_REPAIR, default off).
- * Mirrors runOperatorMutationRepair for a DISJOINT bug shape: the read-after-delete
- * ordering bug (`X.delete(K); X.set(K, X.get(K))`) that a sub-14B model localizes
- * perfectly yet writes with the read AFTER the delete, so it re-inserts undefined.
- * The operator-mutation space can't touch it (no operator flip fixes an ordering
- * mistake). repairReadAfterDelete deterministically hoists the read into a temp
- * before the delete for a SINGLE unambiguous finding; we run the real oracle on
- * that candidate and keep it only if it goes fully green (can't fake-green),
- * reverting otherwise so the file is left either fixed or byte-identical.
+ * Statement-repair archetype (read-after-delete): a DISJOINT bug shape from the
+ * operator/literal sweeps — the `X.delete(K); X.set(K, X.get(K))` ordering bug a
+ * sub-14B model localizes yet writes reading AFTER the delete. Not a sweep: one
+ * deterministic hoist per base. Because the model's buggy edit regresses green
+ * tests and is reverted off disk, the model's LATEST attempt (from turn history)
+ * is tried FIRST, then current disk — the analog of operator's pristine-first.
  */
+const statementArchetype: RepairArchetype = {
+  logName: "statement-repair",
+  targets: (state) => (state.lockedTargetPath !== undefined ? [state.lockedTargetPath] : []),
+  candidatesFor(state, targetRel, current) {
+    const attempt = latestAttemptContent(state, targetRel);
+    const bases: string[] = [];
+    if (attempt !== null && attempt !== current) bases.push(attempt);
+    bases.push(current);
+    const candidates: RepairCandidate[] = [];
+    for (const base of bases) {
+      const rep = repairReadAfterDelete(base);
+      if (rep === null) continue;
+      candidates.push({ candidate: rep.candidate, label: rep.label, line: rep.line });
+    }
+    return candidates;
+  },
+};
+
+/** Harness-side statement-repair (I/O). Thin wrapper over the shared driver. */
 export async function runStatementRepair(
   state: AgentState,
   testBaseline: TestBaseline,
@@ -618,56 +549,8 @@ export async function runStatementRepair(
   writeFileFn: (p: string, content: string) => Promise<void>,
   runOracle: typeof runTieredOracle = runTieredOracle,
 ): Promise<{ label: string; line: number; attempts: number } | null> {
-  // NOTE: the deterministic repair passes still operate ONLY on the single
-  // `lockedTargetPath`, even when SMALLCODE_TARGET_SET widened the model's
-  // editable set to the import neighborhood. Repair is a best-effort last resort
-  // (deterministic-or-noop), so this narrows the backstop back to single-file
-  // scope on multi-file tasks; widening the brute-force pass across the set is a
-  // future step (bounded by oracle-run cost). See project_multifile_target_set.
-  const targetRel = state.lockedTargetPath;
-  if (targetRel === undefined) return null;
-  const current = await readFileFn(targetRel);
-  if (current === null) return null;
-
-  // Bases to repair, in priority order. The model's read-after-delete edit stores
-  // undefined and regresses green tests, so the loop REVERTS it — disk is left
-  // pristine (no delete to hoist) while the structural attempt survives only in
-  // turn history. So try the model's latest attempt content FIRST, then current
-  // disk. Mirror of operator-mutation's pristine-first multi-base strategy.
-  const attempt = latestAttemptContent(state, targetRel);
-  const bases: string[] = [];
-  if (attempt !== null && attempt !== current) bases.push(attempt);
-  bases.push(current);
-
-  let attempts = 0;
-  try {
-    for (const base of bases) {
-      const rep = repairReadAfterDelete(base);
-      if (rep === null) continue;
-      attempts++;
-      await writeFileFn(targetRel, rep.candidate);
-      const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
-      if (verdict.outcome === "solved") {
-        // Leave the hoisted candidate on disk — it IS the fix.
-        return { label: rep.label, line: rep.line, attempts };
-      }
-      // Miss: restore the file to exactly how the model left it before the next base.
-      await writeFileFn(targetRel, current);
-    }
-  } catch (err) {
-    // Same backstop as operator-mutation: a throw mid-candidate must never orphan a
-    // half-tried hoist on disk. Restore the model's edit and hand off UNSOLVED to
-    // the final-state guard. (Dogfood 2026-07-08.)
-    try {
-      await writeFileFn(targetRel, current);
-    } catch {
-      // best-effort restore
-    }
-    console.error(
-      `[statement-repair] ${targetRel}: aborted after ${attempts} candidate(s) — ${err instanceof Error ? err.message : String(err)}; restored the model's edit.`,
-    );
-  }
-  return null;
+  const r = await runArchetypeRepair(statementArchetype, state, testBaseline, readFileFn, writeFileFn, runOracle);
+  return r === null ? null : { label: r.label, line: r.line, attempts: r.attempts };
 }
 
 /**
