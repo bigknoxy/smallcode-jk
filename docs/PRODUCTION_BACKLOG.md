@@ -148,7 +148,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☑ DONE |
 | E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☑ DONE |
 | E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☑ DONE |
-| E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☐ TODO |
+| E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☑ DONE |
 | E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☐ TODO |
 | E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☐ TODO |
 | E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☐ TODO |
@@ -508,7 +508,7 @@ replicated, unfakeable win record (operator-mutation cracked mri 0.00→0.88 CI-
 archetype is permanent, can't fake-green (requires full-green real oracle), and compounds. BUT: gate every
 new archetype to genuinely GENERAL defects, validate at n≥8, and attribute honestly (else it's eval-gaming).
 
-### E4-T1 — Generalize repair into a pluggable archetype interface  ·  P2 · M · Status: ☐ TODO
+### E4-T1 — Generalize repair into a pluggable archetype interface  ·  P2 · M · Status: ☑ DONE
 **Goal:** Extract the shared pattern (enumerate candidates → scope to locked range/editable set → for each:
 write → run real oracle → revert if not fully green → keep first green → record `mutationRepair`
 attribution) into one interface so new archetypes are small additions.
@@ -518,7 +518,7 @@ attribution) into one interface so new archetypes are small additions.
 repair tests still green); adding a new archetype requires only an `enumerate`+`apply` pair.
 **Verification:** `bun test tests/*repair* tests/*mutation* && bun test && bunx tsc --noEmit`.
 **Docs-to-update:** `docs/architecture.html` (edit-format/repair pipeline), `docs/llms.html` (module map).
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #166). New `src/repair/archetype.ts`: `RepairArchetype` interface (`targets(state)` + `candidatesFor(state, target, current, attemptsSoFar)`) + `runArchetypeRepair` driver owning the identical write→oracle→revert→keep-first-green loop + throw-containment (the unfakeable invariants: keep only on full-green, revert every miss, throw→restore, never orphan a candidate). The 3 concrete archetypes (`operatorArchetype`, `literalArchetype`, `statementArchetype`) now live in `loop.ts` as `targets`+`candidatesFor` pairs; `runOperatorMutationRepair`/`runLiteralRepair`/`runStatementRepair` are thin wrappers (exported signatures unchanged). `attemptsSoFar` threads the shared multi-file cap (literal). **Measured:** ALL 62 existing repair/mutation/statement/throw/loaderror/journal tests still green (behavior-preserving) + 4 new `tests/repair-archetype.test.ts` proving the driver contract on a trivial custom archetype (keep-first-green, revert-misses, throw-contained, shared-budget). **Adversarial code-reviewer: refactor FAITHFUL — no behavioral differences across all 9 checked axes** (candidate order/dedup/cap, base order, label suffix, return shape, attempts counting, per-target revert, throw-halt-all, early-exit, logging); flagged only orphaned docstrings, which I cleaned. Full `bun test` 1227/0 on bun 1.3.12 and 1.3.14; tsc clean. Adding a new archetype (E4-T2) is now just a `targets`+`candidatesFor` pair. Docs: llms.html archetype.ts row.
 
 ### E4-T2 — Add validated new rescue archetypes (n≥8 gated)  ·  P2 · L · Dep: E4-T1 · Status: ☐ TODO
 **Goal:** Add archetypes for common, general, deterministically-checkable bug shapes. Candidates to
