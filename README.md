@@ -402,6 +402,8 @@ bun scripts/classify-pass-quality.ts                            # per task: mode
 
 **SWE-bench-Lite** (`scripts/run-swebench.ts`) runs the honest way: it clones each instance, applies the test patch, and *probes* with `pytest --collect-only`; an instance whose pinned Python deps aren't importable is **skipped (env-unavailable), never a fake 0** (SWE-bench-Lite ships a Docker image per instance for this reason). pass@1 is reported *only over the runnable subset* (denominator = runnable, never total), with a skip breakdown and a model-vs-rescue split. On a stock box the honest result is typically `0 runnable / N env-unavailable`; install each instance's deps (or use the official Docker harness) to make a subset runnable: `SWEBENCH_LIMIT=5 bun scripts/run-swebench.ts`.
 
+**Dogfood over smallcode's own history** (`scripts/dogfood-history.ts`) is the highest-fidelity real test: it takes real past bug-fix commits, re-introduces each bug by reverse-applying *only its source hunks* (keeping the guarding test), confirms the test goes red, then has the current agent re-fix it — graded by smallcode's own `bun test`, with model-vs-rescue attribution and a single-site/cross-file label. Setup is verified deterministically (4/4 real commits reproduce their bug). Run setup-only with `bun scripts/dogfood-history.ts`, or add the agent with `DOGFOOD_AGENT=1 bun scripts/dogfood-history.ts`.
+
 ---
 
 ## License

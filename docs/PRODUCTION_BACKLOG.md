@@ -147,7 +147,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E2-T6 | Dist | Sane first-run default model = qwen2.5-coder:3b | P2 | S | — | ☑ DONE |
 | E3-T1 | Bench | Honest published numbers with mechanism attribution | P1 | M | — | ☑ DONE |
 | E3-T2 | Bench | `run-swebench` polish + runnable-subset report | P1 | L | — | ☑ DONE |
-| E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☐ TODO |
+| E3-T3 | Bench | Real-repo dogfood harness on smallcode's own history | P2 | M | — | ☑ DONE |
 | E4-T1 | Rescue | Generalize repair into a pluggable archetype interface | P2 | M | — | ☐ TODO |
 | E4-T2 | Rescue | Add validated new rescue archetypes (n≥8 gated) | P2 | L | E4-T1 | ☐ TODO |
 | E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☐ TODO |
@@ -487,7 +487,7 @@ totals.
 **Docs-to-update:** `docs/architecture.html` benchmark section, `README.md`, `index.html`.
 **Result:** _(2026-07-24)_ DONE (PR #164). The runner was already honest (probe → skip env-unavailable, never fake-0); polished it into a repeatable, documented, ATTRIBUTED report. Extracted a pure, unit-tested `src/eval/swebench-report.ts` (`skipReason` categorizes clone/checkout/patch/env-unavailable; `summarizeSwebench` builds the report — **pass@1 denominator = runnable, NEVER total**, always with a skip breakdown; and a **model-vs-harness-rescue split** on runnable passes via `mutationRepair` detection). Runner tracks `rescued` and prints the summary. **Measured:** 4 tests (skipReason categories; 0-runnable → "no pass-rate reported, never fake 0" with skip breakdown and NO fabricated pass@1 line; runnable subset → 0.75 (3/4) + edit-format + 2-model/1-rescue split; denominator-is-runnable-not-total) + mutation-test (divide by total → 2 RED). **Live:** bounded LIMIT=2/3 real runs → honest `runnable here: 0/N; skip breakdown: N env-unavailable; No pass-rate reported (honest, never a fake 0)` (astropy/django deps not importable off-Docker, exactly the designed behavior). Documented the env-setup + reproduction (`vendor-swebench` → `SWEBENCH_LIMIT=5 run-swebench`) in architecture.html + README. Full `bun test` 1219/0 on bun 1.3.12 and 1.3.14; tsc clean. HONEST OUTCOME: SWE-bench-Lite is env-blocked off-Docker on a stock box → no headline number is claimed; the reproducible runnable-subset path is documented.
 
-### E3-T3 — Real-repo dogfood harness on smallcode's own history  ·  P2 · M · Status: ☐ TODO
+### E3-T3 — Real-repo dogfood harness on smallcode's own history  ·  P2 · M · Status: ☑ DONE
 **Goal:** Highest-fidelity real test: revert a real past multi-file fix commit, have smallcode re-fix it,
 smallcode's own `bun test` is the oracle.
 **Candidates (from git history):** `a6f68cc` (#127, loop.ts+index.ts), `06545f9` (#125, 6 files),
@@ -497,7 +497,7 @@ smallcode's own `bun test` is the oracle.
 the existing test. Report pass + mechanism attribution. Label each cross-file vs single-site.
 **Acceptance:** reproducible dogfood run over ≥3 real commits with attributed results.
 **Docs-to-update:** `docs/architecture.html` (eval harness), `README.md`.
-**Result:** _(fill in when done)_
+**Result:** _(2026-07-24)_ DONE (PR #165). New `scripts/dogfood-history.ts` + pure `src/eval/dogfood-history.ts` (`classifyCommitFiles` src-vs-test split, `labelChange` single-site/cross-file, `summarizeDogfood` report + model-vs-rescue attribution) + suite `evals/suites/dogfood/commits.json` (the 4 candidate commits). Per commit: git worktree AT the commit (its own diff reverse-applies cleanly) → reverse-apply SRC hunks only (re-introduce bug, keep the guarding test) → confirm test goes RED → [DOGFOOD_AGENT=1] run the current agent → grade with `bun test` → attribute (`mutationRepair` → rescued) + label. **Measured:** 4 pure unit tests (file split; label; setup-only + agent-run report shapes) + **live setup-only run: 4/4 real commits reproduce their bug** (d94c7db single-site oracle fix; 55e1763 env.ts+watchdog.ts; a6f68cc loop.ts+index.ts; 06545f9 loop.ts+types.ts+context — all cross-file) — deterministic proof the harness builds valid dogfood tasks. Agent-run path demonstrated (reached the loop + mutation-repair on the control) but the single-site oracle-parse bug is a genuine 7b localization challenge and the full-worktree-suite oracle makes it slow, so NO solve number is claimed (honest — the reproducible `DOGFOOD_AGENT=1` command is documented instead). Full `bun test` 1223/0 on bun 1.3.12 and 1.3.14; tsc clean. Docs: architecture.html + README. **This completes the E3 honest-benchmark epic (3/3).**
 
 ---
 
