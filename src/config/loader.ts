@@ -31,7 +31,7 @@ export function loadConfig(configPath?: string): LoadedConfig {
     }
 
     return {
-      config: parsed.data.config,
+      config: applyEnvOverrides(parsed.data.config),
       extraModels: parsed.data.models ?? [],
     };
   }
@@ -48,4 +48,26 @@ export function loadConfigFromEnv(): Partial<SmallcodeConfig> {
     ...(baseUrl ? { provider: { baseUrl, apiKey: "none", timeoutMs: 120_000 } } : {}),
     ...(model ? { activeModel: model } : {}),
   };
+}
+
+/**
+ * Overlay env-var overrides onto a file-loaded config so a documented flag
+ * actually bites (previously `loadConfigFromEnv` was exported but never
+ * consumed — SMALLCODE_BASE_URL / SMALLCODE_MODEL silently did nothing in the
+ * eval path). Only the overridden fields change: SMALLCODE_BASE_URL swaps
+ * `provider.baseUrl` while keeping the file's apiKey/timeout; SMALLCODE_MODEL
+ * swaps `activeModel`. This is what lets a run point at a non-Ollama endpoint
+ * (e.g. a llama-server on :8910) without editing the checked-in config file.
+ */
+export function applyEnvOverrides(config: SmallcodeConfig): SmallcodeConfig {
+  const baseUrl = process.env["SMALLCODE_BASE_URL"];
+  const model = process.env["SMALLCODE_MODEL"];
+  let next = config;
+  if (baseUrl) {
+    next = { ...next, provider: { ...next.provider, baseUrl } };
+  }
+  if (model) {
+    next = { ...next, activeModel: model };
+  }
+  return next;
 }
