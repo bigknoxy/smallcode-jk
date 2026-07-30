@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { env } from "@/config/env.ts";
 import { repoSubprocessEnv } from "../util/subprocess-env.ts";
 import { computeStaticConfidence, type StaticConfidence } from "./confidence.ts";
@@ -323,16 +324,46 @@ let bunTestRunner: (repoRoot: string) => BunTestRun = runBunTestImpl;
 const oracleCache = new Map<string, BunTestRun>();
 
 /**
+ * Entry cap. The map is process-local but the process is long-lived: an eval
+ * run walks hundreds of tasks × turns × candidates, each a distinct repo state,
+ * and every entry retains a full un-truncated `bun test` output. Insertion
+ * order makes `Map` an LRU as long as a hit re-inserts, so eviction is
+ * "delete the oldest key". A hit only ever needs the state the harness is
+ * bouncing between right now, so a small cap costs no realistic hit rate.
+ */
+const ORACLE_CACHE_MAX = 32;
+
+/**
  * Cache key for this repo state, or `null` for "never cache, always spawn".
  * `null` covers the flag being off AND every fail-closed case in
  * `repoFingerprint` (git failure, untracked non-ignored file, unreadable file,
  * tracked symlink) — one return value, so no path can accidentally cache under
  * an empty key.
+ *
+ * The key is (repo PATH, fingerprint), not the fingerprint alone. The
+ * fingerprint hashes content, not location, so two directories holding
+ * byte-identical repos hash the same — routine in the eval harness, which runs
+ * many trials from one fixture template in one process. Tests that read
+ * `process.cwd()`, `import.meta.dir`, or any absolute path legitimately differ
+ * by directory, so a content-only key could hand trial B the verdict measured
+ * in trial A's directory. The path is resolved through `realpathSync` so the
+ * same repo reached via a symlink (`/tmp` → `/private/tmp` on macOS) is still
+ * one cache entry; an unresolvable path falls back to the raw string, which is
+ * at worst an extra miss.
  */
 function oracleCacheKey(repoRoot: string): string | null {
   if (!env.oracleCache) return null;
   const subprocessEnv = repoSubprocessEnv();
-  return repoFingerprint(repoRoot, defaultFingerprintDeps(subprocessEnv, TEST_COMMAND));
+  const fingerprint = repoFingerprint(repoRoot, defaultFingerprintDeps(subprocessEnv, TEST_COMMAND));
+  if (fingerprint === null) return null;
+  let resolved: string;
+  try {
+    resolved = realpathSync(repoRoot);
+  } catch {
+    resolved = repoRoot;
+  }
+  // NUL separator: cannot occur in a path, so the two fields cannot re-split.
+  return `${resolved}\0${fingerprint}`;
 }
 
 /** Test-only seam: drop every memoized run so suites cannot leak state into each other. */
@@ -354,6 +385,10 @@ function runBunTest(repoRoot: string, callSite: OracleCallSite = "other"): BunTe
       // Loud by contract: a cache that silently skips test runs is the DX
       // failure mode this feature is most likely to be blamed for.
       console.log("oracle: cached (unchanged repo state)");
+      // Re-insert so `Map` insertion order stays LRU rather than FIFO: the
+      // state the harness keeps bouncing back to must not be the one evicted.
+      oracleCache.delete(key);
+      oracleCache.set(key, hit);
       // No `recordOracleCall`: the skipped spawn is the entire point, and the
       // E6-T1 cost report must show the saving rather than hide it.
       return hit;
@@ -364,7 +399,15 @@ function runBunTest(repoRoot: string, callSite: OracleCallSite = "other"): BunTe
   // Store only COMPLETED full runs. A timed-out run's output is a PREFIX of
   // the truth — memoizing it would pin a false red count to this repo state
   // for the rest of the process.
-  if (key !== null && run.complete !== false) oracleCache.set(key, run);
+  if (key !== null && run.complete !== false) {
+    // Evict oldest-first BEFORE inserting, so the map never exceeds the cap.
+    while (oracleCache.size >= ORACLE_CACHE_MAX) {
+      const oldest = oracleCache.keys().next().value;
+      if (oldest === undefined) break;
+      oracleCache.delete(oldest);
+    }
+    oracleCache.set(key, run);
+  }
   return run;
 }
 

@@ -164,6 +164,47 @@ describe("oracle cache — hits only on a provably identical state", () => {
   });
 });
 
+describe("oracle cache — the key is (path, content), never content alone", () => {
+  test("a byte-identical COPY at another path does not hit the original's entry", async () => {
+    // The eval harness runs many trials from one fixture template in one
+    // process, so two directories with identical bytes are routine. Tests that
+    // read cwd / import.meta.dir differ by directory, so sharing an entry
+    // across paths would hand trial B trial A's verdict.
+    await oracle();
+    const twin = mkdtempSync(join(tmpdir(), "smallcode-oracle-twin-"));
+    try {
+      Bun.spawnSync(["cp", "-R", `${repo}/.`, twin]);
+      await runTieredOracle(twin, { typecheck: null });
+      expect(runs).toBe(2);
+      // ...and the twin now memoizes on its OWN key.
+      await runTieredOracle(twin, { typecheck: null });
+      expect(runs).toBe(2);
+    } finally {
+      rmSync(twin, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("oracle cache — bounded memory", () => {
+  test("entries are evicted so a long run cannot grow the map without bound", async () => {
+    // 33 distinct states with a cap of 32: the FIRST state must be gone.
+    const write = (n: number) => writeFileSync(join(repo, "src/a.ts"), `export const a = ${n};\n`);
+    write(0);
+    await oracle();
+    for (let n = 1; n <= 32; n++) {
+      write(n);
+      await oracle();
+    }
+    expect(runs).toBe(33);
+    write(0); // back to the evicted state
+    await oracle();
+    expect(runs).toBe(34); // spawned again — not still memoized
+    write(32); // the most recent state is still resident
+    await oracle();
+    expect(runs).toBe(34);
+  });
+});
+
 describe("oracle cache — never memoize an incomplete run", () => {
   test("a timed-out run is not stored (its output is a prefix of the truth)", async () => {
     __setBunTestRunnerForTests(() => {

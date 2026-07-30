@@ -841,6 +841,28 @@ Also fixed pre-existing doc drift found en route: `docs/architecture.html` still
 BASELINE-RELATIVE ("zero *new* failures"), which v1.2.2 replaced with fully-green because the relative
 bar produced false solves. Rewritten to match the code.
 
+**Code review (PR #186) — 2 findings, both fixed before merge:**
+1. *Critical — cross-directory collision.* The key was the fingerprint alone, and `repoFingerprint`
+   hashes CONTENT, not location. The eval harness runs many trials from one fixture template in a
+   single process, so byte-identical repos in different tmpdirs hash the same and would have shared one
+   memo entry; any test reading `process.cwd()`, `import.meta.dir`, or an absolute path would then have
+   been handed another directory's verdict — the exact stale-signal failure E6 exists to prevent. Key is
+   now `` `${realpathSync(repoRoot)}\0${fingerprint}` `` (realpath so `/tmp` → `/private/tmp` stays one
+   entry; NUL separator so the fields cannot re-split). Test: a `cp -R` twin at another path MISSES the
+   original's entry and then memoizes on its own key.
+2. *Important — unbounded map.* Every entry retains a full un-truncated suite output and one eval run
+   walks hundreds of distinct repo states in a single process. Capped at `ORACLE_CACHE_MAX = 32` with
+   LRU eviction (a hit re-inserts to refresh recency; insertion order does the rest, evicting oldest-first
+   BEFORE insert so the cap is never exceeded). Test: 33 distinct states ⇒ the first is gone, the most
+   recent is still resident.
+
+Both fixes mutation-verified (fingerprint-only key ⇒ 1 fail; cap raised to 100000 ⇒ 1 fail). 14 tests,
+suite 1298/0, tsc clean, docs-sync green. Review also CONFIRMED as correct: the run-not-verdict design,
+`signalCode == null` as the completeness test (it catches OOM/any signal kill, not just the timeout), and
+the fail-closed `null` wiring. It noted `run_tests`/`run_command` in `src/agent/tools.ts` spawn `bun test`
+directly and bypass the memo — correct as-is: those are model-facing informational tools, not verdict
+producers, and only `runBunTest` feeds a verdict.
+
 ---
 
 ### E6-T4 — Adversarial cache-safety tests + fake-green re-audit  ·  P0 · M · Dep: E6-T3 · Status: ☐ TODO

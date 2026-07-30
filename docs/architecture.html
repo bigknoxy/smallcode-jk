@@ -544,7 +544,7 @@ flowchart TD
     EXECTOOLS --> IMPORTGATE{SMALLCODE_IMPORT_GATE\nedit added an import that\ndoes not resolve?\npackage.json deps + fs + Bun.resolveSync}
     IMPORTGATE -- yes --> IMPORTREVERT[revert file to pre-edit content\nfeed IMPORT ERROR — does not resolve\navailable deps: …]
     IMPORTREVERT --> ORACLE
-    IMPORTGATE -- "no / gate off" --> FPRINT{repoFingerprint memoized?\nSMALLCODE_ORACLE_CACHE, default off\nnull fingerprint / incomplete run = never cached}
+    IMPORTGATE -- "no / gate off" --> FPRINT{memoized under key = repo path + repoFingerprint?\nSMALLCODE_ORACLE_CACHE, default off\nnull fingerprint / incomplete run = never cached\nLRU, 32 entries, process-local}
     FPRINT -- "hit: same repo state" --> CACHED[oracle: cached unchanged repo state\nreuse the memoized RUN\nverdict re-derived vs CURRENT baseline]
     FPRINT -- "miss / off / null" --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
     CACHED --> REGRESSED
@@ -1401,7 +1401,13 @@ flowchart TD
             what E6 exists to eliminate. Re-deriving the verdict from cached output is pure string parsing and
             provably baseline-correct, while the expensive part is still skipped. Fails closed everywhere: a
             <code>null</code> fingerprint always spawns and never stores, and a run killed by the 120s timeout is
-            never stored — its output is a <em>prefix</em> of the truth, not the truth.
+            never stored — its output is a <em>prefix</em> of the truth, not the truth. The key is
+            (resolved repo <em>path</em>, fingerprint): the fingerprint hashes content, not location, so two
+            directories holding byte-identical repos — routine in the eval harness, which runs many trials from
+            one fixture template in a single process — would otherwise share one entry, and a test reading
+            <code>process.cwd()</code> or an absolute path would get another directory's verdict. The map is
+            capped at 32 entries with LRU eviction, since each entry retains a full suite output and one eval
+            run walks hundreds of distinct repo states.
           </p>
         </div>
         <div class="decision">
