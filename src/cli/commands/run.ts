@@ -24,6 +24,7 @@ import { createProvider } from "../../provider/factory.ts";
 import { ReasoningHandler } from "../../reasoning/handler.ts";
 import { renderConfidence } from "../../verify/confidence.ts";
 import { captureTestBaseline, runTieredOracle } from "../../verify/oracle.ts";
+import { formatOracleCostReport } from "../../verify/oracle-cost.ts";
 import type { ParsedArgs } from "../args.ts";
 import { ProgressDisplay } from "../progress.ts";
 import {
@@ -706,6 +707,15 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     }
   }
 
+  // E6-T1 measuring stick: the oracle spawns the whole suite on every call, from
+  // five different places. Print the split at every terminal path so the cost is
+  // visible in a normal run instead of guessed at. stderr, so --json's stdout
+  // stays a single clean line.
+  const printOracleCost = (): void => {
+    const report = formatOracleCostReport();
+    if (report) process.stderr.write(`${report}\n`);
+  };
+
   // R9 dev-UX: end every run with a review/undo summary so the agent is never a
   // black box — the user sees what changed and how to take it back.
   const changes = workingChanges(repoRoot);
@@ -726,6 +736,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
       ? numstatChanges(repoRoot)
       : { filesChanged: [], added: 0, removed: 0 };
     const payload = formatRunJson(finalState, classification, jsonChanges, modelId, solvedByEscalation);
+    printOracleCost();
     process.stdout.write(`${JSON.stringify(payload)}\n`);
     if (classification.ok) return;
     process.exit(1);
@@ -738,6 +749,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
     // E1-T5: one-line "how this was solved" attribution so a solve is never a
     // black box (model vs harness-rescue vs escalation).
     process.stderr.write(`[smallcode] ${renderSolvedAttribution(outcome)}\n`);
+    printOracleCost();
     return;
   }
 
@@ -760,6 +772,7 @@ export async function runCommand(args: ParsedArgs): Promise<void> {
   } catch {
     // keep the plain message
   }
+  printOracleCost();
   if (classification.tone === "warn") progress.showWarn(msg);
   else progress.showError(msg);
   process.exit(1);

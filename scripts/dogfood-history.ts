@@ -23,6 +23,7 @@ import { contextBudgetFor } from "../src/models/context-budget.ts";
 import { defaultRegistry } from "../src/models/registry.ts";
 import { createProvider } from "../src/provider/factory.ts";
 import { ReasoningHandler } from "../src/reasoning/handler.ts";
+import { formatOracleCostReport } from "../src/verify/oracle-cost.ts";
 import {
   classifyCommitFiles,
   type DogfoodResult,
@@ -127,6 +128,12 @@ async function main(): Promise<void> {
 
   console.log("");
   for (const line of summarizeDogfood(results)) console.log(line);
+
+  // E6-T1: the agent ran in THIS process, so the oracle counters are ours. Print
+  // the cost split (baseline / per-turn / guard / repair-candidate) so the
+  // dogfood run doubles as the oracle-cost measuring stick.
+  const cost = formatOracleCostReport();
+  if (cost) console.log(`\n${cost}`);
 }
 
 if (import.meta.main) {

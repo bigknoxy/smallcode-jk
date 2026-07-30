@@ -1,6 +1,7 @@
 import { env } from "@/config/env.ts";
 import { repoSubprocessEnv } from "../util/subprocess-env.ts";
 import { computeStaticConfidence, type StaticConfidence } from "./confidence.ts";
+import { type OracleCallSite, recordOracleCall } from "./oracle-cost.ts";
 import { extractFirstFailure, type FailureDiagnostic } from "./failure-extract.ts";
 import { runChecker } from "./runner.ts";
 import type { CheckerConfig, CheckResult } from "./types.ts";
@@ -191,8 +192,11 @@ export function escalateBrokenClean(verdict: OracleVerdict): OracleVerdict {
   };
 }
 
-export function captureTestBaseline(repoRoot: string): TestBaseline {
-  const { state, fullOutput } = runBunTest(repoRoot);
+export function captureTestBaseline(
+  repoRoot: string,
+  callSite: OracleCallSite = "baseline",
+): TestBaseline {
+  const { state, fullOutput } = runBunTest(repoRoot, callSite);
   // Parse counts/ids from the FULL, un-truncated output. `result.output` is
   // sliced to 4000 chars for model-facing feedback brevity; a verbose failure
   // (deep recursion, long stack traces) can push the `(fail)` lines and the
@@ -284,8 +288,16 @@ function runBunTestImpl(repoRoot: string): BunTestRun {
  */
 let bunTestRunner: (repoRoot: string) => BunTestRun = runBunTestImpl;
 
-function runBunTest(repoRoot: string): BunTestRun {
-  return bunTestRunner(repoRoot);
+/**
+ * Every real `bun test` spawn funnels through here, so this is the one place
+ * cost is accounted (E6-T1). Injected runners are counted too — a test seam
+ * that reported zero cost would make the measuring stick lie about its own
+ * coverage. Accounting only: the verdict returned is untouched.
+ */
+function runBunTest(repoRoot: string, callSite: OracleCallSite = "other"): BunTestRun {
+  const run = bunTestRunner(repoRoot);
+  recordOracleCall(callSite, run.result.durationMs);
+  return run;
 }
 
 /** Test-only seam: override the bun-test runner. Pass `null` to restore the real one. */
@@ -304,6 +316,12 @@ export interface TieredOracleOptions {
    * focused next-turn message instead of the whole suite output.
    */
   baseline?: TestBaseline;
+  /**
+   * Cost-accounting tag only (E6-T1) — which call site drove this run. Never
+   * read by any verdict path; it exists so the cost report can break out the
+   * per-turn / repair-candidate / guard split.
+   */
+  callSite?: OracleCallSite;
 }
 
 export async function runTieredOracle(
@@ -311,7 +329,7 @@ export async function runTieredOracle(
   opts: TieredOracleOptions = {},
 ): Promise<OracleVerdict> {
   // Tier 1: tests (authoritative).
-  const test = runBunTest(repoRoot);
+  const test = runBunTest(repoRoot, opts.callSite ?? "other");
   if (test.state !== "absent") {
     // Parse verdict-driving counts/ids from the FULL output (see runBunTest):
     // `test.result.output` is truncated for feedback and would under-count a

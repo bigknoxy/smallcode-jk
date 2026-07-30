@@ -153,7 +153,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☑ DONE |
 | E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☑ DONE |
 | E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☑ DONE |
-| E6-T1 ([#174](https://github.com/bigknoxy/smallcode-jk/issues/174)) | Cost | Oracle cost measuring stick (before-number) | P0 | S | — | ☐ TODO |
+| E6-T1 ([#174](https://github.com/bigknoxy/smallcode-jk/issues/174)) | Cost | Oracle cost measuring stick (before-number) | P0 | S | — | ✅ DONE |
 | E6-T2 ([#175](https://github.com/bigknoxy/smallcode-jk/issues/175)) | Cost | `repoFingerprint()` — fail-closed repo-state hash | P0 | M | E6-T1 | ☐ TODO |
 | E6-T3 ([#176](https://github.com/bigknoxy/smallcode-jk/issues/176)) | Cost | No-change skip + full-verdict memo in oracle | P0 | M | E6-T2 | ☐ TODO |
 | E6-T4 ([#177](https://github.com/bigknoxy/smallcode-jk/issues/177)) | Cost | Adversarial cache-safety tests + fake-green re-audit | P0 | M | E6-T3 | ☐ TODO |
@@ -655,7 +655,7 @@ Full 13-row test matrix + test diagram:
 
 ---
 
-### E6-T1 — Oracle cost measuring stick (the before-number)  ·  P0 · S · Status: ☐ TODO
+### E6-T1 — Oracle cost measuring stick (the before-number)  ·  P0 · S · Status: ✅ DONE
 **Goal:** No optimization without a before-number. Nothing else in E6 starts until this lands.
 
 **Files**
@@ -684,7 +684,20 @@ bun test && bunx tsc --noEmit && bun run scripts/oracle-cost-report.ts
 ```
 **Docs-to-update:** `docs/llms.html` module map (new script). Add `scripts/oracle-cost-report.ts`.
 **Rollback:** counters are additive; delete the module-local + the script.
-**Result:** _(pending)_
+**Result:** SHIPPED 2026-07-30. `src/verify/oracle-cost.ts` (pure accounting) + a `callSite` tag threaded
+through the single `runBunTest` funnel in `src/verify/oracle.ts`, tagged at all five call sites
+(`loop.ts` baseline / per-turn / final-guard / restore-verify, `repair/archetype.ts` repair-candidate).
+`smallcode run` prints the table on every terminal path (stderr, so `--json` stdout stays clean);
+`scripts/dogfood-history.ts` prints it too. Guarded by `tests/oracle-cost.test.ts` (8 tests), including
+an **inertness** test: verdicts are byte-identical with the counters hot vs freshly reset, and a red run
+still reports `regressed === true`. Full suite 1258 pass / 0 fail, `bunx tsc --noEmit` clean.
+**BEFORE-NUMBER (measured on this repo, 1258 tests, bun 1.3.12):** one oracle call = **11.4s**
+(median of 3, spread 0.2s). Fixed floor per run, baseline + one per-turn verdict per turn, *excluding*
+the final-state guard, its restore verification, and every repair candidate:
+1 turn = 2 calls ≈ 22.8s · 3 turns = 4 calls ≈ 45.5s · 6 turns = 7 calls ≈ 79.7s.
+So a 6-turn run burns **~80s of oracle floor** before a single repair candidate is tried — and each
+repair candidate adds another full 11.4s. Reproduce: `bun run scripts/oracle-cost-report.ts`
+(model-free), or `bun scripts/oracle-cost-report.ts --dogfood` for the measured by-call-site split.
 
 ---
 
