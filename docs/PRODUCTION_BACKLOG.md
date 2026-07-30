@@ -694,7 +694,9 @@ still reports `regressed === true`. Full suite 1258 pass / 0 fail, `bunx tsc --n
 **BEFORE-NUMBER (measured on this repo, 1258 tests, bun 1.3.12):** one oracle call = **11.4s**
 (median of 3, spread 0.2s). Fixed floor per run, baseline + one per-turn verdict per turn, *excluding*
 the final-state guard, its restore verification, and every repair candidate:
-1 turn = 2 calls ≈ 22.8s · 3 turns = 4 calls ≈ 45.5s · 6 turns = 7 calls ≈ 79.7s.
+1 turn = 2 calls ≈ 22.8s · 3 turns = 4 calls ≈ 45.5s · 6 turns = 7 calls ≈ 79.7s. An *unsolved* run pays
+2 more calls (final-state guard + its restore verification), so the same rows are 4/6/9 calls
+≈ 45.5s/68.3s/102.5s — the script prints both bounds.
 So a 6-turn run burns **~80s of oracle floor** before a single repair candidate is tried — and each
 repair candidate adds another full 11.4s. Reproduce: `bun run scripts/oracle-cost-report.ts`
 (model-free), or `bun scripts/oracle-cost-report.ts --dogfood` for the measured by-call-site split.
@@ -719,6 +721,9 @@ the realistic one for a hard task. Caveat, stated honestly: n=1 task, and this r
 watchdog (prompt 11271 tok > 8192 max → abstain; then 6.1 tok/s → model reload), so model wall-clock
 here is not representative — but oracle seconds are `bun test` subprocess time and are unaffected by
 that. E6-T5's after-number must be compared against **759.0s / 31 calls** on this same task.
+The dogfood harness resets the counters before each task and prints the table **per task**, so the
+number means the same thing at any `DOGFOOD_LIMIT` — an after-number taken at a different limit is
+still comparable.
 
 ---
 

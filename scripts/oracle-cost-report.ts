@@ -17,7 +17,9 @@
 //   bun scripts/oracle-cost-report.ts --dogfood
 //       Runs the real smallcode-on-own-history harness (scripts/dogfood-history.ts)
 //       with the agent enabled, and reports the MEASURED call/time split by call
-//       site. Needs a reachable model. This is the authoritative number.
+//       site. Needs a reachable model. This is the authoritative number. The
+//       table is emitted PER TASK (counters reset before each), so the number is
+//       comparable regardless of DOGFOOD_LIMIT.
 //
 // Env: ORACLE_COST_SAMPLES (default 3), ORACLE_COST_REPO (default this repo),
 //      plus DOGFOOD_LIMIT / SMALLCODE_MODEL passed through in --dogfood mode.
@@ -79,10 +81,15 @@ function main(): number {
   // are the variable term and the hypothesised dominant cost.
   console.log("[oracle-cost] projected per-run cost (fixed floor, before any repair candidates):");
   for (const turns of [1, 3, 6]) {
-    const calls = 1 + turns; // baseline + one per-turn verdict per turn
+    // baseline + one per-turn verdict per turn. An unsolved run additionally
+    // pays the final-state guard and its restore verification (2 more calls),
+    // so both bounds are printed rather than only the optimistic one.
+    const calls = 1 + turns;
+    const withGuard = calls + 2;
     console.log(
-      `[oracle-cost]   ${turns} turn(s): ${calls} call(s) ≈ ${((calls * unit) / 1000).toFixed(1)}s ` +
-        "(excludes final-guard, restore-verify, and every repair candidate)",
+      `[oracle-cost]   ${turns} turn(s): ${calls} call(s) ≈ ${((calls * unit) / 1000).toFixed(1)}s solved, ` +
+        `${withGuard} call(s) ≈ ${((withGuard * unit) / 1000).toFixed(1)}s unsolved (guard + restore-verify). ` +
+        "Excludes every repair candidate.",
     );
   }
   console.log(
