@@ -3,6 +3,7 @@ import { repoSubprocessEnv } from "../util/subprocess-env.ts";
 import { computeStaticConfidence, type StaticConfidence } from "./confidence.ts";
 import { type OracleCallSite, recordOracleCall } from "./oracle-cost.ts";
 import { extractFirstFailure, type FailureDiagnostic } from "./failure-extract.ts";
+import { defaultFingerprintDeps, repoFingerprint } from "./fingerprint.ts";
 import { runChecker } from "./runner.ts";
 import type { CheckerConfig, CheckResult } from "./types.ts";
 
@@ -244,14 +245,28 @@ export interface BunTestRun {
    * reads a false "0 red" that silently disables the regression guards.
    */
   fullOutput: string;
+  /**
+   * `true` only when the suite ran to completion. A run killed by the 120s
+   * spawn timeout produces PARTIAL output — its red count and failing ids are
+   * a prefix of the truth, not the truth — so it must never be memoized by the
+   * E6-T3 cache. Optional so an injected test runner defaults to complete.
+   */
+  complete?: boolean;
 }
+
+/**
+ * The exact suite command. Shared with the fingerprint, which hashes it: a
+ * different command is a different question, so its answers must not collide
+ * in the cache.
+ */
+const TEST_COMMAND = ["bun", "test"] as const;
 
 function runBunTestImpl(repoRoot: string): BunTestRun {
   const start = Date.now();
   // Clean env: never leak the harness's SMALLCODE_* control vars into the
   // repo-under-repair's oracle (they poison a smallcode-on-smallcode run —
   // SMALLCODE_BASE_URL/MODEL flip smallcode's own config tests red).
-  const proc = Bun.spawnSync(["bun", "test"], {
+  const proc = Bun.spawnSync([...TEST_COMMAND], {
     cwd: repoRoot,
     timeout: 120_000,
     env: repoSubprocessEnv(),
@@ -264,6 +279,10 @@ function runBunTestImpl(repoRoot: string): BunTestRun {
   return {
     state,
     fullOutput: out,
+    // Bun sets `signalCode` when it KILLS the child — which is what the 120s
+    // `timeout` above does. `exitCode` is null in that case and coerces to 1,
+    // so exit status alone cannot tell a timeout from an honest red suite.
+    complete: proc.signalCode == null,
     result: {
       kind: "test",
       name: "bun-test",
@@ -289,14 +308,63 @@ function runBunTestImpl(repoRoot: string): BunTestRun {
 let bunTestRunner: (repoRoot: string) => BunTestRun = runBunTestImpl;
 
 /**
+ * E6-T3 no-change skip. Process-local, never persisted: a memo that outlived
+ * the process would have to prove the repo was untouched by anything else in
+ * between, which it cannot.
+ *
+ * What is memoized is the RAW RUN, not a finished verdict. The verdict is a
+ * function of (disk state × `opts.baseline`), so a verdict memo keyed on the
+ * fingerprint alone could hand back an answer shaped by a STALE baseline —
+ * a fresh staleness class, which is exactly what E6 exists to eliminate.
+ * Re-deriving the verdict from the cached output is both cheap (string
+ * parsing) and provably baseline-correct, while the expensive part (the suite
+ * spawn) is still skipped.
+ */
+const oracleCache = new Map<string, BunTestRun>();
+
+/**
+ * Cache key for this repo state, or `null` for "never cache, always spawn".
+ * `null` covers the flag being off AND every fail-closed case in
+ * `repoFingerprint` (git failure, untracked non-ignored file, unreadable file,
+ * tracked symlink) — one return value, so no path can accidentally cache under
+ * an empty key.
+ */
+function oracleCacheKey(repoRoot: string): string | null {
+  if (!env.oracleCache) return null;
+  const subprocessEnv = repoSubprocessEnv();
+  return repoFingerprint(repoRoot, defaultFingerprintDeps(subprocessEnv, TEST_COMMAND));
+}
+
+/** Test-only seam: drop every memoized run so suites cannot leak state into each other. */
+export function __resetOracleCacheForTests(): void {
+  oracleCache.clear();
+}
+
+/**
  * Every real `bun test` spawn funnels through here, so this is the one place
  * cost is accounted (E6-T1). Injected runners are counted too — a test seam
  * that reported zero cost would make the measuring stick lie about its own
  * coverage. Accounting only: the verdict returned is untouched.
  */
 function runBunTest(repoRoot: string, callSite: OracleCallSite = "other"): BunTestRun {
+  const key = oracleCacheKey(repoRoot);
+  if (key !== null) {
+    const hit = oracleCache.get(key);
+    if (hit !== undefined) {
+      // Loud by contract: a cache that silently skips test runs is the DX
+      // failure mode this feature is most likely to be blamed for.
+      console.log("oracle: cached (unchanged repo state)");
+      // No `recordOracleCall`: the skipped spawn is the entire point, and the
+      // E6-T1 cost report must show the saving rather than hide it.
+      return hit;
+    }
+  }
   const run = bunTestRunner(repoRoot);
   recordOracleCall(callSite, run.result.durationMs);
+  // Store only COMPLETED full runs. A timed-out run's output is a PREFIX of
+  // the truth — memoizing it would pin a false red count to this repo state
+  // for the rest of the process.
+  if (key !== null && run.complete !== false) oracleCache.set(key, run);
   return run;
 }
 
