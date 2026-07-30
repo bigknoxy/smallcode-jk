@@ -699,6 +699,27 @@ So a 6-turn run burns **~80s of oracle floor** before a single repair candidate 
 repair candidate adds another full 11.4s. Reproduce: `bun run scripts/oracle-cost-report.ts`
 (model-free), or `bun scripts/oracle-cost-report.ts --dogfood` for the measured by-call-site split.
 
+**MEASURED by-call-site split** (`DOGFOOD_LIMIT=1 bun scripts/oracle-cost-report.ts --dogfood`,
+one real re-introduced bug from this repo's own history, qwen2.5-coder:7b, 2026-07-30):
+
+| call site | calls | seconds | share |
+|---|---|---|---|
+| `repair-candidate` | 23 | 674.0s | **89%** |
+| `per-turn` | 6 | 64.8s | 9% |
+| `baseline` | 1 | 10.7s | 1% |
+| `final-guard` | 1 | 9.5s | 1% |
+| **total** | **31** | **759.0s** | |
+
+**This confirms the E6 hypothesis and sets the epic's target.** A SINGLE task burned **12.6 minutes**
+of `bun test`, and 89% of it went to operator-mutation repair candidates — 23 full-suite runs of the
+same 1258 tests, differing only by one flipped operator in one function. That is the cost E6-T3's
+verdict cache exists to remove; the per-turn/baseline/guard calls together are barely a tenth of the
+bill. Note the run was *unsolved* (`solved 0/1`), so the whole 759s bought nothing — worst case, but
+the realistic one for a hard task. Caveat, stated honestly: n=1 task, and this run also tripped the
+watchdog (prompt 11271 tok > 8192 max → abstain; then 6.1 tok/s → model reload), so model wall-clock
+here is not representative — but oracle seconds are `bun test` subprocess time and are unaffected by
+that. E6-T5's after-number must be compared against **759.0s / 31 calls** on this same task.
+
 ---
 
 ### E6-T2 — `repoFingerprint()` — fail-closed repo-state hash  ·  P0 · M · Dep: E6-T1 · Status: ☐ TODO
