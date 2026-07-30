@@ -154,7 +154,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☑ DONE |
 | E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☑ DONE |
 | E6-T1 ([#174](https://github.com/bigknoxy/smallcode-jk/issues/174)) | Cost | Oracle cost measuring stick (before-number) | P0 | S | — | ✅ DONE |
-| E6-T2 ([#175](https://github.com/bigknoxy/smallcode-jk/issues/175)) | Cost | `repoFingerprint()` — fail-closed repo-state hash | P0 | M | E6-T1 | ☐ TODO |
+| E6-T2 ([#175](https://github.com/bigknoxy/smallcode-jk/issues/175)) | Cost | `repoFingerprint()` — fail-closed repo-state hash | P0 | M | E6-T1 | ✅ DONE |
 | E6-T3 ([#176](https://github.com/bigknoxy/smallcode-jk/issues/176)) | Cost | No-change skip + full-verdict memo in oracle | P0 | M | E6-T2 | ☐ TODO |
 | E6-T4 ([#177](https://github.com/bigknoxy/smallcode-jk/issues/177)) | Cost | Adversarial cache-safety tests + fake-green re-audit | P0 | M | E6-T3 | ☐ TODO |
 | E6-T5 ([#178](https://github.com/bigknoxy/smallcode-jk/issues/178)) | Cost | A/B: pass@1 unchanged + wall-clock down → default-ON | P0 | M | E6-T4 | ☐ TODO |
@@ -727,7 +727,7 @@ still comparable.
 
 ---
 
-### E6-T2 — `repoFingerprint()` — fail-closed repo-state hash  ·  P0 · M · Dep: E6-T1 · Status: ☐ TODO
+### E6-T2 — `repoFingerprint()` — fail-closed repo-state hash  ·  P0 · M · Dep: E6-T1 · Status: ✅ DONE
 **Goal:** A pure function that answers "is the repo in EXACTLY the state I last tested?" and that
 returns `null` — meaning *never cache* — the moment it is unsure.
 
@@ -760,7 +760,11 @@ bun test tests/oracle-fingerprint.test.ts && bun test && bunx tsc --noEmit
 ```
 **Docs-to-update:** `docs/llms.html` module map (new module `src/verify/fingerprint.ts`).
 **Rollback:** new file + new test; delete both. Nothing imports it yet.
-**Result:** _(pending)_
+**Result:** ✅ DONE. `src/verify/fingerprint.ts` — sha256 over tracked-file **mode + bytes** (sorted path order), optional `bunfig.toml` / `bun.lock` / `bun.lockb`, `Bun.version`, test command, and key-sorted sanitized env. Every field length-prefixed (`label:byteLength\n`) so file content cannot forge another entry's framing. Deps injected (`FingerprintDeps`), so all 26 tests in `tests/oracle-fingerprint.test.ts` are model-free and disk-free except one real-git block. `null` (= **never cache**) on: git failure, non-git dir, unparseable index line, unreadable tracked file, present-but-unreadable optional file, untracked non-ignored file, or a tracked **symlink**. 1284/0, `tsc` clean.
+
+Two review findings fixed before merge, both false-"unchanged" paths that content-only hashing misses: (1) **file mode** — `chmod +x` on a tracked script is a verdict-changing edit with identical bytes, so mode now comes from `git ls-files -s -z` and is hashed; (2) **symlinks** — git's blob is the target PATH but `readFileSync` dereferences it, so a link repointed at a same-content file would look unchanged → mode `120000` fails closed. Six mutants killed (untracked guard, length prefix, file sort, absent-optional≠empty, symlink guard, mode-not-hashed).
+
+**Honest limit for E6-T3:** any untracked non-ignored file yields `null`, so a scratch fixture repo or a dirty worktree simply never caches — correct, but it means the cache's hit rate in dogfood runs depends on worktree cleanliness, not just on the optimization.
 
 ---
 
