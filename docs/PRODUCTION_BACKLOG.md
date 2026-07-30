@@ -155,7 +155,7 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☑ DONE |
 | E6-T1 ([#174](https://github.com/bigknoxy/smallcode-jk/issues/174)) | Cost | Oracle cost measuring stick (before-number) | P0 | S | — | ✅ DONE |
 | E6-T2 ([#175](https://github.com/bigknoxy/smallcode-jk/issues/175)) | Cost | `repoFingerprint()` — fail-closed repo-state hash | P0 | M | E6-T1 | ✅ DONE |
-| E6-T3 ([#176](https://github.com/bigknoxy/smallcode-jk/issues/176)) | Cost | No-change skip + full-verdict memo in oracle | P0 | M | E6-T2 | ☐ TODO |
+| E6-T3 ([#176](https://github.com/bigknoxy/smallcode-jk/issues/176)) | Cost | No-change skip + full-verdict memo in oracle | P0 | M | E6-T2 | ✅ DONE |
 | E6-T4 ([#177](https://github.com/bigknoxy/smallcode-jk/issues/177)) | Cost | Adversarial cache-safety tests + fake-green re-audit | P0 | M | E6-T3 | ☐ TODO |
 | E6-T5 ([#178](https://github.com/bigknoxy/smallcode-jk/issues/178)) | Cost | A/B: pass@1 unchanged + wall-clock down → default-ON | P0 | M | E6-T4 | ☐ TODO |
 | E6-T6 ([#179](https://github.com/bigknoxy/smallcode-jk/issues/179)) | Cost | `--max-concurrency` probe (ship only if it wins) | P2 | S | E6-T1 | ☐ TODO |
@@ -768,7 +768,7 @@ Two review findings fixed before merge, both false-"unchanged" paths that conten
 
 ---
 
-### E6-T3 — No-change skip + full-verdict memo  ·  P0 · M · Dep: E6-T2 · Status: ☐ TODO
+### E6-T3 — No-change skip + full-verdict memo  ·  P0 · M · Dep: E6-T2 · Status: ✅ DONE
 **Goal:** Never run the same full suite twice on the same repo state.
 
 **Files**
@@ -808,7 +808,60 @@ bun test tests/oracle-cache.test.ts && bun test && bunx tsc --noEmit && bun run 
 **Docs-to-update:** `README.md` + `docs/llms.html` (new flag — `scripts/check-docs-sync.ts` will
 fail the build if you skip this), `docs/architecture.html` oracle diagram + footer date.
 **Rollback:** flag defaults OFF; revert the memo block.
-**Result:** _(pending)_
+**Result:** SHIPPED. `SMALLCODE_ORACLE_CACHE` (default OFF) added to `ENV_REGISTRY` + `env.oracleCache`.
+The memo lives in `runBunTest()` — the single choke point every real spawn already funnels through, so
+BOTH `captureTestBaseline` and `runTieredOracle` benefit and no call site outside `oracle.ts` learns
+about it. `oracleCacheKey()` returns `null` for the flag being off AND for every fail-closed fingerprint
+case, so exactly one code path can decide "never cache". 12 tests in `tests/oracle-cache.test.ts` over
+REAL temp git repos with a faked test runner; suite 1296/0, tsc clean, docs-sync green.
+
+**Deliberate deviation from step 2 of this card:** what is memoized is the raw `BunTestRun`, NOT the
+finished verdict. A verdict is a function of (disk state × `opts.baseline`) — `feedback`, `newFailures`,
+`regressed`, `baselineFailures` all come from the baseline — so a verdict memo keyed on the fingerprint
+alone would return an answer shaped by a STALE baseline. That is a NEW staleness class, i.e. precisely
+what E6 exists to eliminate. Re-deriving the verdict from the cached output is pure string parsing and
+provably baseline-correct, while the expensive part (the suite spawn) is still skipped, so the card's
+stated Goal ("never run the same full suite twice on the same repo state") is met in full. A test pins
+this: the same cached run yields different, correct verdicts for two different baselines with `runs === 1`.
+
+**Gap found while implementing step 3:** there was NO timeout detection anywhere in `oracle.ts` — the
+120s `Bun.spawnSync` timeout leaves `exitCode` null, which coerced to `1` and was indistinguishable from
+an honest red suite. Added `BunTestRun.complete` from `proc.signalCode == null` (Bun sets it when it
+KILLS the child) and gated storage on it, since a killed run's output is a PREFIX of the truth.
+
+**Honest coverage gap:** the `proc.signalCode` read itself is only reachable through a real 120s timeout,
+so no test exercises it — mutating it to `complete: true` survives the suite. The *consumer* of the
+signal IS covered (an injected incomplete run is never stored). Verified by inspection only.
+
+Mutants killed (6): store-incomplete-runs, bill-cache-hits-as-oracle-calls, drop-the-DX-log-line,
+ignore-the-flag, constant-cache-key (4 tests), plus the E6-T2 pair already killed. `ENV_REGISTRY`
+count guard in `tests/config-env.test.ts` bumped 26 → 27 (it fired, as designed).
+
+Also fixed pre-existing doc drift found en route: `docs/architecture.html` still described "solved" as
+BASELINE-RELATIVE ("zero *new* failures"), which v1.2.2 replaced with fully-green because the relative
+bar produced false solves. Rewritten to match the code.
+
+**Code review (PR #186) — 2 findings, both fixed before merge:**
+1. *Critical — cross-directory collision.* The key was the fingerprint alone, and `repoFingerprint`
+   hashes CONTENT, not location. The eval harness runs many trials from one fixture template in a
+   single process, so byte-identical repos in different tmpdirs hash the same and would have shared one
+   memo entry; any test reading `process.cwd()`, `import.meta.dir`, or an absolute path would then have
+   been handed another directory's verdict — the exact stale-signal failure E6 exists to prevent. Key is
+   now `` `${realpathSync(repoRoot)}\0${fingerprint}` `` (realpath so `/tmp` → `/private/tmp` stays one
+   entry; NUL separator so the fields cannot re-split). Test: a `cp -R` twin at another path MISSES the
+   original's entry and then memoizes on its own key.
+2. *Important — unbounded map.* Every entry retains a full un-truncated suite output and one eval run
+   walks hundreds of distinct repo states in a single process. Capped at `ORACLE_CACHE_MAX = 32` with
+   LRU eviction (a hit re-inserts to refresh recency; insertion order does the rest, evicting oldest-first
+   BEFORE insert so the cap is never exceeded). Test: 33 distinct states ⇒ the first is gone, the most
+   recent is still resident.
+
+Both fixes mutation-verified (fingerprint-only key ⇒ 1 fail; cap raised to 100000 ⇒ 1 fail). 14 tests,
+suite 1298/0, tsc clean, docs-sync green. Review also CONFIRMED as correct: the run-not-verdict design,
+`signalCode == null` as the completeness test (it catches OOM/any signal kill, not just the timeout), and
+the fail-closed `null` wiring. It noted `run_tests`/`run_command` in `src/agent/tools.ts` spawn `bun test`
+directly and bypass the memo — correct as-is: those are model-facing informational tools, not verdict
+producers, and only `runBunTest` feeds a verdict.
 
 ---
 

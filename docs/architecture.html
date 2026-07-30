@@ -544,7 +544,10 @@ flowchart TD
     EXECTOOLS --> IMPORTGATE{SMALLCODE_IMPORT_GATE\nedit added an import that\ndoes not resolve?\npackage.json deps + fs + Bun.resolveSync}
     IMPORTGATE -- yes --> IMPORTREVERT[revert file to pre-edit content\nfeed IMPORT ERROR — does not resolve\navailable deps: …]
     IMPORTREVERT --> ORACLE
-    IMPORTGATE -- "no / gate off" --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
+    IMPORTGATE -- "no / gate off" --> FPRINT{memoized under key = repo path + repoFingerprint?\nSMALLCODE_ORACLE_CACHE, default off\nnull fingerprint / incomplete run = never cached\nLRU, 32 entries, process-local}
+    FPRINT -- "hit: same repo state" --> CACHED[oracle: cached unchanged repo state\nreuse the memoized RUN\nverdict re-derived vs CURRENT baseline]
+    FPRINT -- "miss / off / null" --> ORACLE[runTieredOracle\nbun test — deterministic pass oracle\nextract FailureDiagnostic on failure]
+    CACHED --> REGRESSED
     ORACLE --> REGRESSED{verdict.regressed?\nnewFailures present OR\ntotal red > baseline red OR\nR4: introduced load/compile error\n(SMALLCODE_VALIDATE_EDIT, default on)}
     REGRESSED -- yes --> REVERT[revertFiles\nrestore pre-turn content\nvia ApplyResult.effectivePath\n+ originalContent\nfold stall signature onto prior turn]
     REVERT --> WARNMODEL[feed revert notice to next turn\nYour edit was REVERTED — broke\ntests that were passing before]
@@ -578,6 +581,8 @@ flowchart TD
     style DONE fill:#14532d,stroke:#16a34a,color:#bbf7d0
     style MAXED fill:#450a0a,stroke:#dc2626,color:#fca5a5
     style ORACLE fill:#451a03,stroke:#d97706,color:#fcd34d
+    style FPRINT fill:#1e293b,stroke:#64748b,color:#e2e8f0
+    style CACHED fill:#1e293b,stroke:#64748b,color:#e2e8f0
     style REDRAFT fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
     style ANSWERNOW fill:#2d1a4a,stroke:#9333ea,color:#e9d5ff
     style THINKONLY fill:#1a2d1a,stroke:#16a34a,color:#bbf7d0
@@ -1370,16 +1375,39 @@ flowchart TD
           </p>
         </div>
         <div class="decision">
-          <strong>Why test-oracle early-stop (baseline-relative)?</strong>
+          <strong>Why test-oracle early-stop, and why "solved" is FULLY green?</strong>
           <p>
-            "Solved" = zero <em>new</em> failures vs a baseline captured before the loop starts,
-            AND ≥1 passing test. This handles repos with pre-existing unrelated failures:
-            those failures appear in the baseline set and are excluded from the "solved" check,
-            so the agent is not penalised for failures it did not introduce.
-            On fresh single-file benchmark repos (no pre-existing failures) the baseline set is
-            empty and behaviour is identical to the original whole-suite-green check.
-            Breaking immediately: (1) locks the pass; (2) stops burning turns;
-            (3) handles "should-not-edit" tasks — if no new failures exist on turn 1, loop exits.
+            "Solved" = the whole suite is green (<code>currentRed === 0</code>) AND ≥1 test passed.
+            It was baseline-relative once — "no <em>new</em> failures vs the pre-loop baseline" — and that
+            produced false solves on repos with pre-existing red, so since v1.2.2 the baseline no longer
+            relaxes the bar. The baseline is still captured, but it only <em>shapes feedback</em>: it separates
+            failures the agent newly introduced (<code>newFailures</code>, and the red-count regression guard)
+            from tests that were already red, so the model gets a focused next-turn message instead of the whole
+            suite dump. Breaking immediately on green: (1) locks the pass; (2) stops burning turns;
+            (3) handles "should-not-edit" tasks — a green turn 1 exits the loop.
+          </p>
+        </div>
+        <div class="decision">
+          <strong>Why cache the oracle RUN and not the oracle VERDICT? (E6-T3)</strong>
+          <p>
+            A measured run spends ~89% of its oracle wall-clock re-running the <em>whole</em> suite on repo
+            states it has already run — repair-candidate passes re-verify the same tree after reverting a
+            candidate, and the final-state guard re-runs a suite the last turn just ran. <code>SMALLCODE_ORACLE_CACHE</code>
+            (default OFF) keys each spawn by <code>repoFingerprint()</code> and returns the memoized run on an
+            exact repeat, printing <code>oracle: cached (unchanged repo state)</code> — a cache that silently skips
+            test runs is the DX failure mode. What is memoized is the raw <em>run</em>, never a finished verdict: a
+            verdict is a function of (disk state × baseline), so a verdict memo keyed on the fingerprint alone
+            could hand back an answer shaped by a <em>stale baseline</em> — a fresh staleness class, which is exactly
+            what E6 exists to eliminate. Re-deriving the verdict from cached output is pure string parsing and
+            provably baseline-correct, while the expensive part is still skipped. Fails closed everywhere: a
+            <code>null</code> fingerprint always spawns and never stores, and a run killed by the 120s timeout is
+            never stored — its output is a <em>prefix</em> of the truth, not the truth. The key is
+            (resolved repo <em>path</em>, fingerprint): the fingerprint hashes content, not location, so two
+            directories holding byte-identical repos — routine in the eval harness, which runs many trials from
+            one fixture template in a single process — would otherwise share one entry, and a test reading
+            <code>process.cwd()</code> or an absolute path would get another directory's verdict. The map is
+            capped at 32 entries with LRU eviction, since each entry retains a full suite output and one eval
+            run walks hundreds of distinct repo states.
           </p>
         </div>
         <div class="decision">
