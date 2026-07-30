@@ -638,7 +638,7 @@ export async function runFinalStateGuard(
   // No test signal at baseline → nothing to compare a "worse" against.
   if (!testBaseline.hadAnyTests) return false;
 
-  const finalState = captureTestBaseline(state.repoRoot);
+  const finalState = captureTestBaseline(state.repoRoot, "final-guard");
   const { worse, newFailures } = finalStateWorseThanBaseline(testBaseline, finalState);
   if (!worse) return false;
 
@@ -656,7 +656,7 @@ export async function runFinalStateGuard(
   }
 
   const restoreVerified = revertRes.verified && createdNotDeleted.length === 0;
-  const restored = captureTestBaseline(state.repoRoot);
+  const restored = captureTestBaseline(state.repoRoot, "restore-verify");
   console.error(
     `[final-state-guard] reverted ${originals.size + created.length} file(s): run ended UNSOLVED and worse than baseline ` +
       `(red ${testBaseline.redCount}→${finalState.redCount}${newFailures.length ? `, new failures: ${newFailures.join(", ")}` : ""}). ` +
@@ -769,7 +769,7 @@ export async function runLoop(
   // pre-existing unrelated failures don't prevent early-stop after the task
   // is solved.  On fresh single-file benchmark repos (no pre-existing failures)
   // the baseline set is empty and behaviour is identical to before this fix.
-  const testBaseline = captureTestBaseline(state.repoRoot);
+  const testBaseline = captureTestBaseline(state.repoRoot, "baseline");
 
   // Target-lock fix-mode: true when the baseline already had a red test — the
   // drift-prone regime (bug-fix with a failing test) dogfooding surfaced. A
@@ -1228,7 +1228,7 @@ export async function runLoop(
     // flying blind. Outcome drives early-stop below.
     let verdict: Awaited<ReturnType<typeof runTieredOracle>> | undefined;
     try {
-      verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline });
+      verdict = await runTieredOracle(state.repoRoot, { baseline: testBaseline, callSite: "per-turn" });
       // Oracle-free safety: a no-test "clean" turn whose static confidence is
       // "broken" means THIS edit does not parse — accepting it would leave the
       // repo non-compiling even though no test flagged it. escalateBrokenClean

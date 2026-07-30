@@ -23,6 +23,7 @@ import { contextBudgetFor } from "../src/models/context-budget.ts";
 import { defaultRegistry } from "../src/models/registry.ts";
 import { createProvider } from "../src/provider/factory.ts";
 import { ReasoningHandler } from "../src/reasoning/handler.ts";
+import { formatOracleCostReport, resetOracleCostStats } from "../src/verify/oracle-cost.ts";
 import {
   classifyCommitFiles,
   type DogfoodResult,
@@ -112,6 +113,12 @@ async function main(): Promise<void> {
       const agentConfig: AgentConfig = { repoRoot: wt, modelId: MODEL, maxTurns: MAX_TURNS, bestOfN: 1, requireApproval: false };
       const task = `A test is failing after a regression. Fix the source so the failing test passes: ${test.join(", ")}. Do not edit the test.`;
       const state = createState(agentConfig, task);
+      // E6-T1: zero the oracle counters so the table printed below is the cost
+      // of THIS task alone. Without the reset the counters accumulate across
+      // commits and the same header silently means "sum of N tasks" at
+      // DOGFOOD_LIMIT>1 — which would make an E6 before/after comparison
+      // depend on the limit rather than on the optimization.
+      resetOracleCostStats();
       const repoMap = await walkRepo({ root: wt }, Date.now());
       const getContext = (q: string) => buildContext(repoMap, q, { repoRoot: wt, tokenBudget: contextBudgetFor(profile) });
       const final = await runLoop(state, getStatePath(agentConfig), { provider, profile, reasoningHandler, config: agentConfig }, getContext);
@@ -120,6 +127,10 @@ async function main(): Promise<void> {
       const rescued = final.turns.some((t) => t.mutationRepair !== undefined);
       results.push({ commit, label, bugReproduced: true, solved, rescued: solved && rescued });
       console.log(`  ${solved ? "PASS" : "fail"} ${commit} (${label})`);
+      // Per-task oracle cost — the E6 measuring stick. Printed here, not at the
+      // end, so the number is per-task at any DOGFOOD_LIMIT.
+      const taskCost = formatOracleCostReport();
+      if (taskCost) console.log(`${taskCost}\n[oracle-cost]   (task ${commit} — ${label})`);
     } finally {
       sh(["git", "worktree", "remove", "--force", wt], ROOT);
     }

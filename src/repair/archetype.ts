@@ -74,7 +74,10 @@ export async function runArchetypeRepair(
       for (const c of candidates) {
         attempts++;
         await writeFileFn(targetRel, c.candidate);
-        const verdict = await runOracle(state.repoRoot, { baseline: testBaseline });
+        const verdict = await runOracle(state.repoRoot, {
+          baseline: testBaseline,
+          callSite: "repair-candidate",
+        });
         if (verdict.outcome === "solved") {
           // Leave the winning candidate on disk — it IS the fix.
           return { file: targetRel, label: c.label, line: c.line, attempts };
