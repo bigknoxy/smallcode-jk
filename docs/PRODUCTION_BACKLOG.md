@@ -153,6 +153,13 @@ Update the `Status` column as you work. `Dep` = must be DONE first.
 | E5-T1 | Discipline | Mechanism attribution in every run/eval report | P1 | S | — | ☑ DONE |
 | E5-T2 | Discipline | Position target user + honest limits in docs | P1 | S | — | ☑ DONE |
 | E5-T3 | Discipline | Docs-drift CI check script | P2 | M | — | ☑ DONE |
+| E6-T1 ([#174](https://github.com/bigknoxy/smallcode-jk/issues/174)) | Cost | Oracle cost measuring stick (before-number) | P0 | S | — | ☐ TODO |
+| E6-T2 ([#175](https://github.com/bigknoxy/smallcode-jk/issues/175)) | Cost | `repoFingerprint()` — fail-closed repo-state hash | P0 | M | E6-T1 | ☐ TODO |
+| E6-T3 ([#176](https://github.com/bigknoxy/smallcode-jk/issues/176)) | Cost | No-change skip + full-verdict memo in oracle | P0 | M | E6-T2 | ☐ TODO |
+| E6-T4 ([#177](https://github.com/bigknoxy/smallcode-jk/issues/177)) | Cost | Adversarial cache-safety tests + fake-green re-audit | P0 | M | E6-T3 | ☐ TODO |
+| E6-T5 ([#178](https://github.com/bigknoxy/smallcode-jk/issues/178)) | Cost | A/B: pass@1 unchanged + wall-clock down → default-ON | P0 | M | E6-T4 | ☐ TODO |
+| E6-T6 ([#179](https://github.com/bigknoxy/smallcode-jk/issues/179)) | Cost | `--max-concurrency` probe (ship only if it wins) | P2 | S | E6-T1 | ☐ TODO |
+| E6-T7 ([#180](https://github.com/bigknoxy/smallcode-jk/issues/180)) | Cost | Docs sync for the cache flag + oracle diagram | P1 | S | E6-T3 | ☐ TODO |
 
 ---
 
@@ -567,7 +574,328 @@ diffs. Start advisory (warn), then enforce.
 
 ---
 
-## 11. Sequencing summary (do in this order)
+## 11. EPIC E6 — Oracle cost (P0, the dogfood blocker)
+
+> Tracking issue: [#173](https://github.com/bigknoxy/smallcode-jk/issues/173). Each task card below has a
+> matching GitHub issue (#174–#180) written to be self-contained for an agent with no prior context.
+
+**Why this epic exists.** `src/verify/oracle.ts` spawns the WHOLE `bun test` suite on every
+oracle call. Oracle is called per-turn, at baseline, at the final-state guard, at revert-verify,
+and **once per candidate inside every deterministic repair archetype**. On smallcode's own repo
+that is 1250 tests × (turns + repair candidates). This is a harness cost, not a model limit, and
+it is the main thing making real-repo dogfood painful.
+
+### The rejected design (read this before proposing anything)
+
+The obvious fix — run only the tests reachable from the edited files — was reviewed and
+**rejected**. The argument, in one line:
+
+> **Static reachability is evidence of INCLUSION, never proof of EXCLUSION.**
+
+A reverse import graph cannot prove a Bun test is *unable* to observe an edit. It misses:
+runtime `import(variable)`/computed `require`; tests that read fixtures/config/snapshots off
+disk; tests that spawn the CLI as a subprocess (importing nothing); `package.json`
+`exports`/`imports` aliasing; preload/setup files; codegen and macros; shared global state and
+test ordering; and any edit to `bunfig.toml` or the test root itself.
+
+Consequence: a subset run with fewer reds reads `regressed = false`, and the **per-turn revert
+KEEPS a regression it cannot see**. That is the same shape as the two credibility bugs this repo
+already ate — the 4000-char truncated `redCount` parse (false "0 red" silently disabled BOTH
+guards) and the `SMALLCODE_*` env leak into the oracle subprocess. Do not revive subset
+selection without a mechanism that can *prove* exclusion.
+
+### THE INVARIANT (this epic's whole thesis)
+
+> **No partial signal may ever decide whether an edit is kept.**
+
+`solved`, `regressed`, per-turn preserve/revert, `finalStateWorseThanBaseline`, restore
+verification, and repair acceptance all consume a FULL-suite result for that EXACT disk state.
+
+E6 therefore does not run *less*. It **never runs the same full suite twice on the same repo
+state.** Every cached verdict is a full-suite verdict, so there is zero new fake-green surface.
+
+### Verified environment facts (do not re-derive)
+- `bun --version` = **1.3.12**. `package.json` declares `@types/bun ^1.3.14`; it does NOT pin the runtime.
+- `bunfig.toml:1-2` sets the test root to `tests`.
+- `bun test <patterns>` positional args are *filters*, not exact paths, and each path must be a
+  separate argv element. (Recorded for completeness — E6 does not use them.)
+
+### Blast radius (verified line refs — check they still hold before editing)
+- `src/verify/oracle.ts` — `TestBaseline` L90-107, `captureTestBaseline` L194-207,
+  `finalStateWorseThanBaseline` L223-230, `runBunTestImpl` L245-271, test seam L285-293,
+  `TieredOracleOptions` L296-307, `runTieredOracle` L309-390.
+- `src/agent/loop.ts` — baseline L768-780, per-turn oracle L1224-1239, revert L1255-1299,
+  final-state guard L630-675, repair wrappers L434-610.
+- `src/repair/archetype.ts` — `runArchetypeRepair` L57-101, accept path L76-80.
+- Consumers: `src/cli/commands/run.ts` L572, L594, L614, L645, L756; `scripts/probe-confidence.ts` L77.
+- `src/config/env.ts` — `ENV_REGISTRY` needs the new flag.
+
+### Architecture (where the cache sits)
+
+```
+src/config/env.ts (SMALLCODE_ORACLE_CACHE)
+        |
+        v
+src/verify/fingerprint.ts   <-- NEW
+   repoFingerprint(repoRoot) -> string | null   (null = NEVER cache)
+        |
+        v
+src/verify/oracle.ts
+   runTieredOracle  ---- memo(fingerprint -> OracleVerdict) ----+
+        |                                                      |
+        +--> every consumer keeps FULL-suite semantics <--------+
+```
+
+The cache sits UNDER `runTieredOracle`. No call site changes its contract. That is the entire
+safety argument — do not push cache awareness up into `loop.ts` or `archetype.ts`.
+
+### Test-plan artifact
+Full 13-row test matrix + test diagram:
+`~/.gstack/projects/bigknoxy-smallcode-jk/E6-oracle-cache-test-plan.md`
+
+---
+
+### E6-T1 — Oracle cost measuring stick (the before-number)  ·  P0 · S · Status: ☐ TODO
+**Goal:** No optimization without a before-number. Nothing else in E6 starts until this lands.
+
+**Files**
+- `src/verify/oracle.ts` — instrument `runBunTestImpl` (L245-271); it already computes `durationMs`.
+- New `scripts/oracle-cost-report.ts`.
+- `src/agent/loop.ts` — the run summary that already reports turns.
+
+**Steps**
+1. Add a process-local counter + accumulator recording every `runBunTestImpl` invocation:
+   call site tag (`baseline` / `per-turn` / `final-guard` / `restore-verify` / `repair-candidate`),
+   `durationMs`, and the resulting state. Keep it a plain module-local, no global mutation.
+2. Expose `getOracleCostStats()` returning `{ calls, totalMs, byCallSite }` and a `reset()`.
+3. Print the summary at the end of a `smallcode run` (behind normal verbose output, not gated).
+4. Write `scripts/oracle-cost-report.ts` that runs the existing dogfood harness
+   (see E3-T3, `scripts/` — the smallcode-on-own-history harness) and prints the table.
+5. Run it on smallcode's own repo. **Record the actual numbers in this card's `Result:` line.**
+
+**Acceptance criteria**
+- Report shows: total oracle calls, total oracle seconds, and the split by call site.
+- The `repair-candidate` row is broken out separately — that is the hypothesised dominant cost.
+- Instrumentation adds no behavior change: full `bun test` still green, verdicts byte-identical.
+
+**Verification**
+```bash
+bun test && bunx tsc --noEmit && bun run scripts/oracle-cost-report.ts
+```
+**Docs-to-update:** `docs/llms.html` module map (new script). Add `scripts/oracle-cost-report.ts`.
+**Rollback:** counters are additive; delete the module-local + the script.
+**Result:** _(pending)_
+
+---
+
+### E6-T2 — `repoFingerprint()` — fail-closed repo-state hash  ·  P0 · M · Dep: E6-T1 · Status: ☐ TODO
+**Goal:** A pure function that answers "is the repo in EXACTLY the state I last tested?" and that
+returns `null` — meaning *never cache* — the moment it is unsure.
+
+**Files**
+- New `src/verify/fingerprint.ts`.
+- New `tests/oracle-fingerprint.test.ts`.
+
+**Steps**
+1. Implement `repoFingerprint(repoRoot: string): string | null`. Hash, in a stable order:
+   - contents of every git-tracked file (use `git ls-files`; a file that fails to read ⇒ return `null`),
+   - the test command string,
+   - `bunfig.toml` contents (missing file = a fixed sentinel, not an error),
+   - the lockfile (`bun.lock` / `bun.lockb`),
+   - `Bun.version`,
+   - the sanitized env actually passed to the subprocess (`repoSubprocessEnv()` output, sorted).
+2. **Fail closed everywhere.** Any read error, any `git` failure, any untracked-file ambiguity ⇒
+   `null`. `null` must be impossible to confuse with a valid hash.
+3. Keep it pure and injectable — take an optional reader so tests do not touch disk.
+
+**Acceptance criteria**
+- Deterministic: two calls with no edit return the identical string.
+- Changes when ANY of these change: a source file, a test file, `bunfig.toml`, the lockfile, the
+  test command, the Bun version, the sanitized env.
+- Returns `null` on an unreadable file / `git` failure.
+- No dependency on `src/verify/oracle.ts` (so oracle can import it, not the reverse).
+
+**Verification**
+```bash
+bun test tests/oracle-fingerprint.test.ts && bun test && bunx tsc --noEmit
+```
+**Docs-to-update:** `docs/llms.html` module map (new module `src/verify/fingerprint.ts`).
+**Rollback:** new file + new test; delete both. Nothing imports it yet.
+**Result:** _(pending)_
+
+---
+
+### E6-T3 — No-change skip + full-verdict memo  ·  P0 · M · Dep: E6-T2 · Status: ☐ TODO
+**Goal:** Never run the same full suite twice on the same repo state.
+
+**Files**
+- `src/verify/oracle.ts` — `runTieredOracle` (L309-390).
+- `src/config/env.ts` — `ENV_REGISTRY` entry `SMALLCODE_ORACLE_CACHE`.
+- New `tests/oracle-cache.test.ts`.
+
+**Steps**
+1. Add flag `SMALLCODE_ORACLE_CACHE`, **default OFF** until E6-T5 promotes it.
+2. In `runTieredOracle`, before spawning: compute `repoFingerprint(repoRoot)`. If it is non-`null`
+   and present in the memo, return the memoized verdict. Otherwise spawn, then store the verdict
+   under that fingerprint.
+3. **Store only COMPLETED FULL runs.** Never store a partial, errored, or timed-out run.
+4. `null` fingerprint ⇒ always spawn, never store.
+5. Memo lifetime is a single process/run. Do not persist to disk in this task.
+6. DX requirement: on a cache hit, print one line — `oracle: cached (unchanged repo state)`.
+   A cache that silently skips test runs is the DX failure mode.
+7. DX requirement: `SMALLCODE_ORACLE_CACHE=0` is a hard kill switch, honored on every path, no
+   partial states.
+8. Preserve existing invariants exactly: `result.output` still sliced to 4000 for model feedback
+   while `fullOutput` is retained for every verdict parser; `repoSubprocessEnv()` still strips
+   `SMALLCODE_*` on every real spawn.
+9. Use the `__setBunTestRunnerForTests` seam in tests. **Never `mock.module` a global** — that
+   poisoned the whole suite process-wide once already.
+
+**Acceptance criteria**
+- Flag OFF ⇒ behavior byte-identical to today (assert with a spawn-count test).
+- Flag ON, no file changed ⇒ zero spawns on the second call, identical verdict object.
+- Flag ON, a file edited ⇒ cache MISSES and re-spawns.
+- `null` fingerprint ⇒ always spawns.
+- No call site outside `src/verify/oracle.ts` learns about the cache.
+
+**Verification**
+```bash
+bun test tests/oracle-cache.test.ts && bun test && bunx tsc --noEmit && bun run scripts/check-docs-sync.ts
+```
+**Docs-to-update:** `README.md` + `docs/llms.html` (new flag — `scripts/check-docs-sync.ts` will
+fail the build if you skip this), `docs/architecture.html` oracle diagram + footer date.
+**Rollback:** flag defaults OFF; revert the memo block.
+**Result:** _(pending)_
+
+---
+
+### E6-T4 — Adversarial cache-safety tests + fake-green re-audit  ·  P0 · M · Dep: E6-T3 · Status: ☐ TODO
+**Goal:** Prove the cache can never return a stale verdict. **These tests must be written and
+passing BEFORE the cache is relied on anywhere.** A stale green is a false solve — the exact
+failure class E1 was built to eliminate.
+
+**Files**
+- `tests/oracle-cache-adversarial.test.ts` (new).
+- Re-run `scripts/audit-literal-repair.ts` (existing, model-free).
+
+**Steps**
+1. **Stale-hit test (the critical one):** run the oracle, edit a file, run again — assert the
+   cache MISSES and the verdict reflects the edit. Repeat for a test-file edit, a `bunfig.toml`
+   edit, and a lockfile edit.
+2. **Return-to-known-state test (the actual win):** run oracle on state A, edit to state B, run,
+   revert to state A, run again — assert a HIT and that the verdict is byte-identical to the
+   original uncached state-A verdict.
+3. **No-change turn test:** a think-only or tool-error turn causes zero spawns.
+4. **Guard equivalence:** a cached verdict flows through `finalStateWorseThanBaseline` and the
+   per-turn revert producing identical decisions to an uncached run, over a fixed scenario set.
+5. **Repair equivalence:** `runArchetypeRepair` (`archetype.ts` L57-101) accept/reject decisions
+   over a fixed candidate set are identical with cache ON vs OFF.
+6. **Fake-green re-audit:** re-run `scripts/audit-literal-repair.ts`. The fake-green count must
+   NOT increase versus the recorded 10.5% baseline. Record both numbers in `Result:`.
+7. **Regression-proofing:** assert `result.output` is still sliced to 4000 while `fullOutput` is
+   whole (the 07-15 truncation bug must not re-enter via the cache), and that
+   `repoSubprocessEnv()` still strips `SMALLCODE_*` on every real spawn (the 07-24 env-poison bug).
+8. **Mutation-test your own tests:** deliberately break the fingerprint (e.g. drop the test-file
+   contents from the hash) and confirm test 1 turns RED. Then revert. A safety test that does not
+   bite is not a safety test.
+
+**Acceptance criteria**
+- All tests above green, and the mutation-test in step 8 provably turns test 1 red.
+- Fake-green count from the audit does not increase.
+- Every test is model-free (no Ollama) and CI-safe.
+
+**Verification**
+```bash
+bun test tests/oracle-cache-adversarial.test.ts && bun run scripts/audit-literal-repair.ts && bun test && bunx tsc --noEmit
+```
+**Docs-to-update:** `docs: no public-page impact` (tests only) unless you change behavior.
+**Rollback:** tests-only.
+**Result:** _(pending)_
+
+---
+
+### E6-T5 — A/B: pass@1 unchanged + wall-clock down → default-ON  ·  P0 · M · Dep: E6-T4 · Status: ☐ TODO
+**Goal:** This is a COST lever, not a capability lever. pass@1 must be UNCHANGED. Promote the flag
+to default-ON only on proven regression-neutrality — the same bar the TARGET_SET flip had to clear.
+
+**Steps**
+1. Run the realrepo baseline with `SMALLCODE_ORACLE_CACHE=0` and `=1`, same seed set, n≥10.
+   Use the existing harness: `scripts/run-baseline.ts` then `scripts/compare-runs.ts`.
+2. Read the result **by 95% CI overlap, never by point estimates** (see §3.5 discipline).
+3. Compare wall-clock against E6-T1's published before-number, using `getOracleCostStats()`.
+4. Promote to default-ON ONLY IF: pass@1 CIs overlap (i.e. unchanged) AND oracle seconds are
+   materially down AND full `bun test` is green.
+5. If pass@1 regresses, keep the flag OFF and record why. An honest negative result is a result.
+
+**Acceptance criteria**
+- A/B report committed with CIs for both arms and the wall-clock delta.
+- Default flipped only if all four conditions hold; otherwise the flag stays OFF and the card
+  records the honest negative.
+
+**Verification**
+```bash
+bun run scripts/run-baseline.ts && bun run scripts/compare-runs.ts && bun test
+```
+**Docs-to-update:** `index.html` headline numbers if any benchmark number moved;
+`docs/architecture.html` cost table + footer date; `README.md` flag default.
+**Rollback:** flip the default back to OFF — one line.
+**Result:** _(pending)_
+
+---
+
+### E6-T6 — `--max-concurrency` probe  ·  P2 · S · Dep: E6-T1 · Status: ☐ TODO
+**Goal:** Find out whether Bun's test concurrency is already optimal, and stop guessing.
+
+**Steps**
+1. Bun already defaults to max-concurrency 20. Time the full 1250-test suite at several
+   `--max-concurrency` values on this machine.
+2. Note that `--concurrent` changes test *scheduling semantics*, not just speed — do not enable it
+   as a performance knob.
+3. Ship a change ONLY if a value measurably and reproducibly wins. Otherwise close the task with
+   the measured table and an honest "no win found."
+
+**Acceptance criteria**
+- A measured table in `Result:`, whichever way it goes.
+- No flakiness introduced: full suite green across 3 consecutive runs at any adopted setting.
+
+**Verification**
+```bash
+bun test && bun test && bun test
+```
+**Docs-to-update:** `docs: no public-page impact` if no change ships.
+**Rollback:** revert the `bunfig.toml` / script change.
+**Result:** _(pending)_
+
+---
+
+### E6-T7 — Docs sync for the cache  ·  P1 · S · Dep: E6-T3 · Status: ☐ TODO
+**Goal:** Satisfy the HARD no-drift rule (§3.4) for everything E6 touches.
+
+**Steps**
+1. `README.md` + `docs/llms.html`: document `SMALLCODE_ORACLE_CACHE` (both files, verbatim flag
+   name — `scripts/check-docs-sync.ts` enforces this and will exit 1 otherwise).
+2. `docs/llms.html` module map: add `src/verify/fingerprint.ts` and `scripts/oracle-cost-report.ts`.
+3. `docs/llms.html` L568 currently promises full-suite semantics. **That claim stays TRUE under
+   E6** (every cached verdict is a full-suite verdict) — verify the wording still reads correctly
+   rather than deleting it.
+4. `docs/architecture.html`: update the oracle / early-stop diagram to show the fingerprint memo,
+   and set the footer timestamp to today.
+5. `index.html`: only if a headline number moved.
+
+**Acceptance criteria**
+- `bun run scripts/check-docs-sync.ts` exits 0.
+- `docs/architecture.html` opens standalone in a browser with no build step.
+
+**Verification**
+```bash
+bun run scripts/check-docs-sync.ts && bun test
+```
+**Rollback:** docs-only.
+**Result:** _(pending)_
+
+---
+
+## 12. Sequencing summary (do in this order)
 
 1. **E1-T1** (regression-proof the oracle) → **E1-T3** (verified revert) → **E1-T2** (journal/crash
    recovery) → **E1-T4** (fail-closed guard) → **E1-T5** (failure UX) → **E1-T6** (undo test). *M1 done.*
@@ -575,6 +903,13 @@ diffs. Start advisory (warn), then enforce.
    → **E2-T5** (bootstrap install) → **E2-T6** (default model). *M2 done.*
 3. In parallel once M1 lands: **E5-T1**, **E5-T2** (cheap, high-credibility), then **E3-T1**, **E3-T2**. *M3.*
 4. Then **E4-T1** → **E4-T2**, and **E3-T3**, **E5-T3** as capacity allows. *M4.*
+5. **E6-T1** (measure — nothing else starts first) → **E6-T2** (fingerprint) → **E6-T3** (cache,
+   flag OFF) → **E6-T4** (adversarial safety — must pass before the cache is relied on) →
+   **E6-T5** (A/B, promote or honestly decline) → **E6-T7** (docs). **E6-T6** any time after T1. *M5.*
+
+**Do NOT** build subset / targeted test selection. It was designed, reviewed, and rejected: a
+static import graph proves inclusion, never exclusion, so a subset verdict can make the per-turn
+revert keep a regression it cannot see. See §11 "The rejected design."
 
 **Do NOT** invest in cross-file/multi-file capability, agentic auto-PR, or a cloud-escalation core — the
 panel unanimously scored these lowest (capability ceiling is mapped and confirmed; they bet against known
@@ -582,5 +917,5 @@ model limits). Revisit only if the localization ceiling demonstrably moves.
 
 ---
 
-_Last updated: 2026-07-22. Keep this table's Status column current — it is the single source of truth for
+_Last updated: 2026-07-30 (E6 added). Keep this table's Status column current — it is the single source of truth for
 what is left to do._
