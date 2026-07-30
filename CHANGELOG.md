@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.14.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.13.0...v1.14.0) (2026-07-30)
+
+
+### Features
+
+* **oracle:** E6-T1 — oracle cost measuring stick (the before-number) ([599b746](https://github.com/bigknoxy/smallcode-jk/commit/599b746533c190ea3aed56a858f6c23a49eeb729))
+* **oracle:** E6-T1 oracle cost measuring stick (the before-number) ([b33ef9b](https://github.com/bigknoxy/smallcode-jk/commit/b33ef9bb3079dfec480f0a6b28d6fb32e9eac680))
+* **oracle:** E6-T3 no-change skip — fingerprint-keyed oracle cache (default OFF) ([8bdeef3](https://github.com/bigknoxy/smallcode-jk/commit/8bdeef3f789d5d5a9f5b2844e7cd848cdf15c737))
+* **oracle:** E6-T3 no-change skip — fingerprint-keyed oracle run cache ([f060758](https://github.com/bigknoxy/smallcode-jk/commit/f06075856e5677b573a13931dc3ed6cd3e1da496))
+* **verify:** repoFingerprint() — fail-closed repo-state hash (E6-T2) ([694695b](https://github.com/bigknoxy/smallcode-jk/commit/694695bcb055ac7a24cb309c32a72f36fca3287b))
+* **verify:** repoFingerprint() — fail-closed repo-state hash (E6-T2) ([50aaadd](https://github.com/bigknoxy/smallcode-jk/commit/50aaadd2ba3e0747e3620b04bf9f7f8673709f19))
+
+
+### Bug Fixes
+
+* **oracle-cost:** per-task cost table + honest unsolved-run projection ([41444df](https://github.com/bigknoxy/smallcode-jk/commit/41444df22f9396138b64375d8759047b60a012af))
+* **oracle:** key the E6-T3 cache by (repo path, fingerprint) and bound it ([ffaeac7](https://github.com/bigknoxy/smallcode-jk/commit/ffaeac76543d035155fd24d0956597c7d4a04d83))
+
 ## [1.13.0](https://github.com/bigknoxy/smallcode-jk/compare/v1.12.0...v1.13.0) (2026-07-24)
 
 
